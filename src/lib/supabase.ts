@@ -69,7 +69,10 @@ export function validateSupabaseEnv(
 }
 
 const rawUrl = import.meta.env.VITE_SUPABASE_URL;
-const rawAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const rawAnonKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
 export const supabaseStatus = validateSupabaseEnv(rawUrl, rawAnonKey);
 

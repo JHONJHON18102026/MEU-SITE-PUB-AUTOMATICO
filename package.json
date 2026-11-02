@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "validate": "npm run lint && npm run test && npm run build"
+    "validate": "npm run lint && npm run test && npm run build",
+    "deploy:preview": "npm run validate && npx vercel --yes",
+    "deploy:prod": "npm run validate && npx vercel --prod --yes"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
