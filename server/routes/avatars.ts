@@ -16,6 +16,7 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import { getAdmin } from '../supabaseAdmin';
+import { debitUserCredits, refundUserCredits, isUnlimitedUser } from '../credits';
 import { ApiError } from '../errors';
 import { generateImage } from '../gemini';
 import { applyWatermark } from '../watermark';
@@ -106,23 +107,16 @@ avatarRoutes.post('/generate', async (c) => {
   if (genInsert.error) throw new ApiError('INTERNAL', `Falha ao registrar a geração: ${genInsert.error.message}`);
 
   // ---- débito atômico (falha aqui = nada foi gerado, nada foi cobrado)
-  const debit = await admin.rpc('debit_credits', {
-    p_user: userId,
-    p_amount: cost,
-    p_reason: 'avatar_image',
-    p_ref: generationId,
-  });
-  if (debit.error) {
+  let balance: number;
+  try {
+    balance = await debitUserCredits({ userId, amount: cost, reason: 'avatar_image', refId: generationId, insufficientMessage: `Você precisa de ${cost} créditos para gerar ${req.count} imagem(ns).` });
+  } catch (err) {
     await admin
       .from('generations')
       .update({ status: 'failed', error: 'Créditos insuficientes', completed_at: new Date().toISOString() })
       .eq('id', generationId);
-    if (/INSUFFICIENT_CREDITS/.test(debit.error.message)) {
-      throw new ApiError('INSUFFICIENT_CREDITS', `Você precisa de ${cost} créditos para gerar ${req.count} imagem(ns).`);
-    }
-    throw new ApiError('INTERNAL', `Falha ao debitar créditos: ${debit.error.message}`);
+    throw err;
   }
-  let balance = Number(debit.data);
 
   // ---- gera em paralelo; cada imagem é independente
   const images: ImageInput[] = [
@@ -133,7 +127,7 @@ avatarRoutes.post('/generate', async (c) => {
 
   const results = await Promise.allSettled(
     Array.from({ length: req.count }, async (_, index) => {
-      const raw = await generateImage({ prompt, engine: req.engine, aspectRatio: req.aspectRatio, images });
+      const raw = await generateImage({ prompt, engine: req.engine, aspectRatio: req.aspectRatio, images, modelOverride: await isUnlimitedUser(userId) ? 'lowerpriority' : undefined });
       const branded = await applyWatermark(raw.buffer);
       const avatarId = randomUUID();
       const storagePath = `${userId}/${avatarId}.png`;
@@ -174,13 +168,8 @@ avatarRoutes.post('/generate', async (c) => {
   // ---- estorno proporcional ao que falhou
   const refunded = failures.length * PRICING.avatarImage;
   if (refunded > 0) {
-    const credit = await admin.rpc('credit_credits', {
-      p_user: userId,
-      p_amount: refunded,
-      p_reason: 'refund',
-      p_ref: generationId,
-    });
-    if (!credit.error) balance = Number(credit.data);
+    const refundedBalance = await refundUserCredits({ userId, amount: refunded, refId: generationId });
+    if (refundedBalance !== null) balance = refundedBalance;
   }
 
   const firstError = failures[0];

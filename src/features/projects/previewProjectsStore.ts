@@ -179,6 +179,7 @@ export function useCreateUgcProject() {
   const [busy, setBusy] = useState(false);
   const setBalance = useSession((s) => s.setBalance);
   const balance = useSession((s) => s.profile?.coins_balance ?? 0);
+  const plan = useSession((s) => s.profile?.plan);
   const notify = useUi((s) => s.notify);
   const { addPreviewProject, addCustomPreviewProject, bump } = usePreviewProjects();
 
@@ -202,7 +203,7 @@ export function useCreateUgcProject() {
       return proj;
     }
 
-    if (balance < cost) {
+    if (plan !== 'unlimited' && balance < cost) {
       toast.error(`Saldo insuficiente: você precisa de ${cost} créditos e tem ${balance}.`);
       return null;
     }

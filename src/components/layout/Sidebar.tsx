@@ -22,6 +22,7 @@ const PLAN_LABEL: Record<string, string> = {
   starter: 'Plano Starter',
   pro: 'Plano Pro',
   agency: 'Plano Agência',
+  unlimited: 'Plano Ilimitado',
 };
 
 function SidebarInner({

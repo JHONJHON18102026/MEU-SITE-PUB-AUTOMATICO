@@ -4,6 +4,12 @@
 import { ApiError } from './errors';
 import { getAdmin } from './supabaseAdmin';
 
+export async function isUnlimitedUser(userId: string): Promise<boolean> {
+  const { data, error } = await getAdmin().from('profiles').select('plan').eq('id', userId).maybeSingle();
+  if (error) throw new ApiError('INTERNAL', `Falha ao verificar o plano: ${error.message}`);
+  return data?.plan === 'unlimited';
+}
+
 export async function debitUserCredits(opts: {
   userId: string;
   amount: number;
@@ -12,6 +18,10 @@ export async function debitUserCredits(opts: {
   insufficientMessage: string;
 }): Promise<number> {
   const admin = getAdmin();
+  if (await isUnlimitedUser(opts.userId)) {
+    const { data } = await admin.from('profiles').select('coins_balance').eq('id', opts.userId).single();
+    return Number(data?.coins_balance ?? 0);
+  }
   const debit = await admin.rpc('debit_credits', {
     p_user: opts.userId,
     p_amount: opts.amount,
@@ -35,6 +45,10 @@ export async function refundUserCredits(opts: {
 }): Promise<number | null> {
   if (opts.amount <= 0) return null;
   const admin = getAdmin();
+  if (await isUnlimitedUser(opts.userId)) {
+    const { data } = await admin.from('profiles').select('coins_balance').eq('id', opts.userId).single();
+    return Number(data?.coins_balance ?? 0);
+  }
   const credit = await admin.rpc('credit_credits', {
     p_user: opts.userId,
     p_amount: opts.amount,

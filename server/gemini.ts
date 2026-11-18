@@ -12,6 +12,7 @@
  */
 import { GoogleGenAI, type Part } from '@google/genai';
 import { env } from './env';
+import { rustEnabled, rustGenerateImage } from './rustMotor';
 import { ApiError } from './errors';
 import type { AspectRatio, EngineId, ImageInput } from '../shared/contracts';
 
@@ -112,7 +113,11 @@ export async function generateImage(opts: {
   aspectRatio: AspectRatio;
   /** Ordem importa: foto base primeiro, depois produto, depois referências. */
   images: ImageInput[];
+  modelOverride?: string;
 }): Promise<ImageResult> {
+  if (rustEnabled()) {
+    return rustGenerateImage({ prompt: opts.prompt, aspectRatio: opts.aspectRatio, model: opts.modelOverride ?? (opts.engine === 'nano-banana-pro' ? 'google_flow' : undefined) });
+  }
   const ai = getClient();
   const models = await resolveModels();
   const model = opts.engine === 'nano-banana-pro' ? models.imagePro : models.image;

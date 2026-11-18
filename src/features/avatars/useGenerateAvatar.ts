@@ -21,6 +21,7 @@ export function useGenerateAvatar() {
   const [lastResult, setLastResult] = useState<AvatarDTO[]>([]);
   const setBalance = useSession((s) => s.setBalance);
   const balance = useSession((s) => s.profile?.coins_balance ?? 0);
+  const plan = useSession((s) => s.profile?.plan);
   const notify = useUi((s) => s.notify);
   const bump = useGalleryVersion((s) => s.bump);
 
@@ -38,7 +39,7 @@ export function useGenerateAvatar() {
       toast.error('Descreva o que você quer criar ou escolha características ao lado.');
       return;
     }
-    if (balance < cost) {
+    if (plan !== 'unlimited' && balance < cost) {
       toast.error(`Saldo insuficiente: você tem ${balance} créditos e essa geração custa ${cost}.`);
       return;
     }

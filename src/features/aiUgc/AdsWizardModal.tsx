@@ -18,6 +18,7 @@ import {
   type VoiceOptionId,
 } from '@shared/ugcContracts';
 import { useCreateUgcProject } from '@/features/projects/previewProjectsStore';
+import { useSession } from '@/store/session';
 import { buildAutoAdsDraft } from './ugcCartridges';
 import type { PreparedImage } from '@/lib/image';
 
@@ -44,6 +45,8 @@ export function AdsWizardModal({
   const navigate = useNavigate();
   const { createProject, busy } = useCreateUgcProject();
   const myAvatars = useMyAvatars();
+  const plan = useSession((s) => s.profile?.plan);
+  const unlimited = plan === 'unlimited';
 
   const [step, setStep] = useState(0);
   const [tplFilter, setTplFilter] = useState<'all' | 'popular' | 'recent'>('all');
@@ -138,16 +141,22 @@ export function AdsWizardModal({
   const footer = (
     <div className="flex w-full flex-wrap items-center justify-between gap-2">
       <div className="flex items-center gap-2 text-xs text-fg-muted">
-        <select
-          value={engine}
-          onChange={(e) => setEngine(e.target.value as VideoEngineId)}
-          aria-label="Motor de vídeo"
-          className="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs font-semibold text-fg"
-        >
-          {VIDEO_ENGINES.map((e) => (
-            <option key={e.id} value={e.id}>{e.label} · {e.creditsPerScene}/cena</option>
-          ))}
-        </select>
+        {unlimited ? (
+          <span className="rounded-lg border border-accent/40 bg-accent-soft px-2 py-1 text-xs font-semibold text-fg" title="Plano Ilimitado usa lowerpriority e fixa vídeos em 8 segundos">
+            lowerpriority · 8s · ilimitado
+          </span>
+        ) : (
+          <select
+            value={engine}
+            onChange={(e) => setEngine(e.target.value as VideoEngineId)}
+            aria-label="Motor de vídeo"
+            className="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs font-semibold text-fg"
+          >
+            {VIDEO_ENGINES.map((e) => (
+              <option key={e.id} value={e.id}>{e.label} · {e.creditsPerScene}/cena</option>
+            ))}
+          </select>
+        )}
         <select
           value={resolution}
           onChange={(e) => setResolution(e.target.value as '720p' | '1080p')}
@@ -165,8 +174,8 @@ export function AdsWizardModal({
         {step < STEPS.length - 1 ? (
           <Button variant="primary" onClick={() => setStep((s) => s + 1)}>Próximo</Button>
         ) : (
-          <Button variant="brand" onClick={() => void submit()} loading={busy} data-testid="wizard-generate-video">
-            <Film className="size-4" /> Gerar Vídeo · <CoinIcon className="size-3.5" /> {cost}
+          <Button variant="brand" onClick={() => void submit()} loading={busy} data-testid="wizard-generate-video" aria-label={unlimited ? 'Gerar vídeo no plano ilimitado' : `Gerar vídeo por ${cost} créditos`} title={unlimited ? 'Gerar vídeo · plano ilimitado · lowerpriority · 8s' : `Gerar vídeo · ${cost} créditos`}>
+            <Film className="size-4" /> {unlimited ? 'Gerar Vídeo · Ilimitado' : <>Gerar Vídeo · <CoinIcon className="size-3.5" /> {cost}</>}
           </Button>
         )}
       </div>
@@ -359,8 +368,12 @@ export function AdsWizardModal({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold">Quantidade de cenas (~8–10s cada)</h3>
-              <p className="text-xs text-fg-muted">Cada cena custa {VIDEO_ENGINES.find((e) => e.id === engine)?.creditsPerScene} créditos no motor atual.</p>
+              <h3 className="text-sm font-bold">Quantidade de cenas ({unlimited ? '8s cada' : 'até 10s cada'})</h3>
+              <p className="text-xs text-fg-muted">
+                {unlimited
+                  ? 'Plano Ilimitado: motor lowerpriority, vídeos fixos em 8s e sem desconto de créditos.'
+                  : `Omni Flash 1.2: ${VIDEO_ENGINES.find((e) => e.id === engine)?.creditsPerScene} créditos por cena.`}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="secondary" size="sm" onClick={() => updateSceneCount(scenes.length - 1)}>-</Button>

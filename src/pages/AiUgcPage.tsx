@@ -7,6 +7,7 @@ import { LinkCreator } from '@/features/aiUgc/LinkCreator';
 import { RemakeViralCreator } from '@/features/aiUgc/RemakeViralCreator';
 import { SlideshowCreator } from '@/features/aiUgc/SlideshowCreator';
 import { TalkingCreator } from '@/features/aiUgc/TalkingCreator';
+import { useSession } from '@/store/session';
 
 interface UgcModeMeta {
   slug: string;
@@ -39,6 +40,7 @@ const LEGACY_TAB_MAP: Record<string, string> = {
 export function AiUgcPage() {
   const { mode } = useParams<{ mode?: string }>();
   const [params] = useSearchParams();
+  const plan = useSession((s) => s.profile?.plan);
 
   const legacyTab = params.get('tab');
   if (!mode && legacyTab && LEGACY_TAB_MAP[legacyTab]) {
@@ -94,6 +96,20 @@ export function AiUgcPage() {
         {['Produto', 'Roteiro', 'Cenas', 'Prévia'].map((step, index) => (
           <span key={step} className="inline-flex items-center gap-2 text-xs font-semibold text-fg-muted"><span className="grid size-6 place-items-center rounded-full bg-accent text-[10px] font-black text-white">{index + 1}</span>{step}{index < 3 && <span className="mx-1 text-fg-subtle">→</span>}</span>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] px-4 py-3 text-xs">
+        {plan === 'unlimited' ? (
+          <>
+            <span className="font-bold text-cyan-200">Plano Ilimitado ativo</span>
+            <span className="text-fg-muted">Vídeos de 8s · motor lowerpriority · sem desconto de créditos</span>
+          </>
+        ) : (
+          <>
+            <span className="font-bold text-fg">Omni Flash 1.2</span>
+            <span className="text-fg-muted">30 créditos por vídeo de até 10s · o saldo é debitado na geração</span>
+          </>
+        )}
       </div>
 
       {activeSlug === 'ads' && <AdsCreator />}

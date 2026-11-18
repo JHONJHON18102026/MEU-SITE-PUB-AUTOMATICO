@@ -13,6 +13,9 @@ export interface ServerEnv {
   geminiImageModel: string;
   geminiImageProModel: string;
   geminiTextModel: string;
+  rustMotorUrl: string;
+  rustImageModel: string;
+  rustVideoModel: string;
   port: number;
 }
 
@@ -26,6 +29,9 @@ export const env: ServerEnv = {
   geminiImageModel: read('GEMINI_IMAGE_MODEL'),
   geminiImageProModel: read('GEMINI_IMAGE_PRO_MODEL'),
   geminiTextModel: read('GEMINI_TEXT_MODEL'),
+  rustMotorUrl: read('RUST_MOTOR_URL').replace(/\/$/, ''),
+  rustImageModel: read('RUST_IMAGE_MODEL') || 'google_flow',
+  rustVideoModel: read('RUST_VIDEO_MODEL') || 'veo3.1',
   port: Number(read('API_PORT') || 8787),
 };
 
@@ -34,6 +40,6 @@ export function missingKeys(): string[] {
   if (!env.supabaseUrl) missing.push('VITE_SUPABASE_URL');
   if (!env.supabaseAnonKey) missing.push('VITE_SUPABASE_ANON_KEY');
   if (!env.supabaseServiceKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
-  if (!env.geminiApiKey) missing.push('GEMINI_API_KEY');
+  if (!env.geminiApiKey && !env.rustMotorUrl) missing.push('GEMINI_API_KEY (ou RUST_MOTOR_URL)');
   return missing;
 }

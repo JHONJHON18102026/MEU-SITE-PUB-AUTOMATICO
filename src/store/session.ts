@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 export interface Profile {
   id: string;
   name: string;
-  plan: 'free' | 'starter' | 'pro' | 'agency';
+  plan: 'free' | 'starter' | 'pro' | 'agency' | 'unlimited';
   coins_balance: number;
 }
 
@@ -34,7 +34,7 @@ export const useSession = create<SessionState>((set, get) => ({
       // Sem .env: libera prévia visual com perfil local sem tocar em banco/IA reais.
       set({
         status: 'signed-in',
-        profile: { id: 'preview', name: 'Visitante (Prévia)', plan: 'free', coins_balance: 20 },
+        profile: { id: 'preview', name: 'Visitante (Prévia)', plan: 'free', coins_balance: 30 },
       });
       return () => undefined;
     }

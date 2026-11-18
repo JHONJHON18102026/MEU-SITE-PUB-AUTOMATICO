@@ -22,7 +22,7 @@ export function calculateImageBatchCost(opts: { engine?: EngineId; count: number
 
 export const VIDEO_ENGINES = [
   { id: 'veo-3.1-fast' as const, label: 'Veo 3.1 Fast', description: 'Rápido e econômico por cena', creditsPerScene: 10 },
-  { id: 'omni-flash' as const, label: 'Omni Flash', description: 'Expressão e movimento aprimorados', creditsPerScene: 15 },
+  { id: 'omni-flash' as const, label: 'Omni Flash 1.2', description: 'Vídeo premium de até 10 segundos', creditsPerScene: 30 },
 ];
 
 export const VOICE_OPTIONS: { id: VoiceOptionId; label: string; desc: string; extraPerScene: number }[] = [

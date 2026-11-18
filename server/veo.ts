@@ -14,6 +14,8 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { getClient, mapGeminiError, pickModel, resolveModels } from './gemini';
 import { env } from './env';
+import { rustChatCompletion, rustEnabled } from './rustMotor';
+import { readFile } from 'node:fs/promises';
 import { ApiError } from './errors';
 import { splitSpeechIntoScenes, type StudioBrandbookDTO, type VideoEngineId, type ViralManifestDTO } from '../shared/ugcContracts';
 
@@ -153,6 +155,11 @@ export async function extractProductFromUrl(rawUrl: string): Promise<ExtractedPr
 
 // ---------------------------------------------------------------- roteiros, hooks e slides (JSON estruturado Gemini)
 async function generateJsonWithGemini<T>(promptText: string, systemInstruction: string, temperature = 0.7): Promise<T> {
+  if (rustEnabled()) {
+    const raw = await rustChatCompletion({ prompt: promptText, system: systemInstruction });
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    try { return JSON.parse(cleaned) as T; } catch { throw new ApiError('GENERATION_FAILED', 'O motor Rust devolveu um JSON inválido.'); }
+  }
   const ai = getClient();
   const { text: model } = await resolveModels();
   try {
@@ -332,7 +339,31 @@ export async function generateVeoSceneBuffer(opts: {
   imageBytesBase64?: string;
   imageMimeType?: string;
   durationSeconds?: number;
+  modelOverride?: string;
 }): Promise<Buffer> {
+  if (rustEnabled()) {
+    const base: Record<string, unknown> = {
+      model: opts.modelOverride ?? env.rustVideoModel,
+      prompt: opts.prompt,
+      mode: opts.imageBytesBase64 ? 'i2v' : 't2v',
+      seconds: opts.durationSeconds ?? 8,
+      aspect_ratio: opts.aspectRatio,
+    };
+    if (opts.imageBytesBase64) {
+      base.reference_images = [{ mime_type: opts.imageMimeType ?? 'image/jpeg', data: opts.imageBytesBase64 }];
+    }
+    const res = await fetch(`${env.rustMotorUrl}/v1/videos/generations`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(base),
+      signal: AbortSignal.timeout(10 * 60_000),
+    });
+    const body = await res.json().catch(() => null) as any;
+    if (!res.ok) throw new ApiError('GENERATION_FAILED', body?.error?.message || `Motor Rust respondeu HTTP ${res.status}.`);
+    const savedPath = body?.saved_path;
+    if (!savedPath) throw new ApiError('GENERATION_FAILED', 'Motor Rust não devolveu o caminho do vídeo.');
+    try { return await readFile(savedPath); } catch {
+      throw new ApiError('GENERATION_FAILED', `O vídeo foi gerado, mas não pôde ser lido no servidor: ${savedPath}`);
+    }
+  }
   const ai = getClient();
   const model = await resolveVeoModel(opts.engine);
 

@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { ApiError } from '../errors';
-import { debitUserCredits, refundUserCredits } from '../credits';
+import { debitUserCredits, refundUserCredits, isUnlimitedUser } from '../credits';
 import { generateImage } from '../gemini';
 import { getAdmin } from '../supabaseAdmin';
 import { applyWatermark } from '../watermark';
@@ -110,6 +110,7 @@ function buildScenePrompt(req: CreateUgcVideoRequest, scene: { text: string; act
 
 async function processVideoProject(projectId: string, userId: string, generationId: string, req: CreateUgcVideoRequest, totalCost: number) {
   const admin = getAdmin();
+  const unlimited = await isUnlimitedUser(userId);
   const aspectForVeo: '9:16' | '16:9' = req.aspectRatio === '16:9' || req.aspectRatio === '4:3' ? '16:9' : '9:16';
   const imgInput = toImageInput(req.avatarImageData) ?? toImageInput(req.productImageData);
   const costPerScene = Math.round(totalCost / req.scenes.length);
@@ -135,7 +136,9 @@ async function processVideoProject(projectId: string, userId: string, generation
         aspectRatio: aspectForVeo,
         imageBytesBase64: imgInput?.data,
         imageMimeType: imgInput?.mimeType,
-        durationSeconds: s.durationSeconds ?? 8,
+        durationSeconds: unlimited ? 8 : (s.durationSeconds ?? 8),
+        // Omni Flash 1.2 é pago por créditos; o plano Ilimitado usa lowerpriority sem cobrança.
+        modelOverride: unlimited ? 'lowerpriority' : (req.engine === 'omni-flash' ? 'omni-flash-1.2' : undefined),
       });
       const scenePath = `${userId}/${projectId}/scene-${i}.mp4`;
       await admin.storage.from(VIDEO_BUCKET).upload(scenePath, buf, { contentType: 'video/mp4', upsert: true });
@@ -256,6 +259,7 @@ async function runBatchImageProject(opts: {
           engine: opts.engine,
           aspectRatio: opts.aspectRatio,
           images: item.images,
+          modelOverride: await isUnlimitedUser(opts.userId) ? 'lowerpriority' : undefined,
         });
         const branded = await applyWatermark(res.buffer);
         const path = `${opts.userId}/${projectId}/item-${index}.png`;
