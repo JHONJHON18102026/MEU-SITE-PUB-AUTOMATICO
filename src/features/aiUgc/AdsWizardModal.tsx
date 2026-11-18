@@ -122,7 +122,9 @@ export function AdsWizardModal({
       voiceType,
       musicMood,
       captions: true,
-      avatarUrl: customAvatar?.previewUrl || avatarUrl,
+      // O preview é uma data URL grande; a API reserva avatarUrl para URLs curtas.
+      // A imagem personalizada já segue corretamente em avatarImageData.
+      avatarUrl: customAvatar ? undefined : avatarUrl,
       avatarImageData: customAvatar?.data,
       productName: productName.trim() || 'Produto',
       productImageData: productImg?.data,
