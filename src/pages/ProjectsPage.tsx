@@ -388,6 +388,7 @@ export function ProjectsPage() {
                       {sc.headline && <div className="mt-1 text-xs font-bold">{sc.headline}</div>}
                       <p className="mt-1 text-xs">{sc.text}</p>
                       {sc.action && <p className="mt-1 text-[11px] text-fg-muted">Ação: {sc.action}</p>}
+                      {sc.error && <p className="mt-2 rounded-lg border border-danger/30 bg-danger/10 p-2 text-[11px] leading-4 text-danger">Detalhe: {sc.error}</p>}
                       {sc.image_url && (
                         <img src={sc.image_url} alt="" className="mt-2 h-24 rounded-lg object-cover" />
                       )}
