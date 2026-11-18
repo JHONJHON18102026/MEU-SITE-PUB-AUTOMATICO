@@ -109,7 +109,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  listProjects: () => request<{ projects: VideoProjectDTO[] }>('/projects'),
+  listProjects: (page = 1, limit = 24) => request<{ projects: VideoProjectDTO[]; page: number; limit: number; hasMore: boolean }>(`/projects?page=${page}&limit=${limit}`),
   retryProjectScene: (projectId: string, sceneIndex: number) =>
     request<{ project: VideoProjectDTO; balance: number }>(`/projects/${projectId}/retry-scene`, {
       method: 'POST',

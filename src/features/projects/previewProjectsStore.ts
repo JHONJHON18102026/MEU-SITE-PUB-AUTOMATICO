@@ -145,16 +145,20 @@ export function useProjectsData() {
   const [remote, setRemote] = useState<VideoProjectDTO[]>([]);
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (nextPage = 1) => {
     if (!isSupabaseConfigured) {
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const res = await api.listProjects();
-      setRemote(res.projects);
+      const res = await api.listProjects(nextPage);
+      setRemote((current) => nextPage === 1 ? res.projects : [...current, ...res.projects]);
+      setPage(nextPage);
+      setHasMore(res.hasMore);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -171,7 +175,9 @@ export function useProjectsData() {
     projects: isSupabaseConfigured ? remote : preview.projects,
     loading,
     error,
-    reload: load,
+    reload: () => load(1),
+    loadMore: () => load(page + 1),
+    hasMore,
   };
 }
 

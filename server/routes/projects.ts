@@ -8,22 +8,26 @@ import { debitUserCredits, refundUserCredits } from '../credits';
 import { getAdmin } from '../supabaseAdmin';
 import { generateVeoSceneBuffer, stitchVideoBuffers } from '../veo';
 import { calculateUgcCost, type ProjectSceneDTO, type VideoEngineId, type VideoProjectDTO } from '../../shared/ugcContracts';
+import { hydrateProjectMedia, removeProjectMedia, signedMediaUrl, VIDEO_BUCKET } from '../storage';
 import type { AppEnv } from '../app';
 
 export const projectRoutes = new Hono<AppEnv>();
-const VIDEO_BUCKET = 'videos';
-
 projectRoutes.get('/', async (c) => {
   const userId = c.get('userId');
+  const page = Math.max(1, Number(c.req.query('page') ?? '1') || 1);
+  const limit = Math.min(48, Math.max(1, Number(c.req.query('limit') ?? '24') || 24));
   const admin = getAdmin();
   const { data, error } = await admin
     .from('video_projects')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(60);
+    .range((page - 1) * limit, page * limit);
   if (error) throw new ApiError('INTERNAL', error.message);
-  return c.json({ projects: (data ?? []) as VideoProjectDTO[] });
+  const rows = (data ?? []) as VideoProjectDTO[];
+  const hasMore = rows.length > limit;
+  const projects = await Promise.all(rows.slice(0, limit).map((project) => hydrateProjectMedia(project)));
+  return c.json({ projects, page, limit, hasMore });
 });
 
 projectRoutes.post('/:id/retry-scene', async (c) => {
@@ -63,13 +67,13 @@ projectRoutes.post('/:id/retry-scene', async (c) => {
     });
     const scenePath = `${userId}/${id}/scene-${scene.index}.mp4`;
     await admin.storage.from(VIDEO_BUCKET).upload(scenePath, buf, { contentType: 'video/mp4', upsert: true });
-    const sceneUrl = admin.storage.from(VIDEO_BUCKET).getPublicUrl(scenePath).data.publicUrl;
+    const sceneUrl = await signedMediaUrl(scenePath);
     scenes[scene.index] = { ...scene, status: 'done', video_url: sceneUrl, error: null };
 
     const stitched = await stitchVideoBuffers([buf]);
     const finalPath = `${userId}/${id}/final.mp4`;
     await admin.storage.from(VIDEO_BUCKET).upload(finalPath, stitched, { contentType: 'video/mp4', upsert: true });
-    const finalUrl = admin.storage.from(VIDEO_BUCKET).getPublicUrl(finalPath).data.publicUrl;
+    const finalUrl = await signedMediaUrl(finalPath);
 
     const { data: updated } = await admin
       .from('video_projects')
@@ -90,10 +94,10 @@ projectRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id');
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ApiError('INVALID_INPUT', 'Id inválido.');
   const admin = getAdmin();
-  const { data, error } = await admin.from('video_projects').select('user_id, storage_path').eq('id', id).maybeSingle();
+  const { data, error } = await admin.from('video_projects').select('*').eq('id', id).maybeSingle();
   if (error) throw new ApiError('INTERNAL', error.message);
   if (!data || data.user_id !== userId) throw new ApiError('INVALID_INPUT', 'Projeto não encontrado.');
-  if (data.storage_path) await admin.storage.from(VIDEO_BUCKET).remove([data.storage_path]);
+  await removeProjectMedia(data as VideoProjectDTO);
   const del = await admin.from('video_projects').delete().eq('id', id);
   if (del.error) throw new ApiError('INTERNAL', del.error.message);
   return c.json({ ok: true });

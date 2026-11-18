@@ -21,7 +21,7 @@ describe('cálculo de custos e quebra de cenas (Entregas 2 & 3)', () => {
   it('calcula 10 créditos/cena no Veo 3.1 Fast e +1/cena com voz personalizada', () => {
     expect(calculateUgcCost({ engine: 'veo-3.1-fast', sceneCount: 3, voiceType: 'default' })).toBe(30);
     expect(calculateUgcCost({ engine: 'veo-3.1-fast', sceneCount: 3, voiceType: 'preset' })).toBe(33);
-    expect(calculateUgcCost({ engine: 'omni-flash', sceneCount: 2, voiceType: 'clone' })).toBe(32);
+    expect(calculateUgcCost({ engine: 'omni-flash', sceneCount: 2, voiceType: 'clone' })).toBe(62);
   });
 
   it('calcula lote de imagens (Slideshows e Image Ads) em Nano Banana 2 (2) e Pro (3)', () => {

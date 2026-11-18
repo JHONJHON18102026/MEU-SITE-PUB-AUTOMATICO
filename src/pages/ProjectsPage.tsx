@@ -39,7 +39,7 @@ const MODE_LABEL: Record<string, string> = {
 };
 
 export function ProjectsPage() {
-  const { projects, loading, error, reload } = useProjectsData();
+  const { projects, loading, error, reload, loadMore, hasMore } = useProjectsData();
   const { retryPreviewScene, deletePreviewProject } = usePreviewProjects();
   const setBalance = useSession((s) => s.setBalance);
 
@@ -305,6 +305,14 @@ export function ProjectsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!loading && hasMore && (
+        <div className="flex justify-center pt-1">
+          <Button variant="secondary" onClick={() => void loadMore()}>
+            Carregar mais projetos
+          </Button>
         </div>
       )}
 

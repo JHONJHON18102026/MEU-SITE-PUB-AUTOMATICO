@@ -130,6 +130,7 @@ export interface VideoProjectDTO {
   refunded: number;
   thumbnail_url: string;
   video_url: string | null;
+  storage_path?: string | null;
   is_preview?: boolean;
   scenes: ProjectSceneDTO[];
   error: string | null;

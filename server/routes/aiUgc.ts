@@ -14,6 +14,7 @@ import { debitUserCredits, refundUserCredits, isUnlimitedUser } from '../credits
 import { generateImage } from '../gemini';
 import { getAdmin } from '../supabaseAdmin';
 import { applyWatermark } from '../watermark';
+import { signedMediaUrl, VIDEO_BUCKET } from '../storage';
 import {
   extractProductFromUrl,
   generateHooksWithGemini,
@@ -42,7 +43,6 @@ import type { AspectRatio, EngineId, ImageInput } from '../../shared/contracts';
 import type { AppEnv } from '../app';
 
 export const aiUgcRoutes = new Hono<AppEnv>();
-const VIDEO_BUCKET = 'videos';
 
 function toImageInput(raw?: string): ImageInput | null {
   if (!raw?.trim()) return null;
@@ -142,7 +142,7 @@ async function processVideoProject(projectId: string, userId: string, generation
       });
       const scenePath = `${userId}/${projectId}/scene-${i}.mp4`;
       await admin.storage.from(VIDEO_BUCKET).upload(scenePath, buf, { contentType: 'video/mp4', upsert: true });
-      const sceneUrl = admin.storage.from(VIDEO_BUCKET).getPublicUrl(scenePath).data.publicUrl;
+      const sceneUrl = await signedMediaUrl(scenePath);
       sceneOutputs[i] = { ...sceneOutputs[i]!, status: 'done', video_url: sceneUrl };
       readyBuffers.push(buf);
     } catch (err) {
@@ -159,7 +159,7 @@ async function processVideoProject(projectId: string, userId: string, generation
     const stitched = await stitchVideoBuffers(readyBuffers);
     finalStoragePath = `${userId}/${projectId}/final.mp4`;
     const up = await admin.storage.from(VIDEO_BUCKET).upload(finalStoragePath, stitched, { contentType: 'video/mp4', upsert: true });
-    if (!up.error) finalVideoUrl = admin.storage.from(VIDEO_BUCKET).getPublicUrl(finalStoragePath).data.publicUrl;
+    if (!up.error) finalVideoUrl = await signedMediaUrl(finalStoragePath);
   }
 
   const refunded = failedCount * costPerScene;
@@ -264,7 +264,7 @@ async function runBatchImageProject(opts: {
         const branded = await applyWatermark(res.buffer);
         const path = `${opts.userId}/${projectId}/item-${index}.png`;
         await admin.storage.from(VIDEO_BUCKET).upload(path, branded, { contentType: 'image/png', upsert: true });
-        const publicUrl = admin.storage.from(VIDEO_BUCKET).getPublicUrl(path).data.publicUrl;
+        const publicUrl = await signedMediaUrl(path);
         if (!firstUrl) firstUrl = publicUrl;
         sceneOutputs[index] = {
           index,
@@ -321,6 +321,7 @@ async function runBatchImageProject(opts: {
       refunded,
       thumbnail_url: firstUrl || opts.fallbackThumb || '/showcase/modelo-01.webp',
       video_url: firstUrl,
+      storage_path: firstUrl ? `${opts.userId}/${projectId}/item-0.png` : null,
       scenes: sceneOutputs,
       params: opts.params,
       error: readyCount ? lastError : (lastError ?? 'Falha ao gerar imagens. Créditos devolvidos.'),
