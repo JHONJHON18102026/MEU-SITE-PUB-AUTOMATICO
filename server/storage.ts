@@ -14,12 +14,14 @@ export async function signedMediaUrl(path: string | null | undefined) {
 /** Reidrata URLs privadas sem expor o caminho permanente do Storage. */
 export async function hydrateProjectMedia(project: VideoProjectDTO): Promise<VideoProjectDTO> {
   const userPrefix = `${project.user_id}/${project.id}`;
-  const finalUrl = await signedMediaUrl(project.storage_path);
+  const isImageBatch = project.mode === 'image-ad' || project.mode === 'slideshow';
+  const fallbackPath = isImageBatch && project.scenes?.length ? `${userPrefix}/item-0.png` : null;
+  const finalUrl = await signedMediaUrl(project.storage_path ?? fallbackPath);
   const scenes = await Promise.all((project.scenes ?? []).map(async (scene: ProjectSceneDTO) => {
-    const ext = project.mode === 'image-ad' || project.mode === 'slideshow' ? 'png' : 'mp4';
-    const path = `${userPrefix}/${project.mode === 'image-ad' || project.mode === 'slideshow' ? `item-${scene.index}.${ext}` : `scene-${scene.index}.${ext}`}`;
+    const ext = isImageBatch ? 'png' : 'mp4';
+    const path = `${userPrefix}/${isImageBatch ? `item-${scene.index}.${ext}` : `scene-${scene.index}.${ext}`}`;
     const url = await signedMediaUrl(path).catch(() => null);
-    return url ? { ...scene, video_url: url, image_url: project.mode === 'image-ad' || project.mode === 'slideshow' ? url : scene.image_url } : scene;
+    return url ? { ...scene, video_url: url, image_url: isImageBatch ? url : scene.image_url } : scene;
   }));
   return { ...project, video_url: finalUrl, scenes };
 }
