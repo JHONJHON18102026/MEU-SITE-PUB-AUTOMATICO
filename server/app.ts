@@ -8,6 +8,7 @@ import { ApiError } from './errors';
 import { getUserIdFromToken } from './supabaseAdmin';
 import { missingKeys } from './env';
 import { enhancePrompt, resolveModels } from './gemini';
+import { rustEnabled } from './rustMotor';
 import { avatarRoutes } from './routes/avatars';
 import { aiUgcRoutes } from './routes/aiUgc';
 import { projectRoutes } from './routes/projects';
@@ -34,7 +35,8 @@ app.get('/health', async (c) => {
   const missing = missingKeys();
   let models: { image: string; imagePro: string; text: string } | null = null;
   let modelError: string | null = null;
-  if (!missing.includes('GEMINI_API_KEY')) {
+  const rust = rustEnabled();
+  if (!rust && !missing.includes('GEMINI_API_KEY')) {
     try {
       const m = await resolveModels();
       models = { image: m.image, imagePro: m.imagePro, text: m.text };
@@ -42,7 +44,7 @@ app.get('/health', async (c) => {
       modelError = err instanceof Error ? err.message : String(err);
     }
   }
-  return c.json({ ok: missing.length === 0 && !modelError, missing, models, modelError });
+  return c.json({ ok: rust || (missing.length === 0 && !modelError), engine: rust ? 'rust' : 'gemini', missing: rust ? missing.filter((key) => !key.includes('GEMINI_API_KEY')) : missing, models, modelError: rust ? null : modelError });
 });
 
 // Daqui para baixo, só usuário logado.
