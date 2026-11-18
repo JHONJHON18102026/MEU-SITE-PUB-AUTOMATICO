@@ -4,6 +4,14 @@ import { getAdmin } from './supabaseAdmin';
 export const VIDEO_BUCKET = 'videos';
 const SIGNED_URL_TTL = 60 * 60;
 
+export async function ensurePrivateGeneratedBuckets() {
+  const admin = getAdmin();
+  for (const bucket of [VIDEO_BUCKET, 'avatars']) {
+    const { error } = await admin.storage.updateBucket(bucket, { public: false });
+    if (error) throw error;
+  }
+}
+
 export async function signedMediaUrl(path: string | null | undefined) {
   if (!path) return null;
   const { data, error } = await getAdmin().storage.from(VIDEO_BUCKET).createSignedUrl(path, SIGNED_URL_TTL);
