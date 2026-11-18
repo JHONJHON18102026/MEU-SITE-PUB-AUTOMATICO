@@ -26,7 +26,18 @@ projectRoutes.get('/', async (c) => {
   if (error) throw new ApiError('INTERNAL', error.message);
   const rows = (data ?? []) as VideoProjectDTO[];
   const hasMore = rows.length > limit;
-  const projects = await Promise.all(rows.slice(0, limit).map((project) => hydrateProjectMedia(project)));
+  const projects = await Promise.all(
+    rows.slice(0, limit).map(async (project) => {
+      try {
+        return await hydrateProjectMedia(project);
+      } catch (err) {
+        // Um projeto em processamento/falha pode ainda não ter mídia assinável.
+        // A listagem deve continuar mostrando seu status e suas cenas.
+        console.error('[api] não foi possível preparar a mídia do projeto:', project.id, err);
+        return project;
+      }
+    }),
+  );
   return c.json({ projects, page, limit, hasMore });
 });
 
