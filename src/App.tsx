@@ -1,95 +1,83 @@
-import { Zap, GitBranch, Database, Globe } from 'lucide-react';
-import { ConnectionStatus } from './components/ConnectionStatus';
-import { AuthPanel } from './components/AuthPanel';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Toaster } from 'sonner';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { useSession } from '@/store/session';
+import { useUi } from '@/store/ui';
+import { AppShell } from '@/components/layout/AppShell';
+import { BrandFullMark } from '@/components/ui/Brand';
+import { LoginPage } from '@/pages/LoginPage';
+import { AvatarsPage } from '@/pages/AvatarsPage';
 
-export function App() {
+const SetupPage = lazy(() => import('@/pages/SetupPage').then((m) => ({ default: m.SetupPage })));
+const HomePage = lazy(() => import('@/pages/HomePage').then((m) => ({ default: m.HomePage })));
+const AiUgcPage = lazy(() => import('@/pages/AiUgcPage').then((m) => ({ default: m.AiUgcPage })));
+const ProjectsPage = lazy(() => import('@/pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })));
+const ImageAdsPage = lazy(() => import('@/pages/ImageAdsPage').then((m) => ({ default: m.ImageAdsPage })));
+const ViralPage = lazy(() => import('@/pages/ViralPage').then((m) => ({ default: m.ViralPage })));
+const StudioPage = lazy(() => import('@/pages/StudioPage').then((m) => ({ default: m.StudioPage })));
+const TutorialsPage = lazy(() => import('@/pages/TutorialsPage').then((m) => ({ default: m.TutorialsPage })));
+const ToolsGuidePage = lazy(() => import('@/pages/ToolsGuidePage').then((m) => ({ default: m.ToolsGuidePage })));
+
+function FullScreenLoader() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Barra superior */}
-      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-              <Zap className="h-5 w-5" />
-            </div>
-            <span className="text-base font-bold tracking-tight text-white">
-              Meu Site
-            </span>
-          </div>
-          <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-400">
-            React + Vite + Vercel + Supabase
-          </span>
+    <div className="grid h-full place-items-center" role="status" aria-label="Carregando">
+      <div className="flex flex-col items-center gap-4">
+        <BrandFullMark className="h-20 w-auto" />
+        <div className="h-1 w-36 overflow-hidden rounded-full bg-surface-2">
+          <div className="skeleton h-full w-full" />
         </div>
-      </header>
-
-      {/* Conteúdo principal */}
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 py-12">
-        <div className="grid gap-10 lg:grid-cols-12 lg:items-start">
-          {/* Coluna Esquerda: Home Base */}
-          <div className="space-y-6 lg:col-span-7">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-xs font-medium text-emerald-300">
-              Pronto para Deploy Automático
-            </div>
-
-            <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-5xl">
-              Estrutura base limpa e conectada ao{' '}
-              <span className="text-emerald-400">Supabase</span>.
-            </h1>
-
-            <p className="max-w-xl text-base leading-relaxed text-slate-400">
-              Edite <code className="text-slate-200">src/App.tsx</code> pelo
-              Antigravity, valide o código e envie ao GitHub. Cada atualização
-              na branch <code className="text-slate-200">main</code> publica
-              automaticamente uma nova versão na Vercel.
-            </p>
-
-            <ConnectionStatus />
-
-            <div className="grid gap-4 pt-2 sm:grid-cols-3">
-              <div className="rounded-xl border border-slate-800/90 bg-slate-900/40 p-4">
-                <GitBranch className="h-5 w-5 text-emerald-400" />
-                <h3 className="mt-2.5 text-sm font-semibold text-white">
-                  GitHub CI
-                </h3>
-                <p className="mt-1 text-xs text-slate-400">
-                  Validação automática de tipos, testes e build a cada push ou PR.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-800/90 bg-slate-900/40 p-4">
-                <Globe className="h-5 w-5 text-emerald-400" />
-                <h3 className="mt-2.5 text-sm font-semibold text-white">
-                  Vercel Auto-Deploy
-                </h3>
-                <p className="mt-1 text-xs text-slate-400">
-                  Produção na branch main e links de Preview para branches de teste.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-800/90 bg-slate-900/40 p-4">
-                <Database className="h-5 w-5 text-emerald-400" />
-                <h3 className="mt-2.5 text-sm font-semibold text-white">
-                  Supabase Seguro
-                </h3>
-                <p className="mt-1 text-xs text-slate-400">
-                  Autenticação pronta com bloqueio contra chaves secretas no cliente.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Coluna Direita: Painel de Autenticação */}
-          <div className="lg:col-span-5">
-            <AuthPanel />
-          </div>
-        </div>
-      </main>
-
-      <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
-        Template Base • GitHub + Vercel + Supabase
-      </footer>
+      </div>
     </div>
   );
 }
 
-export default App;
+/** Só deixa passar quem está logado; guarda para onde ia e volta depois do login. */
+function RequireAuth({ children }: { children: ReactNode }) {
+  const status = useSession((s) => s.status);
+  const location = useLocation();
+  if (status === 'loading') return <FullScreenLoader />;
+  if (status === 'signed-out') return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  return <>{children}</>;
+}
+
+export function App() {
+  const init = useSession((s) => s.init);
+  const theme = useUi((s) => s.theme);
+  useEffect(() => init(), [init]);
+
+  return (
+    <BrowserRouter>
+      <Toaster theme={theme} richColors position="bottom-right" closeButton />
+      <Suspense fallback={<FullScreenLoader />}>
+      <Routes>
+        <Route path="/" element={<ToolsGuidePage />} />
+        <Route path="/login" element={isSupabaseConfigured ? <LoginPage /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/setup" element={<SetupPage />} />
+        <Route path="/ferramentas" element={<ToolsGuidePage />} />
+        <Route path="/tutorials" element={<TutorialsPage />} />
+        <Route
+          element={
+            <RequireAuth>
+              <AppShell />
+            </RequireAuth>
+          }
+        >
+          <Route path="/dashboard" element={<HomePage />} />
+          <Route path="/avatars" element={<AvatarsPage />} />
+          <Route path="/ai-ugc" element={<AiUgcPage />} />
+          <Route path="/ai-ugc/:mode" element={<AiUgcPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/image-ads" element={<ImageAdsPage />} />
+          <Route path="/viral" element={<ViralPage />} />
+          <Route path="/viral/pasta/:folderId" element={<ViralPage />} />
+          <Route path="/studio" element={<StudioPage />} />
+          <Route path="/studio/:section" element={<StudioPage />} />
+          <Route path="/studio/:section/:subId" element={<StudioPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+      </Suspense>
+    </BrowserRouter>
+  );
+}

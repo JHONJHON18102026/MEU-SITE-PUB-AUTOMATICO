@@ -1,29 +1,46 @@
-# Site Base — React + Vite + TypeScript + Tailwind + Supabase
+# FUTURO DIGITAL Studio — Entrega 1
 
-Estrutura limpa configurada para **deploy contínuo na Vercel** via **GitHub** e conexão segura com **Supabase**.
+Plataforma própria de influencers e anúncios UGC com IA.
+Entrega 1: **login, créditos, painel e Influencer IA com geração real de imagem** e marca d'água FUTURO DIGITAL.
 
-## Comandos Principais
+## Ligar pela primeira vez (uma vez só)
 
-```bash
-npm run dev        # Inicia o servidor local de desenvolvimento
-npm run lint       # Verifica tipos TypeScript
-npm run test       # Executa os testes automatizados (Vitest)
-npm run build      # Gera o pacote de produção em dist/
-npm run validate   # Executa lint + testes + build completo antes de enviar ao GitHub
+1. **Chaves** — abra o arquivo `.env` e preencha:
+   - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` → Supabase › Project Settings › API
+   - `GEMINI_API_KEY` → https://aistudio.google.com/apikey
+2. **Banco** — copie todo o `supabase/migrations/0001_init.sql` e cole em Supabase › SQL Editor › **Run**
+   (ou preencha `SUPABASE_DB_URL` no `.env` e rode `npm run db:setup`).
+3. **Conferir** — `npm run check` (diz exatamente o que falta, sem mostrar suas chaves).
+4. **Rodar** — `npm run dev` e abra http://localhost:5173
+
+## Comandos
+
+| Comando | O que faz |
+| :--- | :--- |
+| `npm run dev` | Site (5173) + servidor da API (8787) |
+| `npm run check` | Confere chaves, tabelas, bucket e modelos Gemini liberados |
+| `npm test` | Testes de unidade (prompt, preços, marca d'água, modelos) |
+| `npm run test:e2e` | Robô no Chrome clicando em tudo (banco e IA simulados) |
+| `npm run build` | Checa tipos e gera a versão de produção em `dist/` |
+
+## Como está organizado
+
+```
+shared/      regras que o site e o servidor compartilham (características, preços, prompt)
+server/      API Hono: login, débito de créditos, Gemini, marca d'água, Storage
+src/         site React (telas, componentes, estado)
+supabase/    estrutura do banco (tabelas, segurança RLS, funções de crédito)
+tests/       testes de unidade e robô E2E (capturas em tests/e2e/screenshots)
+public/brand logo e emblema FUTURO DIGITAL
 ```
 
-## Variáveis de Ambiente (Supabase)
+## Segurança
 
-1. Copie `.env.example` para `.env.local`:
-   ```bash
-   copy .env.example .env.local
-   ```
-2. Preencha no `.env.local` (e nas **Environment Variables** do projeto na Vercel):
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY` (use apenas a chave pública `anon` ou `sb_publishable_...`, **nunca** `service_role` ou `sb_secret_...`).
+- `SUPABASE_SERVICE_ROLE_KEY` e `GEMINI_API_KEY` ficam **só no servidor**; o navegador nunca vê.
+- O saldo só muda pelo servidor (funções `debit_credits`/`credit_credits`), com débito atômico e estorno automático.
+- Cada usuário só enxerga os próprios avatares (RLS), mais os que alguém marcou como públicos.
 
-## Fluxo Automático de Publicação
+## Trocar a marca d'água
 
-1. Alterações feitas localmente são validadas com `npm run validate`.
-2. Commits enviados para branches secundárias ou Pull Requests geram **Preview Deployments** automáticos na Vercel.
-3. Commits enviados/mesclados na branch `main` publicam automaticamente em **Produção** na Vercel.
+Substitua `server/assets/marca-dagua.png` (PNG com fundo transparente). Posição e tamanho ficam em
+`server/watermark.ts` (`WATERMARK_LAYOUT`).

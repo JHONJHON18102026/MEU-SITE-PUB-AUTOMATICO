@@ -1,12 +1,25 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/brand/fd-emblema-v4.png" />
+    <link rel="apple-touch-icon" href="/brand/fd-emblema-v4.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Meu Site — Base Conectada ao Supabase</title>
+    <meta name="theme-color" content="#0b0b12" />
+    <meta name="description" content="FUTURO DIGITAL Studio — crie avatares, anúncios UGC, criativos de produto e campanhas completas com IA." />
+    <meta property="og:title" content="FUTURO DIGITAL Studio — Conteúdo com IA" />
+    <meta property="og:description" content="Do avatar ao anúncio publicável: conheça todas as ferramentas do FUTURO DIGITAL Studio." />
+    <meta property="og:type" content="website" />
+    <title>FUTURO DIGITAL — Conteúdo com IA</title>
+    <script>
+      // Aplica o tema salvo antes do React carregar (evita "piscar" branco).
+      try {
+        var t = localStorage.getItem('fd-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
   </head>
-  <body class="bg-slate-950 text-slate-100 antialiased">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

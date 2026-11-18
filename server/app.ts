@@ -1,0 +1,72 @@
+/**
+ * App Hono: junta as rotas, confere o login e padroniza os erros.
+ * Fica separado do index.ts para poder rodar igual na Vercel depois.
+ */
+import { Hono, type Context, type Next } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
+import { ApiError } from './errors';
+import { getUserIdFromToken } from './supabaseAdmin';
+import { missingKeys } from './env';
+import { enhancePrompt, resolveModels } from './gemini';
+import { avatarRoutes } from './routes/avatars';
+import { aiUgcRoutes } from './routes/aiUgc';
+import { projectRoutes } from './routes/projects';
+import { studioRoutes } from './routes/studio';
+import { viralRoutes } from './routes/viral';
+import { enhancePromptSchema, type ApiErrorBody } from '../shared/contracts';
+
+export type AppEnv = { Variables: { userId: string } };
+
+export const app = new Hono<AppEnv>().basePath('/api');
+
+// Até 4 imagens de referência em base64 cabem com folga em 40 MB.
+app.use('*', bodyLimit({ maxSize: 40 * 1024 * 1024 }));
+
+app.onError((err, c) => {
+  const apiErr = err instanceof ApiError ? err : new ApiError('INTERNAL', 'Erro inesperado no servidor.');
+  if (!(err instanceof ApiError)) console.error('[api] erro inesperado:', err);
+  const body: ApiErrorBody = { error: { code: apiErr.code, message: apiErr.message } };
+  return c.json(body, apiErr.status as 400);
+});
+
+// Público: diz o que falta configurar (sem revelar nenhum valor de chave).
+app.get('/health', async (c) => {
+  const missing = missingKeys();
+  let models: { image: string; imagePro: string; text: string } | null = null;
+  let modelError: string | null = null;
+  if (!missing.includes('GEMINI_API_KEY')) {
+    try {
+      const m = await resolveModels();
+      models = { image: m.image, imagePro: m.imagePro, text: m.text };
+    } catch (err) {
+      modelError = err instanceof Error ? err.message : String(err);
+    }
+  }
+  return c.json({ ok: missing.length === 0 && !modelError, missing, models, modelError });
+});
+
+// Daqui para baixo, só usuário logado.
+const requireAuth = async (c: Context<AppEnv>, next: Next) => {
+  c.set('userId', await getUserIdFromToken(c.req.header('Authorization')));
+  await next();
+};
+
+app.use('/avatars/*', requireAuth);
+app.use('/prompt/*', requireAuth);
+app.use('/ai-ugc/*', requireAuth);
+app.use('/projects/*', requireAuth);
+app.use('/viral/*', requireAuth);
+app.use('/studio/*', requireAuth);
+
+app.route('/avatars', avatarRoutes);
+app.route('/ai-ugc', aiUgcRoutes);
+app.route('/projects', projectRoutes);
+app.route('/viral', viralRoutes);
+app.route('/studio', studioRoutes);
+
+app.post('/prompt/enhance', async (c) => {
+  const parsed = enhancePromptSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw new ApiError('INVALID_INPUT', 'Escreva a ideia primeiro (mínimo 3 letras).');
+  const prompt = await enhancePrompt(parsed.data.prompt);
+  return c.json({ prompt });
+});
