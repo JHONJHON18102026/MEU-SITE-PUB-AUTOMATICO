@@ -1,0 +1,5 @@
+# API segura do FUTURO DIGITAL Studio
+# O DNS deve apontar api.futurodigitalai.com.br para 217.77.5.101.
+api.futurodigitalai.com.br {
+    reverse_proxy 127.0.0.1:8787
+}
