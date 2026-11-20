@@ -477,7 +477,15 @@ aiUgcRoutes.post('/create', async (c) => {
   }
 
   // Dispara a geração cena por cena em segundo plano para o usuário poder acompanhar em Projetos.
-  void processVideoProject(projectId, userId, generationId, req, cost);
+  // O callback assíncrono começa no próximo ciclo do event loop; assim o POST
+  // devolve o projeto imediatamente, sem ficar aguardando o Veo/Rust.
+  setImmediate(() => {
+    void processVideoProject(projectId, userId, generationId, req, cost).catch(async (err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      await admin.from('video_projects').update({ status: 'failed', error: message, completed_at: new Date().toISOString() }).eq('id', projectId);
+      await admin.from('generations').update({ status: 'failed', error: message, completed_at: new Date().toISOString() }).eq('id', generationId);
+    });
+  });
 
   return c.json({ project: projIns.data as VideoProjectDTO, balance });
 });
