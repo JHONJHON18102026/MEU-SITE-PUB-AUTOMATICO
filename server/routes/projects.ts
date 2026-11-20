@@ -28,6 +28,12 @@ projectRoutes.get('/', async (c) => {
   const hasMore = rows.length > limit;
   const projects = await Promise.all(
     rows.slice(0, limit).map(async (project) => {
+      // Projetos em processamento/falha ainda nao possuem arquivos assinaveis.
+      // Nao consulte o Storage nesses estados: a chamada pode ficar pendurada
+      // na funcao serverless e causar 502 na tela de Projetos.
+      if (project.status === 'processing' || project.status === 'failed') {
+        return project;
+      }
       try {
         return await hydrateProjectMedia(project);
       } catch (err) {
