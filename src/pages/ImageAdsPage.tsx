@@ -109,7 +109,7 @@ export function ImageAdsPage() {
 
   return (
     <div className="premium-workspace mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-[1480px] flex-col justify-between gap-4 px-6 pb-6 pt-4">
-      {/* Palco central zen idêntico ao Influai (vazio limpo até escolher modelo ou digitar) */}
+      {/* Palco central limpo até escolher modelo ou digitar. */}
       <div className="flex flex-1 flex-col items-center justify-center py-6">
         {!showPreviewCard ? (
           <div className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-cyan-300/25 bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,.24),transparent_55%),linear-gradient(135deg,#111a2f,#131024)] px-8 py-12 text-left shadow-[0_24px_60px_rgba(13,89,120,.2)] md:px-12 md:py-14">
@@ -254,7 +254,7 @@ export function ImageAdsPage() {
         </div>
       )}
 
-      {/* Dock de prompt estilo Influai ancorado na base */}
+      {/* Dock de prompt ancorado na base. */}
       <div className="mx-auto w-full max-w-[880px] rounded-2xl border border-border bg-surface p-3 shadow-xl">
         <div className="flex items-start gap-2.5">
           {productPhoto ? (

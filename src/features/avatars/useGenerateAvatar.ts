@@ -2,28 +2,35 @@
  * Ação "Gerar": monta o pedido a partir do estado da tela, chama a API,
  * atualiza saldo, galeria e notificações, e traduz erros para o usuário.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { avatarCost, type GenerateAvatarRequest, type AvatarDTO } from '@shared/contracts';
+import { MAX_IMAGES_PER_REQUEST, avatarCost, type GenerateAvatarRequest, type AvatarDTO } from '@shared/contracts';
 import { api, ApiClientError } from '@/lib/api';
 import { prepareImageFromUrl } from '@/lib/image';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useSession } from '@/store/session';
 import { useUi } from '@/store/ui';
-import { useAvatarStudio } from './avatarStore';
-import { useGalleryVersion } from './useAvatarData';
+import { clearDirectorCanvasHandoff, MAX_PENDING_IMAGE_REQUESTS, useAvatarStudio } from './avatarStore';
+import { useGalleryVersion, useGenerations } from './useAvatarData';
 
-const strip = (img: { mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; data: string } | null) =>
-  img ? { mimeType: img.mimeType, data: img.data } : null;
+const strip = (img: { mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; data: string; name?: string } | null) =>
+  img ? { mimeType: img.mimeType, data: img.data, name: img.name } : null;
 
 export function useGenerateAvatar() {
-  const [busy, setBusy] = useState(false);
+  const pendingRequestsRef = useRef(0);
+  const attributeRequestPendingRef = useRef(false);
+  const [pendingRequests, setPendingRequests] = useState(0);
   const [lastResult, setLastResult] = useState<AvatarDTO[]>([]);
   const setBalance = useSession((s) => s.setBalance);
   const balance = useSession((s) => s.profile?.coins_balance ?? 0);
   const plan = useSession((s) => s.profile?.plan);
   const notify = useUi((s) => s.notify);
   const bump = useGalleryVersion((s) => s.bump);
+  const generations = useGenerations();
+  const persistedPendingImageRequests = generations.data.filter(
+    (generation) => generation.kind === 'avatar_image' && generation.status === 'processing',
+  ).length;
+  const pendingImageRequests = Math.max(pendingRequests, persistedPendingImageRequests);
 
   async function generate(mode: 'attributes' | 'prompt') {
     if (!isSupabaseConfigured) {
@@ -31,9 +38,22 @@ export function useGenerateAvatar() {
       return;
     }
     const st = useAvatarStudio.getState();
-    const cost = avatarCost(st.count);
-    const hasAttr = Object.values(st.selection).some((v) => (v?.length ?? 0) > 0);
-    const hasVisual = Boolean(st.basePhoto || st.baseAvatar || st.productImage);
+    if (mode === 'attributes' && attributeRequestPendingRef.current) return;
+    if (Math.max(pendingRequestsRef.current, persistedPendingImageRequests) >= MAX_PENDING_IMAGE_REQUESTS) {
+      toast.info('Já existem 4 pedidos de imagem em andamento. Aguarde uma geração terminar.');
+      return;
+    }
+    if (mode === 'attributes' && !st.useInfluencerPreset) {
+      toast.info('Ative o painel Criar Influencer no compositor para validar este personagem.');
+      return;
+    }
+    const requestedImageCount = mode === 'attributes'
+      ? Math.max(1, Math.min(MAX_IMAGES_PER_REQUEST, Math.floor(st.attributeCount)))
+      : st.count;
+    const cost = avatarCost(requestedImageCount);
+    const useInfluencerPreset = st.useInfluencerPreset;
+    const hasAttr = useInfluencerPreset && Object.values(st.selection).some((v) => (v?.length ?? 0) > 0);
+    const hasVisual = Boolean(st.basePhoto || st.baseAvatar || st.productImage || st.referenceImages.length);
 
     if (mode === 'prompt' && !st.prompt.trim() && !hasAttr && !hasVisual) {
       toast.error('Descreva o que você quer criar ou escolha características ao lado.');
@@ -44,36 +64,50 @@ export function useGenerateAvatar() {
       return;
     }
 
-    setBusy(true);
-    st.set({ pendingCount: st.count, tab: 'mine' });
+    // Reserve synchronously so clicks made before React rerenders cannot
+    // exceed the four-request concurrency limit.
+    if (mode === 'attributes') attributeRequestPendingRef.current = true;
+    pendingRequestsRef.current += 1;
+    setPendingRequests(pendingRequestsRef.current);
+    useAvatarStudio.getState().set({ pendingCount: useAvatarStudio.getState().pendingCount + requestedImageCount });
+    bump();
     try {
-      let basePhoto = strip(st.basePhoto);
+      // A foto enviada pela lateral só influencia o canvas enquanto a chave
+      // estiver ligada. Imagens escolhidas no slot INFLUENCER continuam válidas.
+      let basePhoto = useInfluencerPreset ? strip(st.basePhoto) : null;
       let baseAvatarId = st.baseAvatar?.id ?? null;
       if (!basePhoto && st.baseAvatar?.user_id === 'showcase') {
         const prepared = await prepareImageFromUrl(st.baseAvatar.image_url, `${st.baseAvatar.name}.jpg`);
-        basePhoto = { mimeType: prepared.mimeType, data: prepared.data };
+        basePhoto = { mimeType: prepared.mimeType, data: prepared.data, name: prepared.name };
         baseAvatarId = null;
       }
 
       const payload: GenerateAvatarRequest = {
         mode,
-        attributes: st.selection as Record<string, string[]>,
-        extraDetails: st.extraDetails,
-        characterWorld: st.characterWorld,
+        attributes: (useInfluencerPreset ? st.selection : {}) as Record<string, string[]>,
+        extraDetails: useInfluencerPreset ? st.extraDetails : '',
+        characterWorld: useInfluencerPreset ? st.characterWorld : '',
         prompt: st.prompt,
         basePhoto,
         baseAvatarId,
         productImage: strip(st.productImage),
-        referenceImages: st.referenceImages.map((r) => ({ mimeType: r.mimeType, data: r.data })),
+        referenceImages: st.referenceImages.map((r) => ({ mimeType: r.mimeType, data: r.data, name: r.name })),
         engine: st.engine,
         framing: st.framing,
         aspectRatio: st.aspectRatio,
-        count: st.count,
-        makePublic: st.makePublic,
+        count: requestedImageCount,
+        makePublic: useInfluencerPreset && st.makePublic,
       };
       const res = await api.generateAvatar(payload);
+      clearDirectorCanvasHandoff();
       setBalance(res.balance);
       setLastResult(res.avatars);
+      // O resultado recém-criado vira imediatamente o personagem ativo para
+      // que a próxima ação possa ser "Criar vídeo com este avatar" sem exigir
+      // que o usuário volte à galeria e o selecione manualmente.
+      if (mode === 'attributes' && res.avatars[0]) {
+        useAvatarStudio.getState().set({ baseAvatar: res.avatars[0], basePhoto: null, tab: 'explore' });
+      }
       bump();
       const msg =
         res.refunded > 0
@@ -89,10 +123,13 @@ export function useGenerateAvatar() {
       void useSession.getState().refreshProfile();
       bump();
     } finally {
-      setBusy(false);
-      useAvatarStudio.getState().set({ pendingCount: 0 });
+      if (mode === 'attributes') attributeRequestPendingRef.current = false;
+      pendingRequestsRef.current = Math.max(0, pendingRequestsRef.current - 1);
+      setPendingRequests(pendingRequestsRef.current);
+      const current = useAvatarStudio.getState();
+      current.set({ pendingCount: Math.max(0, current.pendingCount - requestedImageCount) });
     }
   }
 
-  return { generate, busy, lastResult };
+  return { generate, busy: pendingRequests > 0, pendingRequests: pendingImageRequests, lastResult };
 }

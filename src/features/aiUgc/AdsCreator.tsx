@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, Compass, Lock, Plus, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Compass, Lock, Plus, X } from 'lucide-react';
 import { UGC_TEMPLATES, type UgcTemplate } from '@shared/ugcCatalog';
 import { Button } from '@/components/ui/Button';
 import { AdsWizardModal } from './AdsWizardModal';
@@ -17,7 +16,6 @@ export function AdsCreator() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-base font-semibold"><Compass className="size-5 text-accent" />Como criar um vídeo no ADS</h2>
             <div className="flex items-center gap-6 text-xs">
-              <Link to="/tutorials" className="inline-flex items-center gap-2 text-accent"><BookOpen className="size-4" />Tutorial com vídeo</Link>
               <button onClick={() => setGuideOpen(false)} className="inline-flex items-center gap-2 text-fg-muted"><X className="size-4" />Fechar guia</button>
             </div>
           </div>
@@ -40,7 +38,7 @@ export function AdsCreator() {
         </section>
       ) : <div className="flex justify-end"><Button variant="ghost" onClick={() => setGuideOpen(true)}>Ver passo a passo</Button></div>}
 
-      {/* Cabeçalho centralizado compacto idêntico ao Influai */}
+      {/* Cabeçalho centralizado do estúdio. */}
       <div data-guide-target="ads-start" className="mx-auto flex max-w-xl flex-col items-center space-y-2.5 py-1 text-center">
         <h2 className="text-2xl font-bold uppercase tracking-wide">CRIE VÍDEOS HIPER REALISTAS</h2>
         <p className="text-xs text-fg-muted sm:text-sm">
@@ -63,7 +61,7 @@ export function AdsCreator() {
         </Button>
       </div>
 
-      {/* Fileira limpa de vídeos verticais 9:16 idêntica ao Influai */}
+      {/* Fileira de modelos verticais 9:16. */}
       <div data-guide-target="ads-templates" className="flex gap-3 overflow-x-auto pt-5 thin-scroll">
         {UGC_TEMPLATES.map((tpl) => (
           <button

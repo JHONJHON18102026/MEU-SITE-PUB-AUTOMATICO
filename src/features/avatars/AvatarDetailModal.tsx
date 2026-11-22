@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Download, Globe2, Lock, RefreshCcw, ScanFace, Trash2 } from 'lucide-react';
 import type { AvatarDTO } from '@shared/contracts';
@@ -17,6 +17,21 @@ export function AvatarDetailModal({ avatar, onClose }: { avatar: AvatarDTO | nul
   const bump = useGalleryVersion((s) => s.bump);
   const studio = useAvatarStudio();
   const [working, setWorking] = useState<string | null>(null);
+  const [generationParams, setGenerationParams] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    let current = true;
+    setGenerationParams(null);
+    if (!supabase || !avatar?.generation_id) return () => { current = false; };
+    void supabase
+      .from('generations')
+      .select('params')
+      .eq('id', avatar.generation_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (current && data?.params && typeof data.params === 'object') setGenerationParams(data.params as Record<string, unknown>);
+      });
+    return () => { current = false; };
+  }, [avatar?.generation_id]);
   if (!avatar) return null;
   const mine = avatar.user_id === userId;
   const isShowcase = avatar.user_id === 'showcase';
@@ -28,6 +43,12 @@ export function AvatarDetailModal({ avatar, onClose }: { avatar: AvatarDTO | nul
       return opt ? [{ key: `${g.id}:${id}`, label: `${g.label}: ${opt.label}` }] : [];
     }),
   );
+  const generationAsset = (value: unknown) => value && typeof value === 'object' ? value as Record<string, unknown> : null;
+  const basePhoto = generationAsset(generationParams?.basePhoto);
+  const productImage = generationAsset(generationParams?.productImage);
+  const references = Array.isArray(generationParams?.referenceImages)
+    ? generationParams.referenceImages.map(generationAsset).filter((x): x is Record<string, unknown> => Boolean(x))
+    : [];
 
   async function togglePublic() {
     if (!supabase || !avatar) return;
@@ -63,6 +84,13 @@ export function AvatarDetailModal({ avatar, onClose }: { avatar: AvatarDTO | nul
     onClose();
   }
 
+  function animateAvatar() {
+    if (!avatar) return;
+    studio.set({ baseAvatar: avatar, basePhoto: null, panelTab: 'templates', tab: 'explore' });
+    toast.success(`Avatar "${avatar.name}" pronto para usar em um template.`);
+    onClose();
+  }
+
   function recreate() {
     if (!avatar) return;
     studio.set({
@@ -94,13 +122,36 @@ export function AvatarDetailModal({ avatar, onClose }: { avatar: AvatarDTO | nul
             </div>
           )}
           {avatar.prompt && (
-            <details className="rounded-xl border border-border p-3 text-xs text-fg-muted">
+            <details open className="rounded-xl border border-border p-3 text-xs text-fg-muted">
               <summary className="cursor-pointer font-semibold text-fg">Descrição usada</summary>
               <p className="mt-2 whitespace-pre-wrap">{avatar.prompt}</p>
             </details>
           )}
+          {avatar.generation_id && (
+            <details open className="rounded-xl border border-border p-3 text-xs text-fg-muted" data-testid="used-generation-details">
+              <summary className="cursor-pointer font-semibold text-fg">Tudo que foi usado</summary>
+              {generationParams ? (
+                <dl className="mt-2 space-y-1.5">
+                  <UsedValue label="Modo" value={generationParams.mode} />
+                  <UsedValue label="Motor" value={generationParams.engine ?? avatar.engine} />
+                  <UsedValue label="Enquadramento" value={generationParams.framing ?? avatar.framing} />
+                  <UsedValue label="Proporção" value={generationParams.aspectRatio ?? avatar.aspect_ratio} />
+                  <UsedValue label="Variações" value={generationParams.count} />
+                  <UsedValue label="Foto base" value={basePhoto ? basePhoto.name ?? 'Foto base enviada' : generationParams.hasBasePhoto ? 'Foto base usada' : generationParams.baseAvatarId ? 'Avatar existente usado como base' : 'Nenhuma'} />
+                  <UsedValue label="Produto" value={productImage ? productImage.name ?? 'Imagem de produto enviada' : generationParams.hasProduct ? 'Imagem de produto usada' : 'Nenhum'} />
+                  <UsedValue label="Referências" value={references.length ? references.map((item, index) => String(item.name ?? `Referência ${index + 1}`)).join(', ') : generationParams.referenceCount ? `${generationParams.referenceCount} referência(s) usada(s)` : 'Nenhuma'} />
+                  <UsedValue label="Detalhes extras" value={generationParams.extraDetails} />
+                  <UsedValue label="Mundo do personagem" value={generationParams.characterWorld} />
+                  <UsedValue label="Compartilhamento" value={generationParams.makePublic === true ? 'Pública na comunidade' : generationParams.makePublic === false ? 'Privada' : undefined} />
+                </dl>
+              ) : (
+                <p className="mt-2">Carregando os dados da geração…</p>
+              )}
+            </details>
+          )}
           <div className="grid gap-2">
             <Button variant="brand" onClick={useAsBase}><ScanFace className="size-4" /> Usar este rosto como base</Button>
+            <Button variant="brand" onClick={animateAvatar}><ScanFace className="size-4" /> Criar vídeo com este avatar</Button>
             <Button variant="secondary" onClick={recreate}><RefreshCcw className="size-4" /> Recriar com estas características</Button>
             <Button variant="secondary" onClick={() => void downloadImage(avatar.image_url, `futuro-digital-${avatar.id.slice(0, 8)}.png`)}>
               <Download className="size-4" /> Baixar imagem
@@ -120,5 +171,15 @@ export function AvatarDetailModal({ avatar, onClose }: { avatar: AvatarDTO | nul
         </div>
       </div>
     </Modal>
+  );
+}
+
+function UsedValue({ label, value }: { label: string; value: unknown }) {
+  if (value === undefined || value === null || value === '') return null;
+  return (
+    <div className="grid grid-cols-[104px_minmax(0,1fr)] gap-2">
+      <dt className="font-semibold text-fg-muted">{label}</dt>
+      <dd className="min-w-0 break-words text-fg">{String(value)}</dd>
+    </div>
   );
 }

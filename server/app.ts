@@ -15,6 +15,7 @@ import { aiUgcRoutes } from './routes/aiUgc';
 import { projectRoutes } from './routes/projects';
 import { studioRoutes } from './routes/studio';
 import { viralRoutes } from './routes/viral';
+import { directorRoutes } from './routes/director';
 import { enhancePromptSchema, type ApiErrorBody } from '../shared/contracts';
 
 export type AppEnv = { Variables: { userId: string } };
@@ -70,12 +71,14 @@ app.use('/ai-ugc/*', requireAuth);
 app.use('/projects/*', requireAuth);
 app.use('/viral/*', requireAuth);
 app.use('/studio/*', requireAuth);
+app.use('/director/*', requireAuth);
 
 app.route('/avatars', avatarRoutes);
 app.route('/ai-ugc', aiUgcRoutes);
 app.route('/projects', projectRoutes);
 app.route('/viral', viralRoutes);
 app.route('/studio', studioRoutes);
+app.route('/director', directorRoutes);
 
 app.post('/prompt/enhance', async (c) => {
   const parsed = enhancePromptSchema.safeParse(await c.req.json().catch(() => null));

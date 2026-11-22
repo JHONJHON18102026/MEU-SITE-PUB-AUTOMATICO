@@ -347,7 +347,7 @@ export function TalkingCreator() {
           </section>
         </div>
 
-        {/* Painel direito 50%: Preview confortável e espaçado como no Influai */}
+        {/* Painel direito 50% com preview espaçado. */}
         <aside data-guide-target="talking-submit" className="h-fit space-y-4 rounded-2xl border border-white/10 bg-surface p-6 shadow-[0_16px_40px_rgba(0,0,0,.16)] lg:sticky lg:top-20">
           <div className="text-sm font-semibold text-fg-muted">Prévia</div>
           <div className="relative mx-auto max-w-[300px] overflow-hidden rounded-2xl border border-border bg-surface-2">

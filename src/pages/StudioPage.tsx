@@ -142,7 +142,7 @@ export function StudioPage() {
       </div>
       </div>
 
-      {/* Navegação interna compacta idêntica ao Influai Studio */}
+      {/* Navegação interna compacta do Studio. */}
       <div className="premium-tabbar inline-flex h-9 w-fit max-w-full flex-nowrap items-center gap-1 overflow-x-auto rounded-[8px] p-1 thin-scroll" role="tablist" aria-label="Abas do Studio">
         {STUDIO_SECTIONS.map((t) => {
           const active = activeSection === t.id;
@@ -167,7 +167,7 @@ export function StudioPage() {
         <div className="space-y-6">
           <StepGuideBanner guideKey="studio" />
 
-          {/* Os 5 KPIs compactos estilo Influai Studio */}
+          {/* Os 5 KPIs compactos do Studio. */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <div className="flex h-[94px] flex-col justify-between rounded-xl border border-border bg-surface p-4">
               <div className="flex items-center justify-between text-xs text-fg-muted">
@@ -206,7 +206,7 @@ export function StudioPage() {
             </div>
           </div>
 
-          {/* Bloco Crescimento idêntico ao painel Influai */}
+          {/* Bloco de crescimento do painel. */}
           <section className="rounded-xl border border-border bg-surface p-5">
             <h2 className="text-sm font-semibold text-fg">Crescimento (estimado por publicações)</h2>
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">

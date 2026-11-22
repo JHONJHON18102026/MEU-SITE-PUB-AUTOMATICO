@@ -47,7 +47,7 @@ export function AiUgcPage() {
     return <Navigate to={`/ai-ugc/${LEGACY_TAB_MAP[legacyTab]}`} replace />;
   }
 
-  // Sem :mode -> entra direto em ADS (exatamente como no Influai /ai-ugc) mantendo as sub-rotas dedicadas na barra superior
+  // Sem :mode -> entra direto em ADS, mantendo as sub-rotas dedicadas na barra superior.
   const activeSlug = mode ?? 'ads';
   const current = UGC_MODES.find((m) => m.slug === activeSlug);
   if (mode && !current) {
@@ -69,7 +69,7 @@ export function AiUgcPage() {
         </div>
       </div>
 
-      {/* Barra de abas compacta 1:1 com o Influai — largura ajustada ao conteúdo, cada botão navega para /ai-ugc/:mode */}
+      {/* Barra de abas compacta; cada botão navega para /ai-ugc/:mode. */}
       <nav
         className="premium-tabbar inline-flex w-full max-w-full items-center gap-1 overflow-x-auto rounded-[8px] p-1 text-fg-muted thin-scroll"
         aria-label="Ferramentas do AI UGC"

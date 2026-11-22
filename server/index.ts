@@ -16,6 +16,6 @@ serve({ fetch: app.fetch, port: env.port, hostname: '0.0.0.0' }, (info) => {
     console.warn(`[api] Não foi possível aplicar buckets privados: ${error instanceof Error ? error.message : String(error)}`);
   });
   void ensureRustMotorRunning().catch((error) => {
-    console.warn(`[hust] Não foi possível verificar a ponte local: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn('[hust] Não foi possível verificar a ponte local: ' + (error instanceof Error ? error.message : String(error)));
   });
 });

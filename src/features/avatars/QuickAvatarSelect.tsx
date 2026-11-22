@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { ImagePlus, X } from 'lucide-react';
 import { SHOWCASE_AVATARS } from './showcaseExamples';
 import { useMyAvatars } from './useAvatarData';
 import { ImagePicker } from './ImagePicker';
 import type { PreparedImage } from '@/lib/image';
+import { useSession } from '@/store/session';
 
 export interface SelectedVisualSource {
   label: string;
@@ -25,10 +27,38 @@ export function QuickAvatarSelect({
   compact?: boolean;
 }) {
   const { data: myAvatars } = useMyAvatars();
+  const userId = useSession((state) => state.session?.user.id);
+  const storageKey = `fd-avatar-hidden-quick-select:${userId ?? 'anonymous'}`;
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
   const options = [
     ...myAvatars.slice(0, 4).map((a) => ({ id: a.id, label: a.name, url: a.image_url })),
     ...SHOWCASE_AVATARS.slice(0, 6).map((a) => ({ id: a.id, label: a.name, url: a.image_url })),
   ];
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      setHiddenIds(saved ? JSON.parse(saved) as string[] : []);
+    } catch {
+      setHiddenIds([]);
+    }
+  }, [storageKey]);
+
+  function detachOption(item: (typeof options)[number]) {
+    const next = [...new Set([...hiddenIds, item.id])];
+    setHiddenIds(next);
+    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* Local preference is best effort. */ }
+    if (!value.uploaded && value.previewUrl === item.url) {
+      const fallback = options.find((option) => option.id !== item.id && !next.includes(option.id));
+      onChange({ label: fallback?.label ?? 'Nenhum avatar selecionado', previewUrl: fallback?.url ?? '', uploaded: null });
+    }
+  }
+
+  function restoreOptions() {
+    setHiddenIds([]);
+    try { localStorage.removeItem(storageKey); } catch { /* Local preference is best effort. */ }
+  }
+
 
   return (
     <div className="space-y-2">
@@ -57,21 +87,33 @@ export function QuickAvatarSelect({
       )}
 
       <div className={clsx('grid gap-2', compact ? 'grid-cols-4' : 'grid-cols-5 sm:grid-cols-6')}>
-        {options.slice(0, compact ? 3 : 5).map((item) => {
+        {options.filter((item) => !hiddenIds.includes(item.id)).map((item) => {
           const active = !value.uploaded && value.previewUrl === item.url;
           return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onChange({ label: item.label, previewUrl: item.url, uploaded: null })}
-              className={clsx(
-                'overflow-hidden rounded-xl border text-left transition-all',
-                active ? 'border-accent ring-brand' : 'border-border hover:border-fg-subtle',
-              )}
-              title={item.label}
-            >
-              <img src={item.url} alt={item.label} className="aspect-[3/4] w-full object-cover object-top" />
-            </button>
+            <div key={item.id} className="group relative">
+              <button
+                type="button"
+                onClick={() => onChange({ label: item.label, previewUrl: item.url, uploaded: null })}
+                className={clsx(
+                  'w-full overflow-hidden rounded-xl border text-left transition-all',
+                  active ? 'border-accent ring-brand' : 'border-border hover:border-fg-subtle',
+                )}
+                title={item.label}
+                aria-label={`Selecionar ${item.label}`}
+                aria-pressed={active}
+              >
+                <img src={item.url} alt={item.label} className="aspect-[3/4] w-full object-cover object-top" />
+              </button>
+              <button
+                type="button"
+                onClick={() => detachOption(item)}
+                title="Desanexar do seletor; não exclui da biblioteca"
+                aria-label={`Desanexar ${item.label} do seletor`}
+                className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-black/75 text-white shadow opacity-100 transition hover:bg-black sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
           );
         })}
 
@@ -84,6 +126,11 @@ export function QuickAvatarSelect({
           Enviar
         </ImagePicker>
       </div>
+      {hiddenIds.length > 0 && (
+        <button type="button" onClick={restoreOptions} className="text-[10px] font-semibold text-fg-muted underline decoration-dotted underline-offset-2 hover:text-fg">
+          Restaurar {hiddenIds.length} imagem(ns) ocultada(s)
+        </button>
+      )}
     </div>
   );
 }

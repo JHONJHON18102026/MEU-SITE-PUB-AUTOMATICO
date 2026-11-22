@@ -2,10 +2,11 @@
  * Busca listas da galeria direto no Supabase (as regras RLS garantem que
  * cada pessoa só vê o que é dela + o que foi marcado como público).
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 import type { AvatarDTO, GenerationDTO } from '@shared/contracts';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { useSession } from '@/store/session';
 
 /** Contador global: quando muda, todas as listas recarregam. */
@@ -14,12 +15,11 @@ export const useGalleryVersion = create<{ version: number; bump: () => void }>((
   bump: () => set({ version: get().version + 1 }),
 }));
 
-const AVATAR_COLUMNS = 'id, user_id, name, image_url, prompt, attributes, engine, framing, aspect_ratio, is_public, is_favorite, created_at';
-
-function useQuery<T>(fetcher: () => Promise<T[]>, deps: unknown[]) {
+function useQuery<T>(fetcher: () => Promise<T[]>, deps: unknown[], refreshEveryMs?: number) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchedAt = useRef(0);
   const version = useGalleryVersion((s) => s.version);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -29,13 +29,31 @@ function useQuery<T>(fetcher: () => Promise<T[]>, deps: unknown[]) {
     let alive = true;
     setLoading(true);
     run()
-      .then((rows) => alive && (setData(rows), setError(null)))
+      .then((rows) => alive && (lastFetchedAt.current = Date.now(), setData(rows), setError(null)))
       .catch((err: unknown) => alive && setError(err instanceof Error ? err.message : String(err)))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
   }, [run, version]);
+
+  useEffect(() => {
+    if (!refreshEveryMs) return;
+    let alive = true;
+    const refreshIfStaleAndVisible = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastFetchedAt.current < refreshEveryMs) return;
+      run()
+        .then((rows) => alive && (lastFetchedAt.current = Date.now(), setData(rows), setError(null)))
+        .catch((err: unknown) => alive && setError(err instanceof Error ? err.message : String(err)));
+    };
+    const timer = window.setInterval(refreshIfStaleAndVisible, Math.min(refreshEveryMs, 60_000));
+    document.addEventListener('visibilitychange', refreshIfStaleAndVisible);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshIfStaleAndVisible);
+    };
+  }, [run, refreshEveryMs]);
 
   return { data, loading, error };
 }
@@ -44,29 +62,17 @@ export function useMyAvatars() {
   const userId = useSession((s) => s.session?.user.id);
   return useQuery<AvatarDTO>(async () => {
     if (!supabase || !userId) return [];
-    const { data, error } = await supabase
-      .from('avatars')
-      .select(AVATAR_COLUMNS)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(120);
-    if (error) throw error;
-    return data as AvatarDTO[];
-  }, [userId]);
+    const { avatars } = await api.listAvatars('mine');
+    return avatars;
+  }, [userId], 50 * 60 * 1000);
 }
 
 export function useCommunityAvatars() {
   return useQuery<AvatarDTO>(async () => {
     if (!supabase) return [];
-    const { data, error } = await supabase
-      .from('avatars')
-      .select(AVATAR_COLUMNS)
-      .eq('is_public', true)
-      .order('created_at', { ascending: false })
-      .limit(60);
-    if (error) throw error;
-    return data as AvatarDTO[];
-  }, []);
+    const { avatars } = await api.listAvatars('community');
+    return avatars;
+  }, [], 50 * 60 * 1000);
 }
 
 export function useGenerations() {

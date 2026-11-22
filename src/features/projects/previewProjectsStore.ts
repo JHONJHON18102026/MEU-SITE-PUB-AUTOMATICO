@@ -144,6 +144,7 @@ export const usePreviewProjects = create<PreviewProjectsState>()(
 
 export function useProjectsData(origin: 'projects' | 'avatar' = 'projects') {
   const preview = usePreviewProjects();
+  const deletePreviewProject = usePreviewProjects((state) => state.deletePreviewProject);
   const userId = useSession((state) => state.session?.user.id);
   const [remote, setRemote] = useState<VideoProjectDTO[]>([]);
   const [loading, setLoading] = useState(isSupabaseConfigured);
@@ -169,6 +170,15 @@ export function useProjectsData(origin: 'projects' | 'avatar' = 'projects') {
       if (!silent) setLoading(false);
     }
   }, [origin]);
+
+  const deleteProject = useCallback(async (project: VideoProjectDTO) => {
+    if (project.is_preview || !isSupabaseConfigured) {
+      deletePreviewProject(project.id);
+      return;
+    }
+    await api.deleteProject(project.id);
+    setRemote((current) => current.filter((item) => item.id !== project.id));
+  }, [deletePreviewProject]);
 
   useEffect(() => {
     void load();
@@ -211,6 +221,7 @@ export function useProjectsData(origin: 'projects' | 'avatar' = 'projects') {
     error,
     reload: () => load(1),
     loadMore: () => load(page + 1),
+    deleteProject,
     hasMore,
   };
 }

@@ -9,12 +9,14 @@
 import type { ImageInput } from '@shared/contracts';
 
 export const MAX_SIDE = 1536;
-const ACCEPTED = ['image/png', 'image/jpeg', 'image/webp'];
+const ACCEPTED = ['image/png', 'image/jpeg', 'image/webp', 'image/avif'];
 
 export interface PreparedImage extends ImageInput {
   previewUrl: string;
   name: string;
 }
+
+export interface PreparedVideo { data: string; mimeType: string; name: string }
 
 async function bitmapToPrepared(blob: Blob, name: string): Promise<PreparedImage> {
   const bitmap = await createImageBitmap(blob);
@@ -51,6 +53,18 @@ export async function prepareImageFromUrl(url: string, name = 'modelo.jpg'): Pro
   const res = await fetch(url);
   if (!res.ok) throw new Error('Não consegui carregar essa imagem.');
   return bitmapToPrepared(await res.blob(), name);
+}
+
+export async function prepareVideo(file: File): Promise<PreparedVideo> {
+  if (!['video/mp4', 'video/quicktime', 'video/webm'].includes(file.type)) throw new Error('Formato não suportado. Use MP4, MOV ou WebM.');
+  if (file.size > 30 * 1024 * 1024) throw new Error('O vídeo de movimento deve ter no máximo 30 MB.');
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('Não consegui ler o vídeo de movimento.'));
+    reader.readAsDataURL(file);
+  });
+  return { mimeType: file.type, data: dataUrl.slice(dataUrl.indexOf(',') + 1), name: file.name };
 }
 
 /** Baixa uma imagem remota com o nome certo (botão "Baixar"). */

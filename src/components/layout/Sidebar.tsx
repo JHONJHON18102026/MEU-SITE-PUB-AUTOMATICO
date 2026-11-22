@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
-import { Clapperboard, Crown, FolderOpen, Home, SlidersHorizontal, Sparkles, TrendingUp, Users, X } from 'lucide-react';
+import { Bot, Clapperboard, Crown, FolderOpen, Home, SlidersHorizontal, Sparkles, TrendingUp, Users, X } from 'lucide-react';
 import { BrandLogo, CoinIcon } from '@/components/ui/Brand';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -10,11 +10,12 @@ import { useUi } from '@/store/ui';
 
 export const NAV_ITEMS = [
   { to: '/dashboard', label: 'Home', icon: Home },
+  { to: '/agente-diretor', label: 'Agente Diretor', icon: Bot },
   { to: '/avatars', label: 'Avatars', icon: Users },
-  { to: '/projects', label: 'Projetos', icon: FolderOpen },
   { to: '/viral', label: 'VIRAL', icon: TrendingUp },
   { to: '/ai-ugc', label: 'AI UGC', icon: Clapperboard },
   { to: '/studio', label: 'Studio', icon: Sparkles },
+  { to: '/projects', label: 'Projetos', icon: FolderOpen },
 ] as const;
 
 const PLAN_LABEL: Record<string, string> = {
@@ -111,14 +112,14 @@ function SidebarInner({
           {!collapsed && <span>Personalizar menu</span>}
         </button>
 
-        {/* Pílula de créditos + Upgrade idêntica ao rodapé lateral do Influai */}
+        {/* Pílula de créditos + plano ativo */}
         <div
           className={clsx(
             'flex items-center rounded-2xl border border-accent/25 bg-gradient-to-r from-accent/10 to-surface-2 shadow-[0_12px_30px_rgba(0,0,0,0.2)] transition',
             collapsed ? 'mx-auto h-8 w-full justify-center px-1' : 'h-[42px] gap-2.5 px-3',
           )}
           data-testid="credits-balance"
-          aria-label={`Saldo: ${profile?.coins_balance ?? 0} créditos`}
+          aria-label={`Saldo: ${profile?.coins_balance ?? 'carregando'} créditos`}
         >
           <div className={clsx('flex items-center font-bold text-[#f2c55f]', collapsed ? 'gap-1 text-[10px]' : 'gap-1.5 text-xs')}>
             <CoinIcon className={clsx(collapsed ? 'size-3' : 'size-4', 'shrink-0')} />
@@ -129,7 +130,7 @@ function SidebarInner({
               to="/setup"
               className="ml-auto inline-flex h-7 items-center gap-1 rounded-xl bg-accent px-3 text-[10px] font-extrabold text-white transition hover:brightness-110"
             >
-              <Crown className="size-3" /> Upgrade
+              <Crown className="size-3" /> {PLAN_LABEL[profile?.plan ?? 'free']}
             </Link>
           )}
         </div>
@@ -151,7 +152,7 @@ export function Sidebar() {
   } = useUi();
   const [customizeOpen, setCustomizeOpen] = useState(false);
 
-  // Na tela /avatars, o menu inicia recolhido em trilho fino (50px) igual ao Influai para dar palco total ao estúdio
+  // Na tela /avatars, o menu inicia recolhido para dar palco total ao estúdio.
   const collapsed = pathname.startsWith('/avatars') ? !avatarsRailExpanded : sidebarCollapsed;
 
   return (

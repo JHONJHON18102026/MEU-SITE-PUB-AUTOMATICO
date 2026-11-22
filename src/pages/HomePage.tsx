@@ -2,23 +2,18 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChevronDown,
-  Clapperboard,
-  Compass,
-  Flame,
   Gift,
-  Images,
-  ImagePlus,
   Play,
-  Presentation,
-  ShoppingBag,
-  UserRound,
-  Wand2,
+  Globe2,
+  Sparkles,
   Zap,
   Activity,
   ShieldCheck,
 } from 'lucide-react';
 import { useSession } from '@/store/session';
 import { PRICING } from '@shared/contracts';
+import { SHOWCASE_AVATARS } from '@/features/avatars/showcaseExamples';
+import { useCommunityAvatars } from '@/features/avatars/useAvatarData';
 
 const HOME_STRIP_IMAGES = [
   '/showcase/internal-identity-new.png',
@@ -36,27 +31,10 @@ function greeting(date = new Date()): string {
   return 'Boa noite';
 }
 
-const TOOLS = [
-  { icon: ImagePlus, color: '#678ffe', title: 'Image Ads', desc: 'Anúncios de imagem com IA', to: '/image-ads', badge: 'Novo' },
-  { icon: UserRound, color: '#27c98f', title: 'Avatar Video', desc: 'Avatares de IA hiper-realistas', to: '/ai-ugc/falante', badge: '' },
-  { icon: Play, color: '#16b9c7', title: 'Ad Clone', desc: 'Clone anúncios virais em segundos', to: '/ai-ugc/remake', badge: 'Novo' },
-  { icon: ShoppingBag, color: '#fb8935', title: 'Vídeo do produto', desc: 'Transforme imagens em vídeos incríveis', to: '/ai-ugc/link', badge: '' },
-  { icon: Presentation, color: '#5977ef', title: 'Slideshows', desc: 'Crie apresentações animadas', to: '/ai-ugc/slideshows', badge: '' },
-  { icon: Wand2, color: '#d532b5', title: 'Motion Control', desc: 'Replique movimentos virais com IA', to: '/avatars?panel=motion', badge: 'Novo' },
-  { icon: Images, color: '#7357de', title: 'Avatar com produto', desc: 'Seu influencer segurando o produto', to: '/avatars?product=1', badge: '' },
-  { icon: Compass, color: '#ae4fe0', title: 'Explorar modelos', desc: 'Galeria pronta para usar como base', to: '/avatars?tab=explore', badge: '' },
-  { icon: Clapperboard, color: '#6366f1', title: 'Vídeo UGC (ADS)', desc: 'Assistente completo em 8 etapas', to: '/ai-ugc/ads', badge: '' },
-  { icon: UserRound, color: '#10b981', title: 'Personagem Falante', desc: 'Avatar falando seu roteiro por cenas', to: '/ai-ugc/falante', badge: '' },
-  { icon: Zap, color: '#f59e0b', title: 'Hook + Demo', desc: 'Gancho forte nos 3s iniciais + demo', to: '/ai-ugc/hook-demo', badge: '' },
-  { icon: Flame, color: '#845cff', title: 'Studio em Massa', desc: 'Marca, lotes de vídeos, legendas e agenda', to: '/studio', badge: 'Novo' },
-];
-
 export function HomePage() {
   const profile = useSession((s) => s.profile);
-  const [showAllTools, setShowAllTools] = useState(false);
   const firstName = (profile?.name ?? '').split(' ')[0];
-  const imagesLeft = Math.floor((profile?.coins_balance ?? 0) / PRICING.avatarImage);
-  const visibleTools = showAllTools ? TOOLS : TOOLS.slice(0, 6);
+  const imagesLeft = profile ? Math.floor(profile.coins_balance / PRICING.avatarImage) : null;
   const isPreview = (profile?.name ?? '').toLowerCase().includes('visitante');
 
   return (
@@ -82,7 +60,7 @@ export function HomePage() {
         </div>
         <div className="flex items-center gap-3 rounded-2xl border border-cyan-300/25 bg-gradient-to-br from-cyan-300/10 via-surface to-surface px-4 py-3 shadow-[0_14px_34px_rgba(13,89,120,0.16)]">
           <span className="grid size-10 place-items-center rounded-xl bg-cyan-300 text-[#071521] shadow-[0_0_22px_rgba(56,189,248,.24)]"><Zap className="size-4" /></span>
-          <div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-fg-subtle">Créditos</div><div className="mt-0.5 text-xs font-semibold">{profile?.coins_balance ?? 0} disponíveis</div></div>
+          <div><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-fg-subtle">Créditos</div><div className="mt-0.5 text-xs font-semibold">{profile?.coins_balance ?? '—'} disponíveis</div></div>
           <Link to="/setup" className="ml-auto text-[10px] font-bold text-accent hover:underline">Gerenciar</Link>
         </div>
         <div className="flex items-center gap-3 rounded-2xl border border-success/30 bg-gradient-to-br from-success/10 via-surface to-surface px-4 py-3 shadow-[0_14px_34px_rgba(24,132,92,0.16)]">
@@ -92,7 +70,7 @@ export function HomePage() {
         </div>
       </div>
 
-      {/* Faixa de status/créditos exata do influai-replica (62px, #191724, borda #3a305a) */}
+      {/* Faixa de status e créditos do FUTURO DIGITAL. */}
       <div className="mb-6 flex min-h-[80px] flex-col justify-between gap-3 rounded-2xl border border-accent/20 bg-gradient-to-r from-accent/10 via-surface to-surface px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.18)] sm:flex-row sm:items-center">
         <div className="flex min-w-0 items-start gap-3 sm:items-center">
           <Gift className="mt-0.5 size-[18px] shrink-0 text-[#936bff] sm:mt-0" />
@@ -104,7 +82,7 @@ export function HomePage() {
               </>
             ) : (
               <>
-                <div className="text-[12px] font-bold text-fg">Você tem {profile?.coins_balance ?? 0} créditos — dá para criar {imagesLeft} imagem(ns) de influencer.</div>
+                <div className="text-[12px] font-bold text-fg">{profile ? `Você tem ${profile.coins_balance} créditos — dá para criar ${imagesLeft} imagem(ns) de influencer.` : 'Consultando seu saldo interno…'}</div>
                 <div className="mt-0.5 text-[11px] text-fg-muted">Cada imagem custa {PRICING.avatarImage} créditos. Se a IA falhar, o valor volta na hora.</div>
               </>
             )}
@@ -148,7 +126,7 @@ export function HomePage() {
         ))}
       </section>
 
-      {/* 2 Hero Cards 440/178 exatos do influai-replica: roxo vibrante + retratos em faixa na base / direita */}
+      {/* Hero cards com roxo vibrante e retratos em faixa. */}
       <div className="mb-6 grid gap-5 md:grid-cols-2">
         <Link
           to="/avatars"
@@ -214,52 +192,54 @@ export function HomePage() {
         </Link>
       </div>
 
-      {/* Ferramentas populares (88px cards com caixas coloridas idênticas ao influai-replica) */}
-      <div>
-        <h2 className="mb-4 text-[18px] font-bold tracking-tight text-fg">Ferramentas populares</h2>
-        <Link to="/ferramentas" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-accent/25 bg-accent-soft px-4 py-3 text-xs transition hover:border-accent/50 hover:bg-accent-soft/80">
-          <span><span className="font-bold text-fg">Ainda não sabe por onde começar?</span> <span className="text-fg-muted">Veja a demonstração de todas as ferramentas.</span></span>
-          <span className="inline-flex shrink-0 items-center gap-1 font-bold text-accent">Ver guia <ChevronDown className="size-3 -rotate-90" /></span>
-        </Link>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visibleTools.map((t) => (
-            <Link
-              key={t.title}
-              to={t.to}
-                className="group flex h-[116px] w-full items-center gap-4 rounded-2xl border border-white/10 bg-surface p-5 text-left shadow-[0_12px_30px_rgba(0,0,0,0.14)] transition duration-200 hover:-translate-y-1 hover:border-accent/45 hover:bg-[var(--surface-hover)] hover:shadow-[0_20px_44px_rgba(0,0,0,0.24)]"
-            >
-              <span
-                className="grid size-[48px] shrink-0 place-items-center rounded-[14px] text-white"
-                style={{ backgroundColor: t.color }}
-              >
-                <t.icon className="size-[18px]" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                  <span className="truncate text-[14px] font-bold text-fg">{t.title}</span>
-                  {t.badge && (
-                    <span className="rounded-full bg-[#efc400] px-1.5 py-0.5 text-[8px] font-extrabold text-[#16130b]">
-                      {t.badge}
-                    </span>
-                  )}
-                </div>
-                <div className="truncate text-[12px] text-fg-muted">{t.desc}</div>
-              </div>
-            </Link>
-          ))}
-        </div>
+      <HomeAvatarPresets />
+    </div>
+  );
+}
 
-        <div className="mt-5 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setShowAllTools((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-[9px] border border-border bg-surface-2 px-4 py-2 text-[11px] font-semibold text-fg-muted transition hover:bg-surface-3 hover:text-fg"
-          >
-            {showAllTools ? 'Mostrar menos' : `Ver todas (${TOOLS.length})`}
-            <ChevronDown className="size-3" />
+function HomeAvatarPresets() {
+  const [active, setActive] = useState<'presets' | 'community'>('presets');
+  const community = useCommunityAvatars();
+  const avatars = active === 'presets' ? SHOWCASE_AVATARS : community.data;
+
+  return (
+    <section aria-labelledby="home-avatar-presets" className="mt-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="home-avatar-presets" className="text-[18px] font-bold tracking-tight text-fg">Templates de avatares</h2>
+          <p className="mt-1 text-xs text-fg-muted">Escolha um influencer pronto para abrir e personalizar no estúdio.</p>
+        </div>
+        <div className="inline-flex flex-wrap rounded-full bg-surface-2 p-1 text-xs font-semibold ring-1 ring-inset ring-border" role="tablist" aria-label="Biblioteca de avatares">
+          <button type="button" role="tab" aria-selected={active === 'presets'} onClick={() => setActive('presets')} className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 transition ${active === 'presets' ? 'bg-brand text-white shadow-sm' : 'text-fg-muted hover:text-fg'}`}>
+            <Sparkles className="size-3.5" /> Presets de Avatares ({SHOWCASE_AVATARS.length})
+          </button>
+          <button type="button" role="tab" aria-selected={active === 'community'} onClick={() => setActive('community')} className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 transition ${active === 'community' ? 'bg-brand text-white shadow-sm' : 'text-fg-muted hover:text-fg'}`}>
+            <Globe2 className="size-3.5" /> Avatares da Comunidade ({community.data.length})
           </button>
         </div>
       </div>
-    </div>
+
+      {active === 'community' && community.loading ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"><div className="skeleton aspect-[3/4] rounded-2xl" /><div className="skeleton aspect-[3/4] rounded-2xl" /><div className="skeleton aspect-[3/4] rounded-2xl" /></div>
+      ) : avatars.length ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {avatars.map((avatar) => (
+            <Link key={avatar.id} to={active === 'presets' ? `/avatars?modelo=${encodeURIComponent(avatar.id)}` : '/avatars?tab=explore&sub=comunidade'} title={`Abrir ${avatar.name} no estúdio`} className="group relative aspect-[3/4] overflow-hidden rounded-2xl border border-accent/25 bg-surface shadow-[0_14px_34px_rgba(0,0,0,.2)] transition duration-300 hover:-translate-y-1 hover:border-accent/70 hover:shadow-[0_22px_48px_rgba(72,42,150,.3)]">
+              <img src={avatar.image_url} alt={avatar.name} loading="lazy" className="h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.03]" />
+              <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+              <span className="absolute inset-x-3 bottom-3 truncate text-left text-xs font-semibold text-white">{avatar.name}</span>
+              <span className="absolute right-2 top-2 rounded-lg bg-black/55 px-2 py-1 text-[10px] font-semibold text-white opacity-0 backdrop-blur transition group-hover:opacity-100">Usar template</span>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border px-6 py-10 text-center">
+          <Globe2 className="size-6 text-fg-subtle" />
+          <p className="text-sm font-semibold text-fg">Ainda não há avatares públicos na comunidade.</p>
+          <p className="max-w-md text-xs text-fg-muted">Quando alguém publicar um avatar, ele aparece aqui para você abrir no estúdio.</p>
+          {community.error && <Link to="/avatars?tab=explore&sub=comunidade" className="mt-1 text-xs font-bold text-accent hover:underline">Abrir galeria de avatares</Link>}
+        </div>
+      )}
+    </section>
   );
 }

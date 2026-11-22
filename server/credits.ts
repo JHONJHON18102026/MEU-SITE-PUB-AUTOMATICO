@@ -16,9 +16,11 @@ export async function debitUserCredits(opts: {
   reason: string;
   refId: string;
   insufficientMessage: string;
+  /** Alguns motores continuam pagos mesmo no plano ilimitado. */
+  chargeUnlimited?: boolean;
 }): Promise<number> {
   const admin = getAdmin();
-  if (await isUnlimitedUser(opts.userId)) {
+  if (!opts.chargeUnlimited && await isUnlimitedUser(opts.userId)) {
     const { data } = await admin.from('profiles').select('coins_balance').eq('id', opts.userId).single();
     return Number(data?.coins_balance ?? 0);
   }
@@ -42,10 +44,12 @@ export async function refundUserCredits(opts: {
   amount: number;
   reason?: string;
   refId: string;
+  /** Deve espelhar chargeUnlimited usado no débito original. */
+  chargeUnlimited?: boolean;
 }): Promise<number | null> {
   if (opts.amount <= 0) return null;
   const admin = getAdmin();
-  if (await isUnlimitedUser(opts.userId)) {
+  if (!opts.chargeUnlimited && await isUnlimitedUser(opts.userId)) {
     const { data } = await admin.from('profiles').select('coins_balance').eq('id', opts.userId).single();
     return Number(data?.coins_balance ?? 0);
   }

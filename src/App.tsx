@@ -11,12 +11,12 @@ import { AvatarsPage } from '@/pages/AvatarsPage';
 
 const SetupPage = lazy(() => import('@/pages/SetupPage').then((m) => ({ default: m.SetupPage })));
 const HomePage = lazy(() => import('@/pages/HomePage').then((m) => ({ default: m.HomePage })));
+const AgentDirectorPage = lazy(() => import('@/pages/AgentDirectorPage').then((m) => ({ default: m.AgentDirectorPage })));
 const AiUgcPage = lazy(() => import('@/pages/AiUgcPage').then((m) => ({ default: m.AiUgcPage })));
 const ProjectsPage = lazy(() => import('@/pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })));
 const ImageAdsPage = lazy(() => import('@/pages/ImageAdsPage').then((m) => ({ default: m.ImageAdsPage })));
 const ViralPage = lazy(() => import('@/pages/ViralPage').then((m) => ({ default: m.ViralPage })));
 const StudioPage = lazy(() => import('@/pages/StudioPage').then((m) => ({ default: m.StudioPage })));
-const TutorialsPage = lazy(() => import('@/pages/TutorialsPage').then((m) => ({ default: m.TutorialsPage })));
 const ToolsGuidePage = lazy(() => import('@/pages/ToolsGuidePage').then((m) => ({ default: m.ToolsGuidePage })));
 
 function FullScreenLoader() {
@@ -55,7 +55,6 @@ export function App() {
         <Route path="/login" element={isSupabaseConfigured ? <LoginPage /> : <Navigate to="/dashboard" replace />} />
         <Route path="/setup" element={<SetupPage />} />
         <Route path="/ferramentas" element={<ToolsGuidePage />} />
-        <Route path="/tutorials" element={<TutorialsPage />} />
         <Route
           element={
             <RequireAuth>
@@ -64,6 +63,7 @@ export function App() {
           }
         >
           <Route path="/dashboard" element={<HomePage />} />
+          <Route path="/agente-diretor" element={<AgentDirectorPage />} />
           <Route path="/avatars" element={<AvatarsPage />} />
           <Route path="/ai-ugc" element={<AiUgcPage />} />
           <Route path="/ai-ugc/:mode" element={<AiUgcPage />} />

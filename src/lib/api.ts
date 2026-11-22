@@ -21,6 +21,10 @@ import type {
   ViralManifestDTO,
 } from '@shared/ugcContracts';
 import { supabase } from './supabase';
+import type { DirectorPlan, DirectorPlanRequest } from '@shared/directorContracts';
+import type { AvatarTemplateDTO, AvatarTemplateInput } from '@shared/avatarTemplateContracts';
+
+export type { DirectorPlan, DirectorPlanRequest } from '@shared/directorContracts';
 
 export class ApiClientError extends Error {
   readonly code: ApiErrorCode | 'NETWORK';
@@ -72,9 +76,17 @@ export const api = {
   health: () => request<HealthResponse>('/health'),
   generateAvatar: (payload: GenerateAvatarRequest) =>
     request<GenerateAvatarResponse>('/avatars/generate', { method: 'POST', body: JSON.stringify(payload) }),
+  listAvatars: (scope: 'mine' | 'community') =>
+    request<{ avatars: import('@shared/contracts').AvatarDTO[] }>(`/avatars/gallery?scope=${scope}`),
   enhancePrompt: (prompt: string) =>
     request<{ prompt: string }>('/prompt/enhance', { method: 'POST', body: JSON.stringify({ prompt }) }),
+  createDirectorPlan: (payload: DirectorPlanRequest) =>
+    request<{ plan: DirectorPlan }>('/director/plan', { method: 'POST', body: JSON.stringify(payload) }),
   deleteAvatar: (id: string) => request<{ ok: true }>(`/avatars/${id}`, { method: 'DELETE' }),
+  listAvatarTemplates: () => request<{ templates: AvatarTemplateDTO[] }>('/avatars/templates'),
+  createAvatarTemplate: (payload: AvatarTemplateInput) =>
+    request<{ template: AvatarTemplateDTO }>('/avatars/templates', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteAvatarTemplate: (id: string) => request<{ ok: true }>(`/avatars/templates/${id}`, { method: 'DELETE' }),
   extractProductLink: (url: string) =>
     request<{ name: string; description: string; imageUrl: string | null; highlights: string[] }>('/ai-ugc/extract-link', {
       method: 'POST',

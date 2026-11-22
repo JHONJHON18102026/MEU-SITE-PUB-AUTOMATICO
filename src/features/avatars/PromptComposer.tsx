@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { Cpu, Film, Image as ImageIcon, Minus, Plus, RectangleVertical, ScanFace, Sparkles, Wand2, X } from 'lucide-react';
+import { Cpu, Film, Image as ImageIcon, LoaderCircle, Minus, Plus, RectangleVertical, ScanFace, Sparkles, Wand2, X } from 'lucide-react';
 import {
   ASPECT_RATIOS,
   ENGINES,
@@ -13,11 +13,12 @@ import {
   type EngineId,
   type FramingId,
 } from '@shared/contracts';
+import { VIDEO_ENGINES, type VideoEngineId } from '@shared/ugcContracts';
 import { PillSelect } from '@/components/ui/PillSelect';
 import { CoinIcon } from '@/components/ui/Brand';
 import { api, ApiClientError } from '@/lib/api';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { useAvatarStudio } from './avatarStore';
+import { MAX_PENDING_IMAGE_REQUESTS, MAX_PENDING_VIDEO_REQUESTS, useAvatarStudio } from './avatarStore';
 import { ImagePicker } from './ImagePicker';
 import { AvatarPickerModal } from './AvatarPickerModal';
 
@@ -52,14 +53,14 @@ function Slot({
           >
             <X className="size-3.5" />
           </button>
-          <span className="pointer-events-none absolute bottom-1.5 left-2 text-[10px] font-black uppercase tracking-wide text-white">
+            <span className="pointer-events-none absolute inset-x-2 bottom-1.5 truncate text-[10px] font-black uppercase tracking-wide text-white">
             {label}
           </span>
         </>
       ) : (
         <>
           {children}
-          <span className="pointer-events-none absolute bottom-2 left-2 text-[11px] font-black uppercase tracking-wide text-fg">
+          <span className="pointer-events-none absolute inset-x-2 bottom-2 truncate text-[10px] font-black uppercase tracking-wide text-fg">
             {label}
           </span>
         </>
@@ -68,13 +69,24 @@ function Slot({
   );
 }
 
-export function PromptComposer({ onGenerate, busy, highlightProduct }: { onGenerate: () => void; busy: boolean; highlightProduct?: boolean }) {
+export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, pendingVideoRequests = 0, highlightProduct }: { onGenerate: () => void; onVideo: () => void; pendingImageRequests?: number; pendingVideoRequests?: number; highlightProduct?: boolean }) {
   const st = useAvatarStudio();
-  const [media, setMedia] = useState<'image' | 'video'>('image');
+  const media = st.composerMode;
   const [enhancing, setEnhancing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const cost = avatarCost(st.count);
-  const avatarSlotPreview = st.baseAvatar?.image_url ?? st.basePhoto?.previewUrl ?? null;
+  const videoBusy = st.videoBusy;
+  // Foto enviada é só referência de criação; o slot INFLUENCER recebe a imagem
+  // depois da validação (baseAvatar) ou quando a pessoa escolhe um avatar pronto.
+  const avatarSlotPreview = st.baseAvatar?.image_url ?? null;
+  const activeMedia = media;
+  const generationCount = activeMedia === 'image' ? st.count : st.videoCount;
+  const countLabel = activeMedia === 'image' ? 'imagens' : 'vídeos';
+
+  function openVideoTemplates() {
+    st.set({ composerMode: 'video', panelTab: 'templates' });
+    onVideo();
+  }
 
   async function enhance() {
     if (!isSupabaseConfigured) {
@@ -98,7 +110,7 @@ export function PromptComposer({ onGenerate, busy, highlightProduct }: { onGener
       className="flex flex-col gap-2 rounded-2xl border border-border/80 bg-surface/95 p-2 text-left shadow-xl shadow-black/25 backdrop-blur sm:flex-row"
       data-testid="prompt-composer"
     >
-      {/* Imagem / Vídeo — coluna vertical estilo Influai */}
+      {/* Imagem / Vídeo — coluna vertical. */}
       <div className="flex shrink-0 gap-1 sm:w-[70px] sm:flex-col" role="tablist" aria-label="Tipo de criação">
         {(
           [
@@ -109,14 +121,13 @@ export function PromptComposer({ onGenerate, busy, highlightProduct }: { onGener
           <button
             key={id}
             role="tab"
-            aria-selected={media === id}
+            aria-selected={activeMedia === id}
             onClick={() => {
-              if (id === 'video') toast.info('Para vídeos com este avatar, use a aba Motion ou AI UGC -> Falante.');
-              else setMedia(id);
+              st.set({ composerMode: id });
             }}
             className={clsx(
               'flex flex-1 items-center justify-center gap-1 rounded-xl px-2 py-2 text-[11px] font-semibold transition sm:flex-col',
-              media === id ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
+              activeMedia === id ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
             )}
           >
             <Icon className="size-4" />
@@ -134,9 +145,12 @@ export function PromptComposer({ onGenerate, busy, highlightProduct }: { onGener
           rows={2}
           aria-label="Descreva o que você quer criar"
           placeholder="Descreva o que você quer criar… ex.: tomando o suplemento na cozinha, luz da manhã"
-          className="min-h-[44px] w-full resize-none bg-transparent text-sm outline-none placeholder:text-fg-subtle"
+          className="composer-prompt min-h-[44px] w-full resize-none bg-transparent text-sm outline-none placeholder:text-fg-subtle focus:border-transparent focus:outline-none focus:ring-0"
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) onGenerate();
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+              if (activeMedia === 'video') void st.videoSubmit?.();
+              else onGenerate();
+            }
           }}
         />
 
@@ -157,23 +171,56 @@ export function PromptComposer({ onGenerate, busy, highlightProduct }: { onGener
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-1 xl:flex-nowrap">
+        <div className="relative flex min-h-7 flex-wrap items-center gap-0.5 pr-[68px]">
           <ImagePicker
             label={`Adicionar imagem de referência (até ${MAX_REFERENCE_IMAGES})`}
             testId="reference-input"
             disabled={st.referenceImages.length >= MAX_REFERENCE_IMAGES}
+            multiple
             onPicked={st.addReference}
+            onPickedMany={(images) => images.slice(0, MAX_REFERENCE_IMAGES - st.referenceImages.length).forEach(st.addReference)}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-surface-3/70 hover:text-fg disabled:opacity-40"
           >
             <Plus className="size-3.5" />
           </ImagePicker>
-          <PillSelect<EngineId>
-            label="Motor de criação"
-            icon={<Cpu className="size-3.5 text-accent dark:text-indigo-400" />}
-            value={st.engine}
-            onChange={(engine) => st.set({ engine })}
-            options={ENGINES.map((e) => ({ value: e.id, label: e.label, hint: e.description }))}
-          />
+          {activeMedia === 'image' ? (
+            <PillSelect<EngineId>
+              label="Modelo de imagem"
+              icon={<Cpu className="size-3.5 text-accent dark:text-indigo-400" />}
+              value={st.engine}
+              onChange={(engine) => st.set({ engine })}
+              options={ENGINES.map((e) => ({ value: e.id, label: e.label, hint: e.description }))}
+            />
+          ) : (
+            <PillSelect<VideoEngineId>
+              label="Modelo de vídeo"
+              icon={<Cpu className="size-3.5 text-accent dark:text-indigo-400" />}
+              value={st.videoEngine}
+              onChange={(videoEngine) => st.set({ videoEngine, videoDurationSeconds: videoEngine === 'omni-flash' ? 10 : 8 })}
+              options={VIDEO_ENGINES.map((engine) => ({
+                value: engine.id,
+                label: engine.id === 'veo-3.1-fast' ? 'Veo 3.1 · lower priority' : 'Omni Flash 1.2',
+                hint: engine.id === 'omni-flash' ? 'Vídeo de até 10 segundos no Avatar' : engine.description,
+              }))}
+            />
+          )}
+          <div className="flex h-7 shrink-0 items-center gap-0.5 rounded-lg px-0.5 text-[11px] font-semibold text-fg-muted" aria-label={activeMedia === 'image' ? 'Quantidade de imagens' : 'Quantidade de vídeos'}>
+              <button
+                onClick={() => { const next = Math.max(1, generationCount - 1); st.set(activeMedia === 'image' ? { count: next } : { videoCount: next }); }}
+                className="rounded p-0.5 hover:bg-surface-3/70 hover:text-fg"
+                aria-label={`Menos ${countLabel}`}
+              >
+                <Minus className="size-3" />
+              </button>
+              <span className="w-6 text-center tabular-nums" data-testid={activeMedia === 'image' ? 'image-count' : 'video-count'}>{generationCount}/{MAX_IMAGES_PER_REQUEST}</span>
+              <button
+                onClick={() => { const next = Math.min(MAX_IMAGES_PER_REQUEST, generationCount + 1); st.set(activeMedia === 'image' ? { count: next } : { videoCount: next }); }}
+                className="rounded p-0.5 hover:bg-surface-3/70 hover:text-fg"
+                aria-label={`Mais ${countLabel}`}
+              >
+                <Plus className="size-3" />
+              </button>
+            </div>
           <PillSelect<FramingId>
             label="Enquadramento"
             icon={<ScanFace className="size-3.5" />}
@@ -192,28 +239,11 @@ export function PromptComposer({ onGenerate, busy, highlightProduct }: { onGener
               hint: r === '9:16' ? 'Reels, TikTok, Stories' : r === '1:1' ? 'Feed quadrado' : r === '16:9' ? 'YouTube' : undefined,
             }))}
           />
-          <div className="flex h-7 shrink-0 items-center gap-0.5 rounded-lg px-0.5 text-[11px] font-semibold text-fg-muted" aria-label="Quantidade de imagens">
-            <button
-              onClick={() => st.set({ count: Math.max(1, st.count - 1) })}
-              className="rounded p-1 hover:bg-surface-3/70 hover:text-fg"
-              aria-label="Menos imagens"
-            >
-              <Minus className="size-3" />
-            </button>
-            <span className="w-6 text-center tabular-nums" data-testid="image-count">{st.count}/{MAX_IMAGES_PER_REQUEST}</span>
-            <button
-              onClick={() => st.set({ count: Math.min(MAX_IMAGES_PER_REQUEST, st.count + 1) })}
-              className="rounded p-1 hover:bg-surface-3/70 hover:text-fg"
-              aria-label="Mais imagens"
-            >
-              <Plus className="size-3" />
-            </button>
-          </div>
           <button
             onClick={enhance}
             disabled={st.prompt.trim().length < 3 || enhancing}
             title={st.prompt.trim().length < 3 ? 'Escreva a ideia primeiro' : 'A IA reescreve sua ideia com mais detalhes'}
-            className="ml-auto flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 text-[11px] font-semibold text-accent transition hover:bg-accent-soft dark:text-indigo-300 disabled:opacity-40"
+            className="absolute right-0 top-0 flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-[11px] font-semibold text-accent transition hover:bg-accent-soft dark:text-indigo-300 disabled:opacity-40"
           >
             <Wand2 className={clsx('size-3.5', enhancing && 'animate-pulse')} />
             {enhancing ? 'Melhorando…' : 'Melhorar'}
@@ -221,10 +251,10 @@ export function PromptComposer({ onGenerate, busy, highlightProduct }: { onGener
         </div>
       </div>
 
-      {/* Slots AVATAR, PRODUTO e CTA GERAR idênticos ao Influai (apenas '+' no círculo superior) */}
-      <div className="flex shrink-0 items-stretch justify-end gap-2">
+      {/* Slots INFLUENCER, PRODUTO, VÍDEO e CTA GERAR. */}
+      <div className="flex w-full shrink-0 items-stretch gap-2 sm:w-auto sm:justify-end">
         <Slot
-          label="AVATAR"
+          label="INFLUENCER"
           preview={avatarSlotPreview}
           onClear={() => st.set({ baseAvatar: null, basePhoto: null })}
         >
@@ -232,7 +262,7 @@ export function PromptComposer({ onGenerate, busy, highlightProduct }: { onGener
             type="button"
             onClick={() => setPickerOpen(true)}
             className="absolute inset-0 transition hover:bg-surface-3/60"
-            aria-label="Escolher avatar"
+            aria-label="Escolher influencer"
           >
             <span className="pointer-events-none absolute left-2 top-2 flex size-6 items-center justify-center rounded-full border border-fg/25 text-fg-muted">
               <Plus className="size-3.5" />
@@ -256,18 +286,40 @@ export function PromptComposer({ onGenerate, busy, highlightProduct }: { onGener
             </span>
           </ImagePicker>
         </Slot>
+        <Slot label="VÍDEO" preview={null} onClear={() => undefined}>
+          <button
+            type="button"
+            onClick={openVideoTemplates}
+            className="absolute inset-0 transition hover:bg-surface-3/60"
+            aria-label="Abrir templates de vídeo"
+          >
+            <span className="pointer-events-none absolute left-2 top-2 flex size-6 items-center justify-center rounded-full border border-fg/25 text-fg-muted">
+              <Plus className="size-3.5" />
+            </span>
+          </button>
+        </Slot>
         <button
-          onClick={onGenerate}
-          disabled={busy}
+          onClick={activeMedia === 'video' ? () => void st.videoSubmit?.() : onGenerate}
+          disabled={activeMedia === 'image' ? pendingImageRequests >= MAX_PENDING_IMAGE_REQUESTS : pendingVideoRequests >= MAX_PENDING_VIDEO_REQUESTS || !st.videoSubmit}
+          type="button"
           data-testid="generate-from-prompt"
+          aria-label={activeMedia === 'video' ? `Gerar vídeo${pendingVideoRequests ? `, ${pendingVideoRequests} de ${MAX_PENDING_VIDEO_REQUESTS} pedidos em andamento` : ''}` : `Gerar imagem, ${cost} créditos${pendingImageRequests ? `, ${pendingImageRequests} de ${MAX_PENDING_IMAGE_REQUESTS} pedidos em andamento` : ''}`}
+          title={activeMedia === 'video' ? pendingVideoRequests >= MAX_PENDING_VIDEO_REQUESTS ? 'Aguarde um vídeo terminar para enviar outro pedido' : 'Gerar vídeo com o modelo selecionado' : pendingImageRequests >= MAX_PENDING_IMAGE_REQUESTS ? 'Aguarde uma geração de imagem terminar para enviar outro pedido' : `Gerar imagem · ${cost} créditos${pendingImageRequests ? ` · ${pendingImageRequests}/${MAX_PENDING_IMAGE_REQUESTS} pedidos em andamento` : ''}`}
           className="flex min-h-[84px] w-[96px] shrink-0 flex-col items-center justify-center gap-1 self-stretch rounded-xl bg-brand text-sm font-black uppercase tracking-wide text-white glow-brand transition hover:brightness-110 disabled:opacity-60"
         >
-          <span>{busy ? '…' : 'GERAR'}</span>
-          <span className="inline-flex items-center gap-1 text-xs font-bold normal-case">
-            <Sparkles className="size-3.5" />
-            <CoinIcon className="size-3.5" />
-            {cost}
+          {(activeMedia === 'image' ? pendingImageRequests > 0 : pendingVideoRequests > 0 || videoBusy) && <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />}
+          <span aria-live="polite">
+            {activeMedia === 'image'
+              ? pendingImageRequests >= MAX_PENDING_IMAGE_REQUESTS ? 'AGUARDE' : pendingImageRequests > 0 ? `GERANDO IMAGEM… ${pendingImageRequests}/${MAX_PENDING_IMAGE_REQUESTS}` : 'GERAR IMAGEM'
+              : pendingVideoRequests >= MAX_PENDING_VIDEO_REQUESTS ? 'AGUARDE' : videoBusy ? 'ENVIANDO…' : pendingVideoRequests > 0 ? `GERANDO VÍDEO… ${pendingVideoRequests}/${MAX_PENDING_VIDEO_REQUESTS}` : 'GERAR'}
           </span>
+          {activeMedia === 'image' && (
+            <span className="inline-flex items-center gap-1 text-xs font-bold normal-case">
+              <Sparkles className="size-3.5" />
+              <CoinIcon className="size-3.5" />
+              {cost}
+            </span>
+          )}
         </button>
       </div>
 

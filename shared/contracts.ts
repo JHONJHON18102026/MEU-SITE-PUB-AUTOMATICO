@@ -41,6 +41,7 @@ export const MAX_IMAGE_BASE64_CHARS = 8_000_000;
 const imageInput = z.object({
   mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
   data: z.string().min(16).max(MAX_IMAGE_BASE64_CHARS),
+  name: z.string().max(160).optional(),
 });
 export type ImageInput = z.infer<typeof imageInput>;
 
@@ -77,6 +78,7 @@ export function avatarCost(count: number): number {
 /** Formatos devolvidos pela API. */
 export interface AvatarDTO {
   id: string;
+  generation_id?: string | null;
   name: string;
   image_url: string;
   prompt: string;

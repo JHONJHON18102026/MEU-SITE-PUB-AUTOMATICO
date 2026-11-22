@@ -16,10 +16,10 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import { getAdmin } from '../supabaseAdmin';
-import { debitUserCredits, refundUserCredits, isUnlimitedUser } from '../credits';
+import { debitUserCredits, refundUserCredits } from '../credits';
 import { ApiError } from '../errors';
 import { generateImage } from '../gemini';
-import { applyWatermark } from '../watermark';
+import { applyWatermark, isOwnerUser } from '../watermark';
 import { buildAvatarPrompt, suggestAvatarName } from '../../shared/avatarPrompt';
 import {
   avatarCost,
@@ -32,10 +32,107 @@ import {
 } from '../../shared/contracts';
 import type { AttributeSelection } from '../../shared/attributes';
 import type { AppEnv } from '../app';
+import { avatarTemplateInputSchema, type AvatarTemplateDTO } from '../../shared/avatarTemplateContracts';
 
 export const avatarRoutes = new Hono<AppEnv>();
 
 const BUCKET = 'avatars';
+
+avatarRoutes.get('/templates', async (c) => {
+  const userId = c.get('userId');
+  const { data, error } = await getAdmin()
+    .from('avatar_templates')
+    .select('id, name, mode, prompt, skill_ids, created_at, updated_at')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(30);
+  if (error) throw new ApiError('INTERNAL', `Não consegui carregar seus templates: ${error.message}`);
+  const templates = (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    mode: row.mode as AvatarTemplateDTO['mode'],
+    prompt: row.prompt,
+    skillIds: row.skill_ids ?? [],
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  })) as AvatarTemplateDTO[];
+  return c.json({ templates });
+});
+
+avatarRoutes.post('/templates', async (c) => {
+  const userId = c.get('userId');
+  const parsed = avatarTemplateInputSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw new ApiError('INVALID_INPUT', parsed.error.issues[0]?.message ?? 'Confira os dados do template.');
+  const admin = getAdmin();
+  const { count, error: countError } = await admin
+    .from('avatar_templates')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+  if (countError) throw new ApiError('INTERNAL', `Não consegui conferir a biblioteca: ${countError.message}`);
+  if ((count ?? 0) >= 30) throw new ApiError('INVALID_INPUT', 'Você já salvou 30 templates. Exclua um para salvar outro.');
+  const { data, error } = await admin
+    .from('avatar_templates')
+    .insert({
+      user_id: userId,
+      name: parsed.data.name,
+      mode: parsed.data.mode,
+      prompt: parsed.data.prompt,
+      skill_ids: parsed.data.skillIds,
+    })
+    .select('id, name, mode, prompt, skill_ids, created_at, updated_at')
+    .single();
+  if (error) throw new ApiError('INTERNAL', `Não consegui salvar o template: ${error.message}`);
+  const template: AvatarTemplateDTO = {
+    id: data.id,
+    name: data.name,
+    mode: data.mode as AvatarTemplateDTO['mode'],
+    prompt: data.prompt,
+    skillIds: data.skill_ids ?? [],
+    created_at: data.created_at,
+    updated_at: data.updated_at,
+  };
+  return c.json({ template }, 201);
+});
+
+avatarRoutes.delete('/templates/:id', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ApiError('INVALID_INPUT', 'Id de template inválido.');
+  const { error, count } = await getAdmin()
+    .from('avatar_templates')
+    .delete({ count: 'exact' })
+    .eq('id', id)
+    .eq('user_id', userId);
+  if (error) throw new ApiError('INTERNAL', `Não consegui excluir o template: ${error.message}`);
+  if (!count) throw new ApiError('INVALID_INPUT', 'Template não encontrado.');
+  return c.json({ ok: true });
+});
+const SIGNED_IMAGE_TTL_SECONDS = 60 * 60;
+
+/** Devolve URLs renovadas para a galeria; image_url no banco pode ter expirado. */
+avatarRoutes.get('/gallery', async (c) => {
+  const userId = c.get('userId');
+  const scope = c.req.query('scope') === 'community' ? 'community' : 'mine';
+  const admin = getAdmin();
+  let query = admin
+    .from('avatars')
+    .select('id, user_id, generation_id, name, storage_path, prompt, attributes, engine, framing, aspect_ratio, is_public, is_favorite, created_at')
+    .order('created_at', { ascending: false })
+    .limit(scope === 'community' ? 60 : 120);
+  query = scope === 'community' ? query.eq('is_public', true) : query.eq('user_id', userId);
+  const { data, error } = await query;
+  if (error) throw new ApiError('INTERNAL', `Não consegui carregar a galeria: ${error.message}`);
+
+  const avatars = await Promise.all((data ?? []).map(async (avatar) => {
+    const signed = await admin.storage.from(BUCKET).createSignedUrl(avatar.storage_path, SIGNED_IMAGE_TTL_SECONDS);
+    if (signed.error || !signed.data?.signedUrl) {
+      console.error(`[avatars] URL temporária falhou para ${avatar.id}:`, signed.error?.message);
+      return null;
+    }
+    return { ...avatar, image_url: signed.data.signedUrl };
+  }));
+  return c.json({ avatars: avatars.filter((avatar): avatar is NonNullable<typeof avatar> => avatar !== null) });
+});
 
 async function downloadAvatarAsInput(userId: string, avatarId: string): Promise<ImageInput> {
   const admin = getAdmin();
@@ -97,6 +194,11 @@ avatarRoutes.post('/generate', async (c) => {
     hasBasePhoto: Boolean(basePhoto),
     hasProduct: Boolean(req.productImage),
     referenceCount: req.referenceImages.length,
+    basePhoto: req.basePhoto ? { name: req.basePhoto.name ?? 'Foto base', mimeType: req.basePhoto.mimeType } : null,
+    baseAvatarId: req.baseAvatarId,
+    productImage: req.productImage ? { name: req.productImage.name ?? 'Produto', mimeType: req.productImage.mimeType } : null,
+    referenceImages: req.referenceImages.map((image, index) => ({ name: image.name ?? `Referência ${index + 1}`, mimeType: image.mimeType })),
+    makePublic: req.makePublic,
   };
 
   const genInsert = await admin
@@ -109,7 +211,7 @@ avatarRoutes.post('/generate', async (c) => {
   // ---- débito atômico (falha aqui = nada foi gerado, nada foi cobrado)
   let balance: number;
   try {
-    balance = await debitUserCredits({ userId, amount: cost, reason: 'avatar_image', refId: generationId, insufficientMessage: `Você precisa de ${cost} créditos para gerar ${req.count} imagem(ns).` });
+    balance = await debitUserCredits({ userId, amount: cost, reason: 'avatar_image', refId: generationId, insufficientMessage: `Você precisa de ${cost} créditos para gerar ${req.count} imagem(ns).`, chargeUnlimited: true });
   } catch (err) {
     await admin
       .from('generations')
@@ -119,16 +221,29 @@ avatarRoutes.post('/generate', async (c) => {
   }
 
   // ---- gera em paralelo; cada imagem é independente
-  const images: ImageInput[] = [
-    ...(basePhoto ? [basePhoto] : []),
-    ...(req.productImage ? [req.productImage] : []),
-    ...req.referenceImages,
-  ];
+  const images: ImageInput[] = [];
+  const imageDescriptions: string[] = [];
+  if (basePhoto) {
+    images.push(basePhoto);
+    imageDescriptions.push('PRIMARY IDENTITY PHOTO: use this exact person as the subject and preserve their recognizable identity.');
+  }
+  req.referenceImages.forEach((image, index) => {
+    images.push(image);
+    imageDescriptions.push(
+      !basePhoto && index === 0
+        ? 'PRIMARY USER REFERENCE: use the main subject in this exact image as the subject of the result. Preserve the same person and recognizable identity (face, skin tone, hair, age, and body), or preserve the same defining object if no person is shown. Do not replace the subject with someone unrelated.'
+        : `SECONDARY VISUAL REFERENCE ${index + 1}: use as a constraint for requested visual details while keeping the primary subject identity unchanged.`,
+    );
+  });
+  if (req.productImage) {
+    images.push(req.productImage);
+    imageDescriptions.push('PRODUCT PHOTO: reproduce this product faithfully; do not use it as the person/identity reference.');
+  }
 
   const results = await Promise.allSettled(
     Array.from({ length: req.count }, async (_, index) => {
-      const raw = await generateImage({ prompt, engine: req.engine, aspectRatio: req.aspectRatio, images, modelOverride: await isUnlimitedUser(userId) ? 'lowerpriority' : undefined });
-      const branded = await applyWatermark(raw.buffer);
+      const raw = await generateImage({ prompt, engine: req.engine, aspectRatio: req.aspectRatio, images, imageDescriptions });
+      const branded = isOwnerUser(userId) ? await applyWatermark(raw.buffer) : raw.buffer;
       const avatarId = randomUUID();
       const storagePath = `${userId}/${avatarId}.png`;
       const up = await admin.storage.from(BUCKET).upload(storagePath, branded, {
@@ -137,13 +252,18 @@ avatarRoutes.post('/generate', async (c) => {
         upsert: false,
       });
       if (up.error) throw new ApiError('INTERNAL', `Falha ao salvar a imagem: ${up.error.message}`);
-      const publicUrl = admin.storage.from(BUCKET).getPublicUrl(storagePath).data.publicUrl;
+      // O bucket de avatares é privado; URL pública gera imagem quebrada no
+      // navegador e impede que o Motion reutilize o avatar recém-criado.
+      const signed = await admin.storage.from(BUCKET).createSignedUrl(storagePath, 60 * 60);
+      if (signed.error || !signed.data?.signedUrl) {
+        throw new ApiError('INTERNAL', `Falha ao preparar a imagem para visualização: ${signed.error?.message ?? 'URL ausente'}`);
+      }
       return {
         id: avatarId,
         user_id: userId,
         generation_id: generationId,
         name: suggestAvatarName(req.attributes as AttributeSelection, index),
-        image_url: publicUrl,
+        image_url: signed.data.signedUrl,
         storage_path: storagePath,
         prompt: req.mode === 'prompt' ? req.prompt : prompt,
         attributes: req.attributes,
@@ -168,7 +288,7 @@ avatarRoutes.post('/generate', async (c) => {
   // ---- estorno proporcional ao que falhou
   const refunded = failures.length * PRICING.avatarImage;
   if (refunded > 0) {
-    const refundedBalance = await refundUserCredits({ userId, amount: refunded, refId: generationId });
+    const refundedBalance = await refundUserCredits({ userId, amount: refunded, refId: generationId, chargeUnlimited: true });
     if (refundedBalance !== null) balance = refundedBalance;
   }
 

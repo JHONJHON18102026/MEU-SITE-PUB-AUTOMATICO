@@ -33,32 +33,42 @@ export async function rustGenerateImage(opts: {
   prompt: string;
   aspectRatio: string;
   model?: string;
+  imageModel?: string;
   images?: ImageInput[];
+  imageDescriptions?: string[];
 }): Promise<RustImageResult> {
-  // O endpoint Rust recebe caminhos locais; gravamos cada referência em um
-  // diretório temporário compartilhado pelo backend e pelo motor na VPS.
-  const referenceDir = opts.images?.length
-    ? await fs.mkdtemp(path.join(os.tmpdir(), 'fd-image-reference-'))
-    : null;
-
+  const images = opts.images ?? [];
+  const referenceDir = images.length ? await fs.mkdtemp(path.join(os.tmpdir(), 'fd-image-reference-')) : null;
   try {
     const referenceImages: string[] = [];
-    for (const [index, image] of (opts.images ?? []).entries()) {
-      const extension = image.mimeType === 'image/png' ? 'png' : image.mimeType === 'image/webp' ? 'webp' : 'jpg';
-      const referencePath = path.join(referenceDir!, `reference-${index + 1}.${extension}`);
-      await fs.writeFile(referencePath, Buffer.from(image.data, 'base64'));
-      referenceImages.push(referencePath);
+    if (referenceDir) {
+      for (const [index, image] of images.entries()) {
+        const ext = image.mimeType === 'image/png' ? 'png' : image.mimeType === 'image/webp' ? 'webp' : 'jpg';
+        const referencePath = path.join(referenceDir, `reference-${index + 1}.${ext}`);
+        await fs.writeFile(referencePath, Buffer.from(image.data, 'base64'));
+        referenceImages.push(referencePath);
+      }
     }
-
+    const visualInstructions = images.map((_, index) =>
+      opts.imageDescriptions?.[index] ?? ('Attached visual ' + (index + 1) + '.'),
+    ).join('\n');
+    const prompt = images.length
+      ? [
+          'WRITTEN SCENE PRIORITY: Follow the user prompt exactly for action, pose, clothing, location, framing, lighting, and camera. Attached photos are identity/product references only; do not copy their pose, outfit, or background unless the written prompt asks for it.',
+          visualInstructions,
+          'USER SCENE: ' + opts.prompt,
+        ].filter(Boolean).join('\n\n')
+      : opts.prompt;
     const body = await requestJson('/v1/images/generations', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         model: opts.model || env.rustImageModel,
-        prompt: opts.prompt,
+        image_model: opts.imageModel || 'GEM_PIX_2',
+        prompt,
         aspect_ratio: opts.aspectRatio,
         ...(referenceImages.length ? { reference_images: referenceImages } : {}),
       }),
-    });
+    }, 210_000);
     const encoded = body?.data?.[0]?.b64_json;
     if (!encoded) throw new Error('Motor Rust não devolveu uma imagem.');
     return { buffer: Buffer.from(encoded, 'base64'), mimeType: 'image/png', model: body.model || opts.model || env.rustImageModel };
@@ -73,10 +83,20 @@ export async function rustChatCompletion(opts: {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  images?: ImageInput[];
 }): Promise<string> {
+  const userContent = opts.images?.length
+    ? [
+        ...opts.images.flatMap((image, index) => [
+          { type: 'text', text: `VISUAL REFERENCE ${index + 1}: inspect the attached image directly. It is present in this message.` },
+          { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.data}` } },
+        ]),
+        { type: 'text', text: opts.prompt },
+      ]
+    : opts.prompt;
   const messages = [
     ...(opts.system ? [{ role: 'system', content: opts.system }] : []),
-    { role: 'user', content: opts.prompt },
+    { role: 'user', content: userContent },
   ];
   const body = await requestJson('/v1/chat/completions', {
     method: 'POST', headers: { 'content-type': 'application/json' },

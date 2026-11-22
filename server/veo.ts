@@ -406,6 +406,14 @@ export async function generateBrandbookWithGemini(opts: {
 }
 
 // ---------------------------------------------------------------- Veo vídeo + FFmpeg
+export function resolveFlowVideoMode(input: { hasSourceVideo: boolean; hasStartFrame: boolean; hasElements: boolean }): 'edit' | 'i2v' | 'r2v' | 't2v' {
+  if (input.hasSourceVideo) return 'edit';
+  // A supplied start frame is the primary visual instruction for I2V.
+  if (input.hasStartFrame) return 'i2v';
+  if (input.hasElements) return 'r2v';
+  return 't2v';
+}
+
 export async function generateVeoSceneBuffer(opts: {
   prompt: string;
   engine: VideoEngineId;
@@ -414,25 +422,53 @@ export async function generateVeoSceneBuffer(opts: {
   imageMimeType?: string;
   endImageBytesBase64?: string;
   endImageMimeType?: string;
+  sourceVideoBytesBase64?: string;
+  sourceVideoMediaId?: string;
+  sourceVideoAccountId?: string;
   referenceImages?: Array<{ data: string; mimeType: string }>;
   durationSeconds?: number;
   modelOverride?: string;
-}): Promise<Buffer> {
+}): Promise<Buffer & { flowMediaId?: string; flowAccountId?: string }> {
   if (rustEnabled()) {
-    const hasElements = Boolean(opts.referenceImages?.length);
-    const hasStartFrame = Boolean(opts.imageBytesBase64);
-    const localEndFrameFallback = Boolean(opts.endImageBytesBase64 && opts.modelOverride === 'veo');
+    const hasSourceVideo = Boolean(opts.sourceVideoMediaId || opts.sourceVideoBytesBase64);
+    const effectiveReferences = [...(opts.referenceImages ?? [])];
+    if (!hasSourceVideo && opts.imageBytesBase64 && effectiveReferences.length) {
+      const startData = opts.imageBytesBase64.replace(/^data:[^,]*,/, '');
+      if (!effectiveReferences.some((image) => image.data.replace(/^data:[^,]*,/, '') === startData)) {
+        effectiveReferences.unshift({ data: startData, mimeType: opts.imageMimeType ?? 'image/jpeg' });
+      }
+    }
+    const hasElements = Boolean(effectiveReferences.length);
+    const hasStartFrame = Boolean(opts.imageBytesBase64 && !hasElements);
+    const localEndFrameFallback = Boolean(opts.endImageBytesBase64 && (opts.modelOverride === 'veo' || opts.modelOverride === 'lowerpriority'));
+    const bridgeModel = opts.modelOverride === 'omni-flash-1.2'
+      ? 'omni-flash'
+      // "lowerpriority" é o nome do perfil interno do site. O bridge Flow
+      // espera "veo" para resolver o model_key lite_low_priority correto.
+      : opts.modelOverride === 'lowerpriority'
+        ? 'veo'
+        : (opts.modelOverride ?? env.rustVideoModel);
     const base: Record<string, unknown> = {
-      model: opts.modelOverride ?? env.rustVideoModel,
+      model: bridgeModel,
       prompt: opts.prompt,
-      mode: hasElements ? 'r2v' : hasStartFrame ? 'i2v' : 't2v',
+      mode: resolveFlowVideoMode({ hasSourceVideo, hasStartFrame, hasElements }),
       seconds: localEndFrameFallback ? 6 : (opts.durationSeconds ?? 8),
       aspect_ratio: opts.aspectRatio,
     };
-    const needsImages = hasElements || hasStartFrame || Boolean(opts.endImageBytesBase64);
+    // The unlimited lower-priority route must use the authenticated Flow
+    // account. Account 3 can remain listed while its bearer is unavailable;
+    // pin this path to the known-good account 2 instead of letting the bridge
+    // round-robin into a 404/NOT_FOUND account.
+    if (opts.modelOverride === 'lowerpriority') base.account_id = 'conta_2';
+    if (opts.modelOverride === 'omni-flash-1.2') base.account_id = 'conta_1';
+    if (opts.sourceVideoMediaId) {
+      base.prev_media_id = opts.sourceVideoMediaId;
+      if (opts.sourceVideoAccountId) base.account_id = opts.sourceVideoAccountId;
+    }
+    const needsImages = hasElements || hasStartFrame || Boolean(opts.endImageBytesBase64) || hasSourceVideo;
     const referenceDir = needsImages ? await fs.mkdtemp(path.join(os.tmpdir(), 'fd-reference-')) : null;
     try {
-      if (referenceDir && opts.imageBytesBase64) {
+      if (referenceDir && opts.imageBytesBase64 && !hasElements) {
         const referencePath = path.join(referenceDir, 'start.jpg');
         const frameSize = opts.aspectRatio === '9:16' ? { width: 720, height: 1280 } : { width: 1280, height: 720 };
         const frame = await sharp(Buffer.from(opts.imageBytesBase64, 'base64'))
@@ -454,15 +490,20 @@ export async function generateVeoSceneBuffer(opts: {
         await fs.writeFile(referencePath, frame);
         base.end_image = referencePath;
       }
-      if (referenceDir && opts.referenceImages?.length) {
+      if (referenceDir && effectiveReferences.length) {
         const paths: string[] = [];
-        for (const [index, image] of opts.referenceImages.entries()) {
+        for (const [index, image] of effectiveReferences.entries()) {
           const ext = image.mimeType === 'image/png' ? 'png' : image.mimeType === 'image/webp' ? 'webp' : 'jpg';
           const referencePath = path.join(referenceDir, `element-${index + 1}.${ext}`);
           await fs.writeFile(referencePath, Buffer.from(image.data, 'base64'));
           paths.push(referencePath);
         }
         base.reference_images = paths;
+      }
+      if (referenceDir && opts.sourceVideoBytesBase64 && !opts.sourceVideoMediaId) {
+        const sourcePath = path.join(referenceDir, 'motion-source.mp4');
+        await fs.writeFile(sourcePath, Buffer.from(opts.sourceVideoBytesBase64, 'base64'));
+        base.source_video = sourcePath;
       }
     const res = await fetch(`${env.rustMotorUrl}/v1/videos/generations`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(base),
@@ -473,7 +514,9 @@ export async function generateVeoSceneBuffer(opts: {
     const savedPath = body?.saved_path;
     if (!savedPath) throw new ApiError('GENERATION_FAILED', 'Motor Rust não devolveu o caminho do vídeo.');
     try {
-      const generated = await readFile(savedPath);
+      const generated = await readFile(savedPath) as Buffer & { flowMediaId?: string; flowAccountId?: string };
+      generated.flowMediaId = typeof body?.media_id === 'string' ? body.media_id : undefined;
+      generated.flowAccountId = typeof body?.account_id === 'string' ? body.account_id : undefined;
       if (localEndFrameFallback && opts.endImageBytesBase64) {
         const endGenerated = await generateVeoSceneBuffer({
           prompt: `${opts.prompt}\nGenerate one continuous shot departing naturally from this exact final composition. Preserve the same identity, wardrobe, environment and visual details. No cuts, no still frame and no collage.`,
@@ -482,7 +525,7 @@ export async function generateVeoSceneBuffer(opts: {
           imageBytesBase64: opts.endImageBytesBase64,
           imageMimeType: opts.endImageMimeType,
           durationSeconds: 6,
-          modelOverride: 'veo',
+          modelOverride: opts.modelOverride ?? 'lowerpriority',
         });
         return await joinBidirectionalReferenceClips(generated, endGenerated, opts.aspectRatio);
       }
@@ -566,6 +609,27 @@ export async function normalizeEightSecondVideo(buffer: Buffer): Promise<Buffer>
   }
 }
 
+/** Enforceia o limite de duração do Omni no canvas Avatar mesmo quando o provedor excede o pedido. */
+export async function trimVideoToDuration(buffer: Buffer, maxSeconds: number): Promise<Buffer> {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fd-trim-'));
+  try {
+    const input = path.join(tmp, 'input.mp4');
+    const output = path.join(tmp, 'output.mp4');
+    await fs.writeFile(input, buffer);
+    const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', input]);
+    const duration = Number(stdout.trim());
+    if (!Number.isFinite(duration) || duration <= maxSeconds + 0.1) return buffer;
+    await execFileAsync('ffmpeg', [
+      '-y', '-i', input, '-t', String(maxSeconds),
+      '-c:v', 'libx264', '-preset', 'fast', '-c:a', 'aac', '-movflags', '+faststart', output,
+    ]);
+    return await fs.readFile(output);
+  } catch (error) {
+    throw new Error(`Não foi possível limitar o vídeo a ${maxSeconds}s: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
 /** Extrai uma capa real do começo do vídeo concluído. */
 export async function extractVideoThumbnail(buffer: Buffer): Promise<Buffer> {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fd-thumbnail-'));

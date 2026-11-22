@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BookOpen, KeyRound, MessageSquare, Sparkles, X } from 'lucide-react';
+import { KeyRound, MessageSquare, Sparkles, X } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
@@ -30,7 +30,7 @@ export function AppShell() {
         </main>
       </div>
 
-      {/* Botão flutuante de ajuda/suporte idêntico ao canto inferior direito do Influai */}
+      {/* Botão flutuante de ajuda e suporte do FUTURO DIGITAL. */}
       {helpOpen && (
         <aside className="fixed bottom-[72px] right-6 z-50 w-72 overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
           <div className="flex items-center justify-between border-b border-border px-4 py-3 text-xs font-bold">
@@ -40,13 +40,10 @@ export function AppShell() {
             </button>
           </div>
           <div className="space-y-2 p-3 text-xs text-fg-muted">
-            <p>Acesse os tutoriais passo a passo ou conecte suas chaves no painel de configuração.</p>
+            <p>Acesse as ferramentas disponíveis ou conecte suas chaves no painel de configuração.</p>
             <div className="flex flex-col gap-1.5 pt-1">
               <Link to="/ferramentas" onClick={() => setHelpOpen(false)} className="inline-flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 font-semibold text-fg hover:bg-surface-hover">
                 <Sparkles className="size-3.5 text-accent" /> Ver todas as ferramentas
-              </Link>
-              <Link to="/tutorials" onClick={() => setHelpOpen(false)} className="inline-flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 font-semibold text-fg hover:bg-surface-hover">
-                <BookOpen className="size-3.5 text-accent" /> Abrir Tutoriais em Vídeo
               </Link>
               <Link to="/setup" onClick={() => setHelpOpen(false)} className="inline-flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 font-semibold text-fg hover:bg-surface-hover">
                 <KeyRound className="size-3.5 text-accent" /> Conectar Chaves (.env)

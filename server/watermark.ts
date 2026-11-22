@@ -6,8 +6,14 @@
  * Usa a biblioteca "sharp" (processamento de imagem em C, muito rápido).
  */
 import sharp from 'sharp';
+import { execFile } from 'node:child_process';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WATERMARK_PATH = path.join(here, 'assets', 'marca-dagua.png');
@@ -17,6 +23,12 @@ export const WATERMARK_LAYOUT = {
   marginRatio: 0.03,
   opacity: 0.92,
 } as const;
+
+/** A marca é exclusiva da conta proprietária; assinantes nunca recebem overlay. */
+export function isOwnerUser(userId: string): boolean {
+  const ownerId = process.env.OWNER_USER_ID?.trim();
+  return Boolean(ownerId && ownerId === userId);
+}
 
 let watermarkCache: Buffer | null = null;
 async function loadWatermark(): Promise<Buffer> {
@@ -53,4 +65,25 @@ export async function applyWatermark(image: Buffer): Promise<Buffer> {
     .composite([{ input: mark, top: margin, left: margin }])
     .png({ compressionLevel: 8 })
     .toBuffer();
+}
+
+/** Aplica a marca ao vídeo somente quando o chamador já confirmou que é o Dono. */
+export async function applyVideoWatermark(video: Buffer): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'futuro-watermark-'));
+  const input = path.join(dir, 'input.mp4');
+  const logo = path.join(dir, 'logo.png');
+  const output = path.join(dir, 'output.mp4');
+  try {
+    await fs.writeFile(input, video);
+    await fs.copyFile(WATERMARK_PATH, logo);
+    await execFileAsync('ffmpeg', [
+      '-y', '-i', input, '-i', logo,
+      '-filter_complex', '[1:v]scale=iw*0.22:-1[wm];[0:v][wm]overlay=W*0.03:H*0.03:format=auto',
+      '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
+      '-c:a', 'aac', '-movflags', '+faststart', output,
+    ], { windowsHide: true });
+    return await fs.readFile(output);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }

@@ -13,7 +13,7 @@ import { ApiError } from '../errors';
 import { debitUserCredits, refundUserCredits, isUnlimitedUser } from '../credits';
 import { generateImage } from '../gemini';
 import { getAdmin } from '../supabaseAdmin';
-import { applyWatermark } from '../watermark';
+import { applyVideoWatermark, applyWatermark, isOwnerUser } from '../watermark';
 import { signedMediaUrl, VIDEO_BUCKET } from '../storage';
 import { toImageInput } from '../imageInput';
 import {
@@ -24,6 +24,7 @@ import {
   generateVeoSceneBuffer,
   extractVideoThumbnail,
   normalizeEightSecondVideo,
+  trimVideoToDuration,
   stitchVideoBuffers,
 } from '../veo';
 import {
@@ -47,6 +48,29 @@ import type { AppEnv } from '../app';
 
 export const aiUgcRoutes = new Hono<AppEnv>();
 
+type DirectorQualityCheck = { label: string; status: 'passed' | 'warning' | 'failed'; detail: string };
+
+function buildDirectorQuality(opts: {
+  status: 'done' | 'failed';
+  requestedDuration: number;
+  readyScenes: number;
+  totalScenes: number;
+  referenceMode?: 'frames' | 'elements';
+  referenceCount: number;
+  hasThumbnail: boolean;
+}): { overall: 'approved' | 'needs-review'; checks: DirectorQualityCheck[]; checkedAt: string } {
+  const completed = opts.readyScenes === opts.totalScenes;
+  return {
+    overall: opts.status === 'done' && completed ? 'approved' : 'needs-review',
+    checkedAt: new Date().toISOString(),
+    checks: [
+      { label: 'Renderização', status: completed ? 'passed' : 'failed', detail: completed ? `${opts.readyScenes}/${opts.totalScenes} cena(s) concluída(s).` : `${opts.readyScenes}/${opts.totalScenes} cena(s) concluída(s); revise as falhas.` },
+      { label: 'Duração', status: completed ? 'passed' : 'warning', detail: `${opts.requestedDuration}s planejados e registrados para o projeto.` },
+      { label: 'Referências', status: opts.referenceCount > 0 ? 'passed' : 'warning', detail: opts.referenceCount > 0 ? `${opts.referenceCount} referência(s) ${opts.referenceMode === 'elements' ? 'enviada(s) como elementos de consistência.' : 'registrada(s) no projeto.'}` : 'Nenhuma referência visual foi enviada; o Diretor criou um frame inicial quando necessário.' },
+      { label: 'Capa', status: opts.hasThumbnail ? 'passed' : 'warning', detail: opts.hasThumbnail ? 'Capa extraída do vídeo final.' : 'Capa indisponível; revise a prévia.' },
+    ],
+  };
+}
 function buildScenePrompt(req: CreateUgcVideoRequest, scene: { text: string; action?: string }, idx: number): string {
   const ratio = req.aspectRatio === '16:9' ? '16:9 horizontal commercial' : '9:16 vertical UGC smartphone';
   if (req.mode === 'motion') {
@@ -57,8 +81,22 @@ function buildScenePrompt(req: CreateUgcVideoRequest, scene: { text: string; act
       `Realistic ${ratio} AI motion transfer video (${req.resolution ?? '1080p'}).`,
       req.motionPrompt ? `Target body & camera movement: ${req.motionPrompt}` : `Action: ${scene.action || scene.text}`,
       outfitLine,
-      scene.text ? `Spoken / performance line: "${scene.text}"` : '',
+      req.motionVideoMediaId || req.motionVideoData
+        ? ''
+        : scene.text ? `Spoken / performance line: "${scene.text}"` : '',
       'Fluid human motion, anatomically consistent hands and face, natural smartphone lighting, no embedded text or watermarks.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (req.mode === 'avatar-video') {
+    return [
+      `Natural ${ratio} creator video scene ${idx + 1}.`,
+      req.avatarPrompt || scene.action || scene.text,
+      req.productName ? `Present the product faithfully: ${req.productName}.` : '',
+      'Preserve the selected influencer identity and the key details in the attached references.',
+      'Use believable human movement, coherent camera motion, natural lighting, and no generated captions, logos, or watermarks.',
     ]
       .filter(Boolean)
       .join('\n');
@@ -103,12 +141,19 @@ function buildScenePrompt(req: CreateUgcVideoRequest, scene: { text: string; act
 
 async function processVideoProject(projectId: string, userId: string, generationId: string, req: CreateUgcVideoRequest, totalCost: number) {
   const admin = getAdmin();
-  const unlimited = await isUnlimitedUser(userId);
+  const unlimited = (await isUnlimitedUser(userId)) && req.engine !== 'omni-flash';
+  const avatarCanvasLowerPriority = req.origin === 'avatar' && (req.mode === 'motion' || req.mode === 'avatar-video') && req.engine === 'veo-3.1-fast';
+  const useLowerPriorityQueue = unlimited || avatarCanvasLowerPriority;
   const aspectForVeo: '9:16' | '16:9' = req.aspectRatio === '16:9' || req.aspectRatio === '4:3' ? '16:9' : '9:16';
   const legacyImage = toImageInput(req.avatarImageData) ?? toImageInput(req.productImageData);
-  const startFrame = toImageInput(req.startFrameImageData) ?? (req.referenceMode ? null : legacyImage);
+  // Canvas videos sent as Element references still need an opening image:
+  // Flow's lowerpriority queue is reliable as image-to-video, not text-to-video.
+  const avatarCanvasVideo = req.origin === 'avatar' && (req.mode === 'motion' || req.mode === 'avatar-video') && !req.motionVideoData;
+  const startFrame = toImageInput(req.startFrameImageData)
+    ?? (req.referenceMode === 'frames' ? null : (avatarCanvasVideo || !req.referenceMode ? legacyImage : null));
   const endFrame = toImageInput(req.endFrameImageData);
   const elementImages = (req.referenceImages ?? []).map((raw) => toImageInput(raw)).filter((image): image is ImageInput => Boolean(image));
+  const motionVideo = req.motionVideoData?.replace(/^data:video\/[a-z0-9.+-]+;base64,/, '');
   const costPerScene = Math.round(totalCost / req.scenes.length);
 
   const sceneOutputs: ProjectSceneDTO[] = req.scenes.map((s, index) => ({
@@ -116,7 +161,7 @@ async function processVideoProject(projectId: string, userId: string, generation
     text: s.text,
     action: s.action,
     status: 'processing',
-    duration_seconds: s.durationSeconds ?? 8,
+    duration_seconds: useLowerPriorityQueue ? 8 : s.durationSeconds ?? 8,
   }));
 
   const readyBuffers: Buffer[] = [];
@@ -129,10 +174,11 @@ async function processVideoProject(projectId: string, userId: string, generation
       const generated = await generateVeoSceneBuffer({
         prompt: [
           buildScenePrompt(req, s, i),
+          motionVideo ? 'Use the uploaded motion reference video as the exact source for body movement, timing, gestures and camera rhythm. Transfer that motion to the selected avatar while preserving the avatar identity and wardrobe.' : '',
           req.referenceMode === 'elements'
             ? [
               'Use the uploaded Element references as identity and appearance constraints. Render one coherent cinematic scene, never a collage, contact sheet, split screen, or visible reference board. Preserve the same face, hair, clothing, colors, product design, and distinctive details throughout the shot.',
-              startFrame ? 'The first frame must match the uploaded opening image exactly in subject identity, wardrobe, framing, environment, and composition, then continue with natural motion following the storyboard references.' : '',
+              startFrame ? 'Use the selected opening image as a visual identity and appearance reference; preserve its person, clothing and product while creating a coherent moving scene.' : '',
             ].filter(Boolean).join(' ')
             : req.referenceMode === 'frames'
               ? 'Start exactly from the uploaded initial frame and, when supplied, finish exactly on the uploaded final frame. Preserve identity, wardrobe, environment, composition, and object details while creating a natural transition.'
@@ -140,23 +186,41 @@ async function processVideoProject(projectId: string, userId: string, generation
         ].filter(Boolean).join('\n'),
         engine: req.engine ?? 'veo-3.1-fast',
         aspectRatio: aspectForVeo,
-        imageBytesBase64: startFrame?.data,
-        imageMimeType: startFrame?.mimeType,
+        imageBytesBase64: motionVideo ? undefined : startFrame?.data,
+        imageMimeType: motionVideo ? undefined : startFrame?.mimeType,
         endImageBytesBase64: endFrame?.data,
         endImageMimeType: endFrame?.mimeType,
-        referenceImages: elementImages,
-        durationSeconds: unlimited ? 8 : (s.durationSeconds ?? 8),
+        // In video editing the target avatar is an identity reference,
+        // never a literal first frame replacing the source video's opening.
+        referenceImages: req.mode === 'motion' && legacyImage ? [legacyImage, ...elementImages] : elementImages,
+        sourceVideoBytesBase64: motionVideo,
+        sourceVideoMediaId: req.motionVideoMediaId,
+        sourceVideoAccountId: req.motionVideoAccountId,
+        durationSeconds: useLowerPriorityQueue ? 8 : (s.durationSeconds ?? 8),
         // Omni Flash 1.2 é pago por créditos; o plano Ilimitado usa lowerpriority sem cobrança.
-        // A chave "veo" mantém o plano ilimitado na família low-priority.
-        // O motor pode promover internamente para a variante FL quando necessário.
-        modelOverride: unlimited ? 'veo' : (req.engine === 'omni-flash' ? 'omni-flash-1.2' : undefined),
+        // O bridge Rust reconhece explicitamente este perfil como a fila
+        // lowerpriority do Veo 3.1 (sem cobrança no plano ilimitado).
+        modelOverride: unlimited || avatarCanvasLowerPriority
+          ? 'lowerpriority'
+          : req.engine === 'omni-flash' ? 'omni-flash-1.2' : undefined,
       });
-      const buf = unlimited ? await normalizeEightSecondVideo(generated) : generated;
+      const normalized = unlimited
+        ? await normalizeEightSecondVideo(generated)
+        : req.origin === 'avatar' && req.engine === 'omni-flash'
+          ? await trimVideoToDuration(generated, s.durationSeconds ?? 8)
+          : generated;
+      const buf = isOwnerUser(userId) ? await applyVideoWatermark(normalized) : normalized;
       const scenePath = `${userId}/${projectId}/scene-${i}.mp4`;
       const uploaded = await admin.storage.from(VIDEO_BUCKET).upload(scenePath, buf, { contentType: 'video/mp4', upsert: true });
       if (uploaded.error) throw new Error(`Falha ao salvar cena: ${uploaded.error.message}`);
       const sceneUrl = await signedMediaUrl(scenePath);
-      sceneOutputs[i] = { ...sceneOutputs[i]!, status: 'done', video_url: sceneUrl };
+      sceneOutputs[i] = {
+        ...sceneOutputs[i]!,
+        status: 'done',
+        video_url: sceneUrl,
+        flow_media_id: generated.flowMediaId,
+        flow_account_id: generated.flowAccountId,
+      };
       readyBuffers.push(buf);
     } catch (err) {
       failedCount++;
@@ -182,10 +246,26 @@ async function processVideoProject(projectId: string, userId: string, generation
   }
 
   const refunded = failedCount * costPerScene;
-  if (refunded > 0) await refundUserCredits({ userId, amount: refunded, refId: generationId });
+  if (refunded > 0) await refundUserCredits({
+    userId,
+    amount: refunded,
+    refId: generationId,
+    chargeUnlimited: req.engine === 'omni-flash',
+  });
 
   const status = readyBuffers.length === req.scenes.length ? 'done' : 'failed';
   const now = new Date().toISOString();
+  const projectRead = await admin.from('video_projects').select('params').eq('id', projectId).single();
+  const currentParams = projectRead.data?.params && typeof projectRead.data.params === 'object' ? projectRead.data.params as Record<string, unknown> : {};
+  const directorQuality = buildDirectorQuality({
+    status,
+    requestedDuration: useLowerPriorityQueue ? req.scenes.length * 8 : req.scenes.reduce((sum, scene) => sum + (scene.durationSeconds ?? 8), 0),
+    readyScenes: readyBuffers.length,
+    totalScenes: req.scenes.length,
+    referenceMode: req.referenceMode,
+    referenceCount: req.referenceMode === 'elements' ? elementImages.length : [startFrame, endFrame].filter(Boolean).length,
+    hasThumbnail: Boolean(thumbnailUrl),
+  });
   await admin
     .from('video_projects')
     .update({
@@ -195,6 +275,7 @@ async function processVideoProject(projectId: string, userId: string, generation
       ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}),
       storage_path: finalStoragePath,
       scenes: sceneOutputs,
+      params: { ...currentParams, director_quality: directorQuality },
       error: readyBuffers.length ? lastError : (lastError ?? 'Todas as cenas falharam. Créditos devolvidos.'),
       completed_at: now,
     })
@@ -241,7 +322,7 @@ async function runBatchImageProject(opts: {
   title: string;
   engine: EngineId;
   aspectRatio: AspectRatio;
-  items: { headline: string; body: string; prompt: string; images: ImageInput[] }[];
+  items: { headline: string; body: string; prompt: string; images: ImageInput[]; imageDescriptions?: string[] }[];
   params: Record<string, unknown>;
   fallbackThumb?: string;
 }): Promise<{ project: VideoProjectDTO; balance: number }> {
@@ -279,9 +360,10 @@ async function runBatchImageProject(opts: {
           engine: opts.engine,
           aspectRatio: opts.aspectRatio,
           images: item.images,
+          imageDescriptions: item.imageDescriptions,
           modelOverride: await isUnlimitedUser(opts.userId) ? 'lowerpriority' : undefined,
         });
-        const branded = await applyWatermark(res.buffer);
+        const branded = isOwnerUser(opts.userId) ? await applyWatermark(res.buffer) : res.buffer;
         const path = `${opts.userId}/${projectId}/item-${index}.png`;
         await admin.storage.from(VIDEO_BUCKET).upload(path, branded, { contentType: 'image/png', upsert: true });
         const publicUrl = await signedMediaUrl(path);
@@ -392,26 +474,44 @@ aiUgcRoutes.post('/create-image-ad', async (c) => {
   const req = parsed.data;
   const tpl = IMAGE_AD_TEMPLATES.find((t) => t.id === req.templateId) ?? IMAGE_AD_TEMPLATES[0]!;
   const images: ImageInput[] = [];
+  const imageDescriptions: string[] = [];
   const avatarImg = toImageInput(req.avatarImageData);
   const productImg = toImageInput(req.productImageData);
-  if (avatarImg) images.push(avatarImg);
-  if (productImg) images.push(productImg);
+  if (productImg) {
+    images.push(productImg);
+    imageDescriptions.push('PRODUCT PHOTO: reproduce this exact product faithfully; do not alter its shape, colors, packaging, labels, or visible details.');
+  }
+  if (avatarImg) {
+    images.push(avatarImg);
+    imageDescriptions.push('PERSON REFERENCE: preserve this exact person when the selected template asks for a presenter; do not replace the person.');
+  }
 
-  const items = Array.from({ length: req.count }, (_, idx) => ({
-    headline: req.headline,
-    body: `${req.badgeText ? `[${req.badgeText}] ` : ''}${req.productName} · ${req.ctaText}`,
-    prompt: [
-      `Commercial static advertising creative (${req.aspectRatio}), variation #${idx + 1}.`,
-      `Template art direction: ${tpl.compositionPrompt}`,
-      `Featured product: ${req.productName}.`,
-      `Ad angle/headline concept: "${req.headline}".`,
-      req.stylePrompt ? `Extra styling: ${req.stylePrompt}` : '',
-      'Ultra sharp lighting, authentic commercial photography, no random garbled words.',
-    ]
-      .filter(Boolean)
-      .join('\n'),
-    images,
-  }));
+  const imageCount = req.imagePrompts?.length ?? req.count;
+  const items = Array.from({ length: imageCount }, (_, idx) => {
+    const isCover = idx === 0;
+    const prompt = req.imagePrompts?.[idx];
+    return {
+      headline: req.imagePrompts ? (isCover ? 'Capa promocional' : 'Imagem limpa para vídeo') : req.headline,
+      body: req.imagePrompts ? (isCover ? 'Capa promocional' : 'Referência limpa, sem texto') : `${req.badgeText ? `[${req.badgeText}] ` : ''}${req.productName} · ${req.ctaText}`,
+      prompt: prompt
+        ? [
+            `Commercial product image, vertical ${req.aspectRatio}.`,
+            prompt,
+            'Use the attached product image as the exact product reference. Preserve its visible characteristics and packaging. Do not invent product claims, features, prices, discounts, brands, or logos. Use natural human anatomy, realistic materials, and professional lighting.',
+            isCover ? 'Keep any requested Portuguese copy short and legible.' : 'This is a clean video reference image: no text, labels, titles, prices, logos, promotional graphics, or frame.',
+          ].join('\n\n')
+        : [
+            `Commercial static advertising creative (${req.aspectRatio}), variation #${idx + 1}.`,
+            `Template art direction: ${tpl.compositionPrompt}`,
+            `Featured product: ${req.productName}.`,
+            `Ad angle/headline concept: "${req.headline}".`,
+            req.stylePrompt ? `Extra styling: ${req.stylePrompt}` : '',
+            'Ultra sharp lighting, authentic commercial photography, no random garbled words.',
+          ].filter(Boolean).join('\n'),
+      images,
+      imageDescriptions,
+    };
+  });
 
   const out = await runBatchImageProject({
     userId,
@@ -420,7 +520,7 @@ aiUgcRoutes.post('/create-image-ad', async (c) => {
     engine: req.engine,
     aspectRatio: req.aspectRatio,
     items,
-    params: { templateId: req.templateId, headline: req.headline, badgeText: req.badgeText, ctaText: req.ctaText },
+    params: { templateId: req.templateId, headline: req.headline, badgeText: req.badgeText, ctaText: req.ctaText, ...(req.imagePrompts ? { imagePrompts: req.imagePrompts } : {}) },
     fallbackThumb: req.avatarUrl || tpl.thumbnail,
   });
   return c.json(out);
@@ -434,12 +534,43 @@ aiUgcRoutes.post('/create', async (c) => {
     throw new ApiError('INVALID_INPUT', `Dados inválidos: ${parsed.error.issues[0]?.message ?? 'revise o projeto'}`);
   }
   const req = parsed.data;
+  if (req.replacesProjectId) {
+    if (req.origin !== 'avatar') throw new ApiError('INVALID_INPUT', 'Só é possível substituir uma geração da aba Avatar.');
+    const previous = await getAdmin().from('video_projects').select('id,status,origin').eq('id', req.replacesProjectId).eq('user_id', userId).maybeSingle();
+    if (previous.error || !previous.data || previous.data.origin !== 'avatar' || previous.data.status !== 'failed') {
+      throw new ApiError('INVALID_INPUT', 'A geração falhada que seria substituída não está mais disponível.');
+    }
+  }
+  // No Avatar, o Omni fica limitado a 10 s para que duração, crédito e vídeo final coincidam.
+  if (req.origin === 'avatar' && req.engine === 'omni-flash') {
+    req.scenes = req.scenes.map((scene) => ({ ...scene, durationSeconds: Math.min(10, scene.durationSeconds ?? 8) }));
+  }
   // Valide antes de criar projeto ou debitar créditos; nunca gere sem uma imagem enviada.
+  if (req.mode === 'motion' && !req.motionPresetId) {
+    if (!req.motionVideoData) throw new ApiError('INVALID_INPUT', 'Envie o vídeo-base para transferir o movimento.');
+    if (!req.avatarImageData) throw new ApiError('INVALID_INPUT', 'Selecione ou envie a foto do personagem que receberá o movimento.');
+  }
   toImageInput(req.avatarImageData);
   toImageInput(req.productImageData);
   toImageInput(req.startFrameImageData);
   toImageInput(req.endFrameImageData);
   for (const image of req.referenceImages ?? []) toImageInput(image);
+  if (req.origin === 'avatar' && (req.mode === 'avatar-video' || req.mode === 'motion')) {
+    const visualRefs = [req.startFrameImageData, req.avatarImageData, req.productImageData, ...(req.referenceImages ?? [])]
+      .filter((image): image is string => Boolean(image))
+      .map((image) => image.replace(/^data:[^,]*,/, ''));
+    const referenceCount = new Set(visualRefs).size;
+    const maxReferences = req.engine === 'omni-flash' ? 6 : 3;
+    if (referenceCount > maxReferences) {
+      throw new ApiError('INVALID_INPUT', 'Este modelo aceita até ' + maxReferences + ' imagens de referência. Reduza os anexos antes de gerar.');
+    }
+  }
+  if (req.motionVideoData) {
+    const raw = req.motionVideoData.replace(/^data:video\/[a-z0-9.+-]+;base64,/, '');
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(raw) || raw.length % 4 !== 0) {
+      throw new ApiError('INVALID_INPUT', 'Vídeo de movimento inválido. Envie MP4, MOV ou WebM.');
+    }
+  }
   if (!req.referenceMode && req.avatarImageData && req.productImageData) {
     throw new ApiError('INVALID_INPUT', 'Neste modo de vídeo, envie apenas uma imagem de referência por vez.');
   }
@@ -451,14 +582,54 @@ aiUgcRoutes.post('/create', async (c) => {
     if (!(req.referenceImages?.length)) throw new ApiError('INVALID_INPUT', 'Envie pelo menos uma imagem em Elementos.');
     if (req.endFrameImageData) throw new ApiError('INVALID_INPUT', 'O modo Elementos aceita apenas um frame inicial opcional.');
   }
-  const cost = calculateUgcCost({ engine: req.engine, sceneCount: req.scenes.length, voiceType: req.voiceType });
+  const requestedCost = calculateUgcCost({ engine: req.engine, sceneCount: req.scenes.length, voiceType: req.voiceType, sceneDurations: req.scenes.map((scene) => scene.durationSeconds ?? 8) });
+  const unlimited = await isUnlimitedUser(userId);
+  const useUnlimited = unlimited && req.engine !== 'omni-flash';
+  // A fila lowerpriority do Flow trabalha de forma confiável como image-to-video.
+  // Quando o Diretor recebe apenas texto, criamos um frame inicial original a partir
+  // do próprio briefing em vez de enviar t2v (que o Flow responde com 404).
+  const hasVisualInput = Boolean(
+    req.startFrameImageData
+    || req.avatarImageData
+    || req.productImageData
+    || req.referenceImages?.length,
+  );
+  if (useUnlimited && !hasVisualInput) {
+    const scene = req.scenes[0]!;
+    const frame = await generateImage({
+      engine: 'nano-banana-2',
+      aspectRatio: req.aspectRatio,
+      images: [],
+      modelOverride: 'lowerpriority',
+      prompt: [
+        `Crie um frame inicial fotográfico vertical para um anúncio UGC realista chamado "${req.title}".`,
+        `Produto/objetivo: ${req.productName || req.title}.`,
+        `Cena: ${scene.action}.`,
+        'Uma única composição, uma pessoa adulta, aparência natural, pele realista, luz coerente, sem colagem, sem texto, sem logotipos inventados e sem marca d’água.',
+      ].join('\n'),
+    });
+    // Não confie no MIME declarado pelo bridge: o Flow pode entregar JPEG com
+    // rótulo image/png. Sem o prefixo, toImageInput detecta o formato pelos bytes.
+    req.startFrameImageData = frame.buffer.toString('base64');
+    req.referenceMode = 'frames';
+    req.referenceImageNames = ['Frame inicial criado pelo Agente Diretor'];
+  }
+  // O plano ilimitado usa o endpoint low-priority do Flow e não consome créditos.
+  // Mantemos o motor escolhido pela UI para compatibilidade, mas salvamos o motor
+  // efetivamente usado e o custo faturado nos metadados do projeto.
+  const billedCost = useUnlimited ? 0 : requestedCost;
+  const avatarCanvasLowerPriority = req.origin === 'avatar' && (req.mode === 'motion' || req.mode === 'avatar-video') && req.engine === 'veo-3.1-fast';
+  const useLowerPriorityQueue = useUnlimited || avatarCanvasLowerPriority;
+  const actualEngine = useLowerPriorityQueue && req.engine === 'veo-3.1-fast' ? 'veo-3.1-lowerpriority' : req.engine;
+  const modelOverride = useLowerPriorityQueue ? 'lowerpriority' : req.engine === 'omni-flash' ? 'omni-flash-1.2' : null;
+  const engineAccount = modelOverride === 'lowerpriority' ? 'conta_2' : modelOverride === 'omni-flash-1.2' ? 'conta_1' : null;
   const generationId = randomUUID();
   const projectId = randomUUID();
   const admin = getAdmin();
 
   const genIns = await admin
     .from('generations')
-    .insert({ id: generationId, user_id: userId, kind: 'ugc_video', status: 'processing', cost, params: { mode: req.mode, title: req.title, count: req.scenes.length } })
+    .insert({ id: generationId, user_id: userId, kind: 'ugc_video', status: 'processing', cost: billedCost, params: { mode: req.mode, title: req.title, count: req.scenes.length, actual_engine: actualEngine, model_override: modelOverride, billing_cost: billedCost, engine_account: engineAccount } })
     .select()
     .single();
   if (genIns.error) throw new ApiError('INTERNAL', genIns.error.message);
@@ -467,47 +638,78 @@ aiUgcRoutes.post('/create', async (c) => {
   try {
     balance = await debitUserCredits({
       userId,
-      amount: cost,
+      amount: billedCost,
       reason: `ugc_${req.mode}`,
       refId: generationId,
-      insufficientMessage: `Você precisa de ${cost} créditos para criar ${req.scenes.length} cena(s) (${req.engine}).`,
+      insufficientMessage: `Você precisa de ${requestedCost} créditos para criar ${req.scenes.length} cena(s) (${req.engine}).`,
+      chargeUnlimited: req.engine === 'omni-flash',
     });
   } catch (err) {
     await admin.from('generations').update({ status: 'failed', error: 'Créditos insuficientes', completed_at: new Date().toISOString() }).eq('id', generationId);
     throw err;
   }
 
-  const totalDuration = req.scenes.reduce((sum, s) => sum + (s.durationSeconds ?? 8), 0);
+  const totalDuration = useLowerPriorityQueue ? req.scenes.length * 8 : req.scenes.reduce((sum, s) => sum + (s.durationSeconds ?? 8), 0);
   const initialScenes: ProjectSceneDTO[] = req.scenes.map((s, index) => ({
     index,
     text: s.text,
     action: s.action,
     status: 'processing',
-    duration_seconds: s.durationSeconds ?? 8,
+    duration_seconds: useLowerPriorityQueue ? 8 : s.durationSeconds ?? 8,
   }));
 
   let initialThumbnail = req.avatarUrl || '/showcase/modelo-01.webp';
-  const referenceThumbnail = toImageInput(req.startFrameImageData)
-    ?? toImageInput(req.referenceImages?.[0])
-    ?? toImageInput(req.avatarImageData)
-    ?? toImageInput(req.productImageData);
-  if (referenceThumbnail) {
-    const ext = referenceThumbnail.mimeType === 'image/png' ? 'png' : referenceThumbnail.mimeType === 'image/webp' ? 'webp' : 'jpg';
-    const thumbnailPath = `${userId}/${projectId}/reference-thumbnail.${ext}`;
-    const thumbnailUpload = await admin.storage.from(VIDEO_BUCKET).upload(
-      thumbnailPath,
-      Buffer.from(referenceThumbnail.data, 'base64'),
-      { contentType: referenceThumbnail.mimeType, upsert: true },
-    );
-    if (!thumbnailUpload.error) {
-      const signedThumbnail = await signedMediaUrl(thumbnailPath);
-      if (signedThumbnail) initialThumbnail = signedThumbnail;
+  const referenceAssets: Array<{ kind: string; name: string; path: string; url: string }> = [];
+  let motionVideoAsset: { name: string; path: string; url: string } | null = null;
+  if (req.mode === 'motion' && req.motionVideoData) {
+    const raw = req.motionVideoData.replace(/^data:video\/[a-z0-9.+-]+;base64,/, '');
+    const path = `${userId}/${projectId}/motion-reference-${(req.motionVideoName || 'movement').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80)}.mp4`;
+    const upload = await admin.storage.from(VIDEO_BUCKET).upload(path, Buffer.from(raw, 'base64'), { contentType: 'video/mp4', upsert: true });
+    if (!upload.error) {
+      const url = await signedMediaUrl(path);
+      if (url) motionVideoAsset = { name: req.motionVideoName || 'Vídeo de movimento', path, url };
+    }
+  }
+  const referenceInputs = req.referenceMode === 'frames'
+    ? [
+        { raw: req.startFrameImageData, kind: 'frame-inicial' },
+        { raw: req.endFrameImageData, kind: 'frame-final' },
+      ]
+    : [
+        ...(req.origin === 'avatar' && req.avatarImageData ? [{ raw: req.avatarImageData, kind: 'avatar' }] : []),
+        ...(req.referenceImages ?? []).map((raw) => ({ raw, kind: 'elemento' })),
+      ];
+  for (const [index, ref] of referenceInputs.entries()) {
+    const image = toImageInput(ref.raw);
+    if (!image) continue;
+    const ext = image.mimeType === 'image/png' ? 'png' : image.mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const suppliedName = req.referenceImageNames?.[index]?.trim();
+    const safeName = (suppliedName || `${ref.kind}-${index + 1}`).replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80);
+    const path = `${userId}/${projectId}/references/${index + 1}-${safeName}.${ext}`;
+    const upload = await admin.storage.from(VIDEO_BUCKET).upload(path, Buffer.from(image.data, 'base64'), { contentType: image.mimeType, upsert: true });
+    if (upload.error) continue;
+    const url = await signedMediaUrl(path);
+    if (!url) continue;
+    referenceAssets.push({ kind: ref.kind, name: suppliedName || safeName, path, url });
+    if (referenceAssets.length === 1) initialThumbnail = url;
+  }
+  if (!referenceAssets.length) {
+    const legacyImage = toImageInput(req.avatarImageData) ?? toImageInput(req.productImageData);
+    if (legacyImage) {
+      const ext = legacyImage.mimeType === 'image/png' ? 'png' : legacyImage.mimeType === 'image/webp' ? 'webp' : 'jpg';
+      const path = `${userId}/${projectId}/references/1-upload.${ext}`;
+      const upload = await admin.storage.from(VIDEO_BUCKET).upload(path, Buffer.from(legacyImage.data, 'base64'), { contentType: legacyImage.mimeType, upsert: true });
+      if (!upload.error) {
+        const url = await signedMediaUrl(path);
+        if (url) {
+          referenceAssets.push({ kind: 'imagem', name: 'Imagem enviada', path, url });
+          initialThumbnail = url;
+        }
+      }
     }
   }
 
-  const projIns = await admin
-    .from('video_projects')
-    .insert({
+  const projectRow = {
       id: projectId,
       user_id: userId,
       generation_id: generationId,
@@ -520,17 +722,49 @@ aiUgcRoutes.post('/create', async (c) => {
       aspect_ratio: req.aspectRatio,
       duration_seconds: totalDuration,
       scene_count: req.scenes.length,
-      cost,
+      cost: billedCost,
       refunded: 0,
       thumbnail_url: initialThumbnail,
       scenes: initialScenes,
-      params: { language: req.language, voiceType: req.voiceType, captions: req.captions, emotion: req.emotion, brollCount: req.brollCount },
-    })
-    .select()
-    .single();
+      params: {
+        language: req.language,
+        voiceType: req.voiceType,
+        captions: req.captions,
+        emotion: req.emotion,
+        brollCount: req.brollCount,
+        reference_mode: req.referenceMode ?? null,
+        actual_engine: actualEngine,
+        model_override: modelOverride,
+        engine_account: engineAccount,
+        billing_cost: billedCost,
+        billing_mode: useUnlimited ? 'unlimited' : 'credits',
+        reference_assets: referenceAssets.map(({ kind, name, path, url }) => ({ kind, name, path, url })),
+        motion_video_asset: motionVideoAsset,
+        ...(req.replacesProjectId ? { replaces_project_id: req.replacesProjectId } : {}),
+      },
+    };
+  let projIns = await admin.from('video_projects').insert(projectRow).select().single();
+
+  // Some deployed databases still have the older mode check from migration
+  // 0005, which predates `avatar-video`. Preserve Avatar ownership and video
+  // media type, and use the existing `studio` mode only as a compatibility
+  // fallback until migration 0009 is applied.
+  if (
+    projIns.error?.code === '23514'
+    && projIns.error.message.includes('video_projects_mode_check')
+    && req.mode === 'avatar-video'
+  ) {
+    const params = projectRow.params as Record<string, unknown>;
+    projIns = await admin.from('video_projects').insert({
+      ...projectRow,
+      mode: 'studio',
+      params: { ...params, avatar_mode: 'avatar-video' },
+    }).select().single();
+  }
 
   if (projIns.error) {
-    await refundUserCredits({ userId, amount: cost, refId: generationId });
+    await admin.from('generations').update({ status: 'failed', error: projIns.error.message, completed_at: new Date().toISOString() }).eq('id', generationId);
+    await refundUserCredits({ userId, amount: billedCost, refId: generationId, chargeUnlimited: req.engine === 'omni-flash' });
     throw new ApiError('INTERNAL', `Não consegui salvar o projeto: ${projIns.error.message}`);
   }
 
@@ -538,7 +772,7 @@ aiUgcRoutes.post('/create', async (c) => {
   // O callback assíncrono começa no próximo ciclo do event loop; assim o POST
   // devolve o projeto imediatamente, sem ficar aguardando o Veo/Rust.
   setImmediate(() => {
-    void processVideoProject(projectId, userId, generationId, req, cost).catch(async (err) => {
+    void processVideoProject(projectId, userId, generationId, req, billedCost).catch(async (err) => {
       const message = err instanceof Error ? err.message : String(err);
       await admin.from('video_projects').update({ status: 'failed', error: message, completed_at: new Date().toISOString() }).eq('id', projectId);
       await admin.from('generations').update({ status: 'failed', error: message, completed_at: new Date().toISOString() }).eq('id', generationId);

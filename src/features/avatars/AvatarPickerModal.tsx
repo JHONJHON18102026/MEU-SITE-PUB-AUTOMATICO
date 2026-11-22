@@ -18,7 +18,7 @@ function PickerGrid({ items, onPick }: { items: AvatarDTO[]; onPick: (avatar: Av
   );
 }
 
-/** Escolher um dos meus avatares ou modelos prontos para usar como rosto base. */
+/** Escolher um dos meus influencers ou modelos prontos para usar como rosto base. */
 export function AvatarPickerModal({
   open,
   onClose,
@@ -30,7 +30,7 @@ export function AvatarPickerModal({
 }) {
   const { data, loading } = useMyAvatars();
   return (
-    <Modal open={open} onClose={onClose} title="Escolher avatar" description="O rosto escolhido será mantido na nova imagem." size="lg">
+    <Modal open={open} onClose={onClose} title="Escolher influencer" description="O rosto escolhido será mantido na nova imagem e no vídeo." size="lg">
       {loading ? (
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -41,12 +41,12 @@ export function AvatarPickerModal({
         <div className="space-y-5 max-h-[65vh] overflow-y-auto pr-1">
           {data.length > 0 && (
             <div>
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-fg-subtle">Meus avatares</h3>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-fg-subtle">Meus Avatares</h3>
               <PickerGrid items={data} onPick={onPick} />
             </div>
           )}
           <div>
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-fg-subtle">Modelos prontos</h3>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-fg-subtle">Presets de Avatares</h3>
             <PickerGrid items={SHOWCASE_AVATARS} onPick={onPick} />
           </div>
         </div>

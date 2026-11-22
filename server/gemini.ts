@@ -15,6 +15,8 @@ import { env } from './env';
 import { rustChatCompletion, rustEnabled, rustGenerateImage } from './rustMotor';
 import { ApiError } from './errors';
 import type { AspectRatio, EngineId, ImageInput } from '../shared/contracts';
+import { directorPlanSchema, type DirectorPlan, type DirectorPlanRequest, type DirectorPresetId } from '../shared/directorContracts';
+import { calculateUgcCost } from '../shared/ugcContracts';
 
 let client: GoogleGenAI | null = null;
 export function getClient(): GoogleGenAI {
@@ -113,14 +115,17 @@ export async function generateImage(opts: {
   aspectRatio: AspectRatio;
   /** Ordem importa: foto base primeiro, depois produto, depois referências. */
   images: ImageInput[];
+  imageDescriptions?: string[];
   modelOverride?: string;
 }): Promise<ImageResult> {
   if (rustEnabled()) {
     return rustGenerateImage({
       prompt: opts.prompt,
       aspectRatio: opts.aspectRatio,
-      model: opts.modelOverride ?? (opts.engine === 'nano-banana-pro' ? 'google_flow' : undefined),
       images: opts.images,
+      imageDescriptions: opts.imageDescriptions,
+      model: opts.modelOverride ?? 'google_flow',
+      imageModel: opts.engine === 'nano-banana-pro' ? 'BELUGA' : 'GEM_PIX_2',
     });
   }
   const ai = getClient();
@@ -131,7 +136,7 @@ export async function generateImage(opts: {
   try {
     response = await ai.models.generateContent({
       model,
-      contents: [{ role: 'user', parts: [...opts.images.map(toPart), { text: opts.prompt }] }],
+      contents: [{ role: 'user', parts: [...opts.images.flatMap((image, index) => [{ text: opts.imageDescriptions?.[index] ?? `Attached visual ${index + 1}.` }, toPart(image)]), { text: opts.prompt }] }],
       config: {
         responseModalities: ['IMAGE'],
         imageConfig: { aspectRatio: opts.aspectRatio },
@@ -159,21 +164,43 @@ export async function generateImage(opts: {
 }
 
 // ---------------------------------------------------------------- texto
+const HUST_DIRECTOR_MODEL = 'gemini-3.8-flash';
+
 const ENHANCE_INSTRUCTIONS =
-  'Reescreva a ideia como uma cena de anúncio UGC, visual e concisa, em português do Brasil. ' +
+  'Você é somente um editor de texto para prompts de imagem e vídeo. Não gere imagens, não use ferramentas, não retorne links, URLs, IDs de mídia, markdown ou metadados. ' +
+  'Reescreva a ideia como uma cena de anúncio UGC visual e concisa, em português do Brasil. Preserve a pessoa, o produto e as instruções centrais fornecidas pelo usuário. ' +
   'Inclua ação, ambiente e luz sem inventar marcas. Responda em até 2 frases, sem introdução nem aspas.';
+
+function requireEnhancedPrompt(value: string): string {
+  const prompt = value.trim();
+  if (
+    prompt.length < 12 ||
+    /https?:\/\/|googleusercontent\.com\/image_generation_content|\bdata:image\//i.test(prompt)
+  ) {
+    throw new ApiError('GENERATION_FAILED', 'A IA devolveu um link em vez de um prompt. O texto original foi mantido; tente novamente.');
+  }
+  return prompt;
+}
 
 export async function enhancePrompt(idea: string): Promise<string> {
   if (rustEnabled()) {
-    const out = await rustChatCompletion({
-      prompt: idea,
-      system: ENHANCE_INSTRUCTIONS,
-      model: 'gemini-4-argon',
-      temperature: 0.2,
-      maxTokens: 120,
-    });
-    if (!out.trim()) throw new ApiError('GENERATION_FAILED', 'O motor oficial devolveu uma resposta vazia.');
-    return out.trim();
+    try {
+      const out = await rustChatCompletion({
+        prompt: idea,
+        system: ENHANCE_INSTRUCTIONS,
+        model: 'gemini-4-argon',
+        temperature: 0.2,
+        maxTokens: 180,
+      });
+      return requireEnhancedPrompt(out);
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      if (/fetch failed|econnrefused|enotfound|aborted/i.test(message)) {
+        throw new ApiError('GENERATION_FAILED', 'O motor oficial não está acessível. Abra o serviço Hust/Motor e tente novamente.');
+      }
+      throw new ApiError('GENERATION_FAILED', `Não consegui melhorar o prompt pelo motor conectado: ${message.slice(0, 180)}`);
+    }
   }
   const ai = getClient();
   const { text: model } = await resolveModels();
@@ -183,11 +210,288 @@ export async function enhancePrompt(idea: string): Promise<string> {
       contents: [{ role: 'user', parts: [{ text: idea }] }],
       config: { systemInstruction: ENHANCE_INSTRUCTIONS, temperature: 0.2, maxOutputTokens: 120 },
     });
-    const out = (response.text ?? '').trim();
-    if (!out) throw new Error('resposta vazia');
-    return out;
+    return requireEnhancedPrompt(response.text ?? '');
   } catch (err) {
     if (err instanceof ApiError) throw err;
     throw mapGeminiError(err);
+  }
+}
+
+const DIRECTOR_PRESET_RULES: Record<DirectorPresetId, string> = {
+  custom: 'Conduza a ideia do briefing com criatividade, sem ignorar referências, controles ou fatos não comprovados.',
+  'ugc-product': 'UGC natural. Demonstre o produto com clareza, use fatos comprovados e finalize com CTA curta.',
+  avatar: 'Crie personagem adulto coerente e reaproveitável; respeite as referências recebidas.',
+  character: 'Mantenha a mesma identidade, rosto, cabelo, roupa e proporções. Não substitua nem misture identidades.',
+  storyboard: 'Respeite o frame inicial fornecido e mantenha composição e continuidade. Não invente um frame que não foi enviado.',
+  viral: 'Abra com gancho claro, demonstre a ideia e finalize com CTA. Preserve produto e referências; sem alegações sem suporte.',
+  'tiktok-shop-influencer': 'MODO 1 — INFLUENCIADORA. A influenciadora adulta fala diretamente à câmera. Se houver foto de pessoa, mantenha exatamente essa identidade em toda a cena. Preserve o produto. Benefício só se comprovado. Não invente modo de uso, textura, eficácia, preço, desconto ou urgência.',
+  'tiktok-shop-hands': 'MODO 2 — MÃOS. Mostre somente mãos e produto, sem rosto, influenciadora ou apresentadora. Use narração feminina brasileira. Não invente uso, textura, eficácia, preço, desconto ou urgência. Benefícios só se comprovados.',
+  'tiktok-shop-pov': 'MODO 3 — POV. Perspectiva em primeira pessoa, sem rosto, influenciadora ou apresentadora. Narração feminina em primeira pessoa, sem fingir experiência de uso nem afirmar resultados não comprovados. Preserve o produto e cite só fatos visíveis.',
+};
+
+const TIKTOK_VIDEO_LOCKS: Partial<Record<DirectorPresetId, string>> = {
+  'tiktok-shop-influencer': 'REGRA INEGOCIÁVEL DO MODO 1: mantenha a identidade exata da pessoa de referência, se enviada, durante toda a cena. A influenciadora fala à câmera. Preserve o produto; não invente modo de uso, textura, eficácia, benefício, preço ou desconto.',
+  'tiktok-shop-hands': 'REGRA INEGOCIÁVEL DO MODO 2: mostre exclusivamente mãos humanas e produto. Nenhum rosto, influenciadora ou apresentadora. Use narração feminina brasileira e fatos comprovados; não invente modo de uso, textura, eficácia, benefício, preço ou desconto.',
+  'tiktok-shop-pov': 'REGRA INEGOCIÁVEL DO MODO 3: use apenas POV em primeira pessoa, sem rosto, influenciadora ou apresentadora. Narração feminina em primeira pessoa sem fingir experiência. Preserve o produto; não invente uso, textura, eficácia, benefício, preço ou desconto.',
+};
+
+const TIKTOK_ASSET_LOCKS: Partial<Record<DirectorPresetId, { cover: string; clean: string }>> = {
+  'tiktok-shop-influencer': {
+    cover: 'MODO 1 obrigatório: mantenha a identidade exata da pessoa de referência, se enviada. Preserve embalagem e produto. Use somente fatos comprovados; sem textura, eficácia, preço ou alegações inventadas.',
+    clean: 'MODO 1 obrigatório: mantenha a identidade exata da pessoa de referência, se enviada. Preserve o produto e sua embalagem. Imagem limpa, sem texto, grafismo, moldura ou alegação inventada.',
+  },
+  'tiktok-shop-hands': {
+    cover: 'MODO 2 obrigatório: mostre somente mãos e produto, sem rosto ou apresentadora. Preserve embalagem e use apenas fatos comprovados.',
+    clean: 'MODO 2 obrigatório: mostre somente mãos e produto, sem rosto ou apresentadora. Imagem limpa, sem texto, grafismo, moldura ou alegação inventada.',
+  },
+  'tiktok-shop-pov': {
+    cover: 'MODO 3 obrigatório: use perspectiva POV sem rostos, influenciadora ou apresentadora. Preserve embalagem e use apenas fatos comprovados.',
+    clean: 'MODO 3 obrigatório: use perspectiva POV sem rostos, influenciadora ou apresentadora. Imagem limpa, sem texto, grafismo, moldura ou alegação inventada.',
+  },
+};
+
+function appendMandatoryPromptRule(prompt: string | undefined, rule: string, limit: number): string {
+  const suffix = rule.trim();
+  const creative = (prompt ?? '').trim();
+  const available = Math.max(0, limit - suffix.length - 2);
+  return creative.slice(0, available) + (creative ? '\n\n' : '') + suffix;
+}
+
+const DIRECTOR_INSTRUCTIONS = `Você é o Agente Diretor do FUTURO DIGITAL, especializado em anúncios UGC e vídeos de produto.
+Crie um plano executável, realista e conciso em português do Brasil. Responda SOMENTE JSON válido, sem markdown.
+O presetId é obrigatório e independente do texto editável: conduza a ideia do usuário da melhor forma dentro desse preset, sem substituir, enfraquecer ou contradizer suas regras. Obedeça à seção PRESET OBRIGATÓRIO enviada pelo sistema.
+O JSON deve conter: title, objective, creativeDirection, audience, hook, callToAction, aspectRatio, totalDurationSeconds,
+engineId, engineLabel, estimatedCost, referenceMode, scenes e warnings. Cada cena contém index, text, action e durationSeconds.
+Não invente marcas, funcionalidades, benefícios, preços, descontos ou urgência. Analise referências visuais reais quando fornecidas; diferencie fatos visíveis de suposições e inclua incerteza em warnings.
+Use uma cena para vídeos de 8, 10 ou 15 segundos. Para duração acima de 8 segundos, prefira omni-flash.
+engineId aceita apenas veo-3.1-fast ou omni-flash. referenceMode deve ser elements quando houver múltiplas referências.
+Quando presetId for um modo TikTok Shop, inclua também productAnalysis, coverImagePrompt, cleanImagePrompt e flowVideoPrompt.
+productAnalysis deve citar somente características visíveis e não afirmar benefícios sem suporte nas referências ou no briefing.
+Antes de finalizar, confira cada afirmação sobre o produto contra a foto e o briefing. Se nenhum benefício estiver explicitamente comprovado, não invente benefícios nem sensações de uso (por exemplo, textura leve, aplicação prática, hidratação ou resultado na pele); descreva uma característica visível ou o texto legível no rótulo. A fala da cena, a capa e o prompt do vídeo seguem a mesma regra.
+coverImagePrompt e cleanImagePrompt devem ser prompts independentes: a capa pode ter uma chamada comercial curta e CTA adequada; a imagem limpa não pode conter texto, preço, logo promocional, grafismo ou moldura. Nunca misture as duas.
+flowVideoPrompt descreve direção criativa, ações, câmera, luz e fala/narração. Formato e duração são definidos nos controles da tela: não repita proporção ou segundos dentro do prompt.
+Em scenes[0].text escreva um roteiro curto que caiba em 10 segundos e siga: gancho inicial, apresentação do produto, um benefício comprovável e chamada para ação. Prefira “Clique no carrinho e garanta o seu!” quando fizer sentido. Em scenes[0].action descreva a demonstração visual e a câmera.
+Modo 1: a influenciadora adulta morena fala para a câmera; se uma pessoa for anexada, preserve aquela identidade em vez de substituí-la.
+Modo 2: mostre somente mãos e produto, sem rosto; a fala é narração feminina brasileira.
+Modo 3: use POV sem rostos ou personagens; narração feminina em primeira pessoa.
+Em todos os modos, a cena mantém uma só identidade e produto consistente; não invente informação comercial.`;
+
+export async function createDirectorPlan(input: DirectorPlanRequest, context: { unlimited: boolean }): Promise<DirectorPlan> {
+  const references = input.references ?? [];
+  const referenceNames = references.map((ref) => ref.name);
+  // O preset viaja como campo de contrato; prefixos antigos são fallback de compatibilidade.
+  const legacyPreset: DirectorPresetId = input.briefing.startsWith('WORKFLOW TIKTOK SHOP — MODO 1')
+    ? 'tiktok-shop-influencer'
+    : input.briefing.startsWith('WORKFLOW TIKTOK SHOP — MODO 2')
+      ? 'tiktok-shop-hands'
+      : input.briefing.startsWith('WORKFLOW TIKTOK SHOP — MODO 3')
+        ? 'tiktok-shop-pov'
+        : input.briefing.startsWith('WORKFLOW TIKTOK SHOP')
+          ? 'tiktok-shop-influencer'
+          : 'custom';
+  const presetId: DirectorPresetId = input.presetId ?? legacyPreset;
+  const isTikTokShopWorkflow = presetId.startsWith('tiktok-shop-');
+  const presetRules = DIRECTOR_PRESET_RULES[presetId];
+  const directorSystemInstruction = [
+    DIRECTOR_INSTRUCTIONS,
+    'PRESET OBRIGATÓRIO (' + presetId + '):',
+    presetRules,
+    'Conduza e melhore a ideia sem sair destas regras. Se um detalhe do briefing entrar em conflito, preserve o preset e registre a limitação em warnings.',
+  ].join('\n\n');
+  const multimodalReferences: ImageInput[] = references.map((reference) => {
+    const match = /^data:(image\/(?:png|jpeg|webp));base64,([\s\S]+)$/i.exec(reference.dataUrl);
+    if (!match) throw new ApiError('INVALID_INPUT', `A referência “${reference.name}” não é uma imagem PNG, JPG ou WEBP válida.`);
+    return { mimeType: match[1]!.toLowerCase() as ImageInput['mimeType'], data: match[2]! };
+  });
+  const selectedEngine = input.durationSeconds > 8 ? 'omni-flash' : 'veo-3.1-fast';
+  const baseCost = context.unlimited && selectedEngine === 'veo-3.1-fast'
+    ? 0
+    : calculateUgcCost({ engine: selectedEngine, sceneCount: 1, durationSeconds: input.durationSeconds, sceneDurations: [input.durationSeconds] });
+  const request = {
+    workflow: isTikTokShopWorkflow ? 'tiktok-shop' : 'video-plan',
+    presetId,
+    mandatoryPresetRules: presetRules,
+    briefing: input.briefing,
+    objective: input.objective,
+    aspectRatio: input.aspectRatio,
+    durationSeconds: input.durationSeconds,
+    referenceNames,
+    requiredEngineId: selectedEngine,
+    requiredEngineLabel: selectedEngine === 'omni-flash' ? 'Omni Flash 1.2' : (context.unlimited ? 'Veo 3.1 lowerpriority' : 'Veo 3.1 Fast'),
+    requiredEstimatedCost: baseCost,
+  };
+  try {
+    let output: string;
+    if (rustEnabled()) {
+      output = await rustChatCompletion({ prompt: JSON.stringify(request), system: directorSystemInstruction, model: HUST_DIRECTOR_MODEL, images: multimodalReferences });
+    } else {
+      const ai = getClient();
+      const { text: model } = await resolveModels();
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ role: 'user', parts: [...multimodalReferences.flatMap((image, index) => [{ text: `REFERÊNCIA VISUAL ${index + 1} — ${referenceNames[index] ?? 'imagem enviada'}. Analise a imagem como referência real.` }, toPart(image)]), { text: JSON.stringify(request) }] }],
+        config: { systemInstruction: directorSystemInstruction, temperature: 0.25, maxOutputTokens: isTikTokShopWorkflow ? 3000 : 1800, responseMimeType: 'application/json' },
+      });
+      output = response.text ?? '';
+    }
+    const cleaned = output.trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    const jsonStart = cleaned.indexOf('{');
+    const jsonEnd = cleaned.lastIndexOf('}');
+    if (jsonStart < 0 || jsonEnd <= jsonStart) throw new Error('o modelo não retornou JSON válido');
+    const modelPlan = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1)) as Record<string, unknown>;
+    // Engine, custo, duração e modo de referência são regras do produto, não decisões do modelo.
+    // Normalizamos antes da validação para que valores como null/"none" não invalidem um plano útil.
+    const assetLocks = TIKTOK_ASSET_LOCKS[presetId];
+    const mandatoryModeLock = TIKTOK_VIDEO_LOCKS[presetId];
+    const normalizedPlan = {
+      ...modelPlan,
+      // Hust can return a useful warning longer than the UI contract allows.
+      // Keep the plan usable while preserving the warning within the public limit.
+      warnings: Array.isArray(modelPlan.warnings)
+        ? modelPlan.warnings.slice(0, 6).map((warning) => String(warning).slice(0, 240))
+        : [],
+      aspectRatio: input.aspectRatio,
+      totalDurationSeconds: input.durationSeconds,
+      engineId: selectedEngine,
+      engineLabel: request.requiredEngineLabel,
+      estimatedCost: baseCost,
+      ...(typeof modelPlan.title === 'string' ? { title: modelPlan.title.slice(0, 120) } : {}),
+      ...(typeof modelPlan.objective === 'string' ? { objective: modelPlan.objective.slice(0, 160) } : {}),
+      ...(typeof modelPlan.creativeDirection === 'string' ? { creativeDirection: modelPlan.creativeDirection.slice(0, 600) } : {}),
+      ...(typeof modelPlan.audience === 'string' ? { audience: modelPlan.audience.slice(0, 200) } : {}),
+      ...(typeof modelPlan.productAnalysis === 'string' ? { productAnalysis: modelPlan.productAnalysis.slice(0, 1000) } : {}),
+      ...(typeof modelPlan.hook === 'string' ? { hook: modelPlan.hook.slice(0, 200) } : {}),
+      ...(typeof modelPlan.callToAction === 'string' ? { callToAction: modelPlan.callToAction.slice(0, 200) } : {}),
+      ...(typeof modelPlan.coverImagePrompt === 'string'
+        ? { coverImagePrompt: modelPlan.coverImagePrompt.slice(0, Math.max(0, 1600 - (assetLocks?.cover.length ?? 0) - 2)) }
+        : {}),
+      ...(typeof modelPlan.cleanImagePrompt === 'string'
+        ? { cleanImagePrompt: modelPlan.cleanImagePrompt.slice(0, Math.max(0, 1600 - (assetLocks?.clean.length ?? 0) - 2)) }
+        : {}),
+      ...(typeof modelPlan.flowVideoPrompt === 'string'
+        ? { flowVideoPrompt: modelPlan.flowVideoPrompt.slice(0, Math.max(0, 2000 - (mandatoryModeLock?.length ?? 0) - 2)) }
+        : {}),
+      ...(Array.isArray(modelPlan.scenes)
+        ? {
+            scenes: modelPlan.scenes.slice(0, 8).map((scene, index) => {
+              const item = scene && typeof scene === 'object' ? scene as Record<string, unknown> : {};
+              const actionLimit = Math.max(0, 400 - (mandatoryModeLock?.length ?? 0) - 1);
+              return {
+                ...item,
+                index,
+                ...(typeof item.text === 'string' ? { text: item.text.slice(0, 600) } : {}),
+                ...(typeof item.action === 'string' ? { action: item.action.slice(0, actionLimit) } : {}),
+                durationSeconds: input.durationSeconds,
+              };
+            }),
+          }
+        : {}),
+      ...(references.length ? { referenceMode: 'elements' as const } : { referenceMode: undefined }),
+    };
+    const parsed = directorPlanSchema.safeParse(normalizedPlan);
+    if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'plano fora do contrato');
+    if (isTikTokShopWorkflow && (!parsed.data.productAnalysis || !parsed.data.coverImagePrompt || !parsed.data.cleanImagePrompt || !parsed.data.flowVideoPrompt)) {
+      throw new Error('o plano TikTok Shop não trouxe análise e os três prompts necessários');
+    }
+    const scenes = parsed.data.scenes.slice(0, 1).map((scene, index) => ({ ...scene, index, durationSeconds: input.durationSeconds }));
+    let flowVideoPrompt = parsed.data.flowVideoPrompt;
+    let coverImagePrompt = parsed.data.coverImagePrompt;
+    let cleanImagePrompt = parsed.data.cleanImagePrompt;
+    if (assetLocks) {
+      coverImagePrompt = appendMandatoryPromptRule(coverImagePrompt, assetLocks.cover, 1600);
+      cleanImagePrompt = appendMandatoryPromptRule(cleanImagePrompt, assetLocks.clean, 1600);
+    }
+    if (mandatoryModeLock) {
+      const availablePromptLength = Math.max(0, 2000 - mandatoryModeLock.length - 2);
+      const creativePrompt = (flowVideoPrompt ?? '').trim().slice(0, availablePromptLength);
+      flowVideoPrompt = creativePrompt ? creativePrompt + '\n\n' + mandatoryModeLock : mandatoryModeLock;
+      if (scenes.length) {
+        const existingAction = scenes[0]!.action.trim();
+        const maxCreativeLength = Math.max(0, 400 - mandatoryModeLock.length - 2);
+        scenes[0] = {
+          ...scenes[0]!,
+          action: existingAction.slice(0, maxCreativeLength) + '\n' + mandatoryModeLock,
+        };
+      }
+    }
+    const productAnalysis = parsed.data.productAnalysis ?? '';
+    const benefitNotVerified = /não comprova|não há comprovação|sem comprovação|não (?:é possível confirmar|foi possível confirmar).{0,160}(?:benef[ií]cio|eficácia|resultado|propriedade)|(?:benef[ií]cio|eficácia).{0,80}não (?:comprovado|confirmado)/i.test(productAnalysis);
+    let safeHook = parsed.data.hook;
+    let safeCallToAction = parsed.data.callToAction;
+    const unsupportedUseAllowed = /\b(?:aplique|aplicar|aplica|massageie|massagear|massageia|espalhe|espalhar|espalha|passe|passar|usa|usar)\b/i.test(input.briefing + ' ' + productAnalysis);
+    const sceneDraft = scenes[0];
+    const draftContent = `${sceneDraft?.text ?? ''} ${sceneDraft?.action ?? ''} ${flowVideoPrompt ?? ''} ${coverImagePrompt ?? ''} ${cleanImagePrompt ?? ''}`;
+    const hasUnverifiedApplication = isTikTokShopWorkflow && !unsupportedUseAllowed && Boolean(sceneDraft) &&
+      /\b(?:aplic\w*|massage\w*|espalh\w*|pass\w*)\b.{0,120}\b(?:sérum|serum|creme|produto|gota|mão|pele)\b|\b(?:sérum|serum|creme|produto|gota)\b.{0,120}\b(?:aplic\w*|massage\w*|espalh\w*|pass\w*)\b/i.test(draftContent);
+    const unverifiedMarketingClaims = isTikTokShopWorkflow &&
+      /\b(?:cansad[oa] de testar|não sofra|não sofra mais|ingredientes incríveis|resultado garantido|milagroso|perfeito para|sérum perfeito|cura|curar|elimina|eliminar|acaba com|acabar com|hidratação profunda|textura leve|pele mais hidratada)\b/i.test(`${parsed.data.hook} ${parsed.data.callToAction} ${draftContent}`);
+    const needsConservativeRewrite = isTikTokShopWorkflow && scenes.length &&
+      (benefitNotVerified || hasUnverifiedApplication || unverifiedMarketingClaims);
+    let safeSpeech = '';
+    if (needsConservativeRewrite) {
+      const labelParts = [...productAnalysis.matchAll(/[“'\"]([^“'\"]{2,80})[”'\"]/g)]
+        .map((match) => match[1]!.trim())
+        .slice(0, 2);
+      const itemName = labelParts[0] ?? 'produto da foto';
+      const brand = labelParts[1] ? `, da ${labelParts[1]}` : '';
+      safeHook = `Olha esse produto: ${itemName}${brand}.`;
+      safeCallToAction = 'Clique no carrinho e garanta o seu!';
+      safeSpeech = `${safeHook} Confira os detalhes visíveis no rótulo. ${safeCallToAction}`;
+      scenes[0] = { ...scenes[0]!, text: safeSpeech };
+      const safeAction = presetId === 'tiktok-shop-hands'
+        ? 'Somente mãos humanas seguram o produto fechado e viram o rótulo para a câmera. Plano fechado, luz suave e movimento natural, sem uso do produto.'
+        : presetId === 'tiktok-shop-pov'
+          ? 'Enquadramento POV das mãos segurando o produto fechado e mostrando o rótulo. Luz suave e movimento natural de câmera, sem uso do produto.'
+          : 'A mesma pessoa da imagem de referência segura o produto fechado e mostra o rótulo para a câmera. Plano médio, luz suave e movimento natural, sem uso do produto.';
+      if (mandatoryModeLock) {
+        const maxCreativeLength = Math.max(0, 400 - mandatoryModeLock.length - 1);
+        scenes[0] = { ...scenes[0]!, action: safeAction.slice(0, maxCreativeLength) + '\n' + mandatoryModeLock };
+        flowVideoPrompt = appendMandatoryPromptRule(`${safeAction}\nFala exatamente: ${safeSpeech}`, mandatoryModeLock, 2000);
+      } else {
+        scenes[0] = { ...scenes[0]!, action: safeAction.slice(0, 400) };
+        flowVideoPrompt = `${safeAction}\nFala exatamente: ${safeSpeech}`.slice(0, 2000);
+      }
+      const assetSubject = presetId === 'tiktok-shop-hands'
+        ? 'Somente mãos humanas e o produto aparecem; nenhum rosto ou apresentadora.'
+        : presetId === 'tiktok-shop-pov'
+          ? 'Perspectiva POV com mãos e produto; nenhum rosto ou apresentadora.'
+          : 'A mesma pessoa da referência aparece com identidade preservada ao lado do produto.';
+      if (assetLocks) {
+        coverImagePrompt = appendMandatoryPromptRule(
+          `Foto publicitária realista para TikTok Shop. ${assetSubject} Use o produto e a embalagem exatamente como na referência, com rótulo legível, iluminação profissional e composição vertical. Inclua apenas a chamada neutra “Conheça o produto”, sem alegações de eficácia, preço ou desconto.`,
+          assetLocks.cover,
+          1600,
+        );
+        cleanImagePrompt = appendMandatoryPromptRule(
+          `Fotografia limpa e realista do produto de referência, preservando fielmente embalagem, cor, formato e rótulo. ${assetSubject} Fundo simples e iluminação profissional. Sem texto, preço, grafismo, moldura ou alegações.`,
+          assetLocks.clean,
+          1600,
+        );
+      }
+    }
+    const planText = [
+      scenes.map((scene) => scene.action + ' ' + scene.text).join(' '),
+      flowVideoPrompt, coverImagePrompt, cleanImagePrompt,
+    ].filter(Boolean).join(' ');
+    const conflictsWithNoFaceMode = (presetId === 'tiktok-shop-hands' || presetId === 'tiktok-shop-pov') &&
+      /\b(?:a influenciadora|a apresentadora|a mulher)\s+(?:aparece|fala|sorri|olha|demonstra|segura|mostra)\b/i.test(planText);
+    const inventsUnsupportedUse = isTikTokShopWorkflow && !unsupportedUseAllowed &&
+      /\b(?:aplic\w*|massage\w*|espalh\w*|pass\w*)\b.{0,120}\b(?:sérum|serum|creme|produto|gota|mão|pele)\b|\b(?:sérum|serum|creme|produto|gota)\b.{0,120}\b(?:aplic\w*|massage\w*|espalh\w*|pass\w*)\b|\b(?:demonstrando|mostrando)\s+(?:a textura|a hidratação|o resultado)\b|\b(?:textura leve|hidratação profunda|resultado visível|pele mais hidratada)\b/i.test(planText);
+    if (conflictsWithNoFaceMode || inventsUnsupportedUse) {
+      throw new ApiError('GENERATION_FAILED', 'O plano contrariou uma regra obrigatória do preset e foi bloqueado antes de abrir o canvas. Gere o plano novamente; nenhuma mídia foi gerada.');
+    }
+
+    return {
+      ...parsed.data,
+      ...(flowVideoPrompt ? { flowVideoPrompt } : {}),
+      ...(coverImagePrompt ? { coverImagePrompt } : {}),
+      ...(cleanImagePrompt ? { cleanImagePrompt } : {}),
+      ...(needsConservativeRewrite ? { hook: safeHook, callToAction: safeCallToAction } : {}),
+      scenes,
+    };
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    throw new ApiError('GENERATION_FAILED', `O Agente Diretor não conseguiu montar o plano: ${message.slice(0, 240)}`);
   }
 }

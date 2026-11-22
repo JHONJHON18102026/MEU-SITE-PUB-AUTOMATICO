@@ -20,18 +20,19 @@ describe('modos de referência de vídeo', () => {
     expect(parsed.success).toBe(true);
   });
 
-  it('aceita até três imagens no modo Elementos', () => {
+  it('aceita até seis imagens no modo Elementos para Omni Flash', () => {
     const parsed = createUgcVideoSchema.safeParse({
       ...base,
+      engine: 'omni-flash',
       referenceMode: 'elements',
-      referenceImages: [image, image, image],
+      referenceImages: [image, image, image, image, image, image],
     });
     expect(parsed.success).toBe(true);
   });
 
-  it('rejeita Elementos vazio e mais de três referências', () => {
+  it('rejeita Elementos vazio e mais de seis referências', () => {
     expect(createUgcVideoSchema.safeParse({ ...base, referenceMode: 'elements', referenceImages: [] }).success).toBe(false);
-    expect(createUgcVideoSchema.safeParse({ ...base, referenceMode: 'elements', referenceImages: [image, image, image, image] }).success).toBe(false);
+    expect(createUgcVideoSchema.safeParse({ ...base, engine: 'omni-flash', referenceMode: 'elements', referenceImages: [image, image, image, image, image, image, image] }).success).toBe(false);
   });
 
   it('aceita abertura com Elementos, mas rejeita frame final', () => {

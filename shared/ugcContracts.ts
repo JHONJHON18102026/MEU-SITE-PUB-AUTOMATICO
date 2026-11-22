@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { ASPECT_RATIOS, type AspectRatio, type EngineId } from './contracts';
 
-export type UgcMode = 'ads' | 'link' | 'talking' | 'hook' | 'slideshow' | 'motion' | 'image-ad' | 'remake' | 'studio';
+export type UgcMode = 'ads' | 'link' | 'talking' | 'hook' | 'slideshow' | 'motion' | 'avatar-video' | 'image-ad' | 'remake' | 'studio';
 export type VideoEngineId = 'veo-3.1-fast' | 'omni-flash';
 export type VoiceOptionId = 'default' | 'preset' | 'clone' | 'custom';
 export type HookPosition = 'top' | 'center' | 'bottom';
@@ -22,7 +22,7 @@ export function calculateImageBatchCost(opts: { engine?: EngineId; count: number
 
 export const VIDEO_ENGINES = [
   { id: 'veo-3.1-fast' as const, label: 'Veo 3.1 Fast', description: 'Rápido e econômico por cena', creditsPerScene: 10 },
-  { id: 'omni-flash' as const, label: 'Omni Flash 1.2', description: 'Vídeo premium de até 10 segundos', creditsPerScene: 30 },
+  { id: 'omni-flash' as const, label: 'Omni Flash 1.2 · conta 1', description: 'Vídeo premium de até 15 segundos', creditsPerScene: 30 },
 ];
 
 export const VOICE_OPTIONS: { id: VoiceOptionId; label: string; desc: string; extraPerScene: number }[] = [
@@ -48,10 +48,16 @@ export function calculateUgcCost(opts: {
   engine: VideoEngineId;
   sceneCount: number;
   voiceType?: VoiceOptionId;
+  durationSeconds?: number;
+  sceneDurations?: number[];
 }): number {
   const scenes = Math.max(1, Math.min(MAX_SCENES_PER_VIDEO, Math.round(opts.sceneCount)));
   const eng = VIDEO_ENGINES.find((e) => e.id === opts.engine) ?? VIDEO_ENGINES[0];
   const voice = VOICE_OPTIONS.find((v) => v.id === (opts.voiceType ?? 'default')) ?? VOICE_OPTIONS[0];
+  if (opts.engine === 'omni-flash') {
+    const durations = opts.sceneDurations?.length ? opts.sceneDurations : Array.from({ length: scenes }, () => opts.durationSeconds ?? 8);
+    return durations.slice(0, scenes).reduce((sum, seconds) => sum + (seconds > 10 ? 60 : 30), 0);
+  }
   return scenes * ((eng?.creditsPerScene ?? 10) + (voice?.extraPerScene ?? 0));
 }
 
@@ -114,6 +120,9 @@ export interface ProjectSceneDTO {
   video_url?: string | null;
   image_url?: string | null;
   error?: string | null;
+  /** ID do Flow que permite reutilizar o vídeo como referência de Motion. */
+  flow_media_id?: string;
+  flow_account_id?: string;
 }
 
 export interface VideoProjectDTO {
@@ -139,6 +148,8 @@ export interface VideoProjectDTO {
   created_at: string;
   completed_at: string | null;
   expires_at: string;
+  /** Metadados exibíveis da produção, incluindo as referências anexadas. */
+  params?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------- schemas Zod
@@ -158,10 +169,11 @@ export const generateScriptSchema = z.object({
 });
 
 export const createUgcVideoSchema = z.object({
-  mode: z.enum(['ads', 'link', 'talking', 'hook', 'motion', 'remake', 'studio']),
+  mode: z.enum(['ads', 'link', 'talking', 'hook', 'motion', 'avatar-video', 'remake', 'studio']),
   origin: z.enum(['projects', 'avatar']).default('projects'),
   mediaType: z.enum(['video', 'motion']).default('video'),
   title: z.string().min(2).max(120),
+  replacesProjectId: z.string().uuid().optional(),
   engine: z.enum(['veo-3.1-fast', 'omni-flash']).default('veo-3.1-fast'),
   aspectRatio: z.enum(ASPECT_RATIOS).default('9:16'),
   language: z.string().max(40).default('pt-BR'),
@@ -175,10 +187,16 @@ export const createUgcVideoSchema = z.object({
   productName: z.string().max(160).optional(),
   productImageData: z.string().max(8_000_000).optional(),
   avatarImageData: z.string().max(8_000_000).optional(),
+  avatarPrompt: z.string().max(2000).optional(),
+  motionVideoData: z.string().max(40_000_000).optional(),
+  motionVideoName: z.string().max(160).optional(),
+  motionVideoMediaId: z.string().max(300).optional(),
+  motionVideoAccountId: z.string().max(80).optional(),
   referenceMode: z.enum(['frames', 'elements']).optional(),
   startFrameImageData: z.string().max(8_000_000).optional(),
   endFrameImageData: z.string().max(8_000_000).optional(),
-  referenceImages: z.array(z.string().max(8_000_000)).max(3).optional(),
+  referenceImages: z.array(z.string().max(8_000_000)).max(6).optional(),
+  referenceImageNames: z.array(z.string().max(120)).max(3).optional(),
   brollCount: z.number().int().min(0).max(4).default(0),
   hookText: z.string().max(200).optional(),
   hookStyle: z.string().max(40).optional(),
@@ -192,7 +210,7 @@ export const createUgcVideoSchema = z.object({
       z.object({
         text: z.string().min(1).max(600),
         action: z.string().max(400).optional(),
-        durationSeconds: z.number().int().min(4).max(10).default(8),
+        durationSeconds: z.number().int().min(4).max(15).default(8),
       }),
     )
     .min(1)
@@ -212,6 +230,14 @@ export const createUgcVideoSchema = z.object({
     }
     if (value.endFrameImageData) {
       ctx.addIssue({ code: 'custom', path: ['endFrameImageData'], message: 'O modo Elementos aceita apenas um frame inicial opcional.' });
+    }
+  }
+  for (const [index, scene] of value.scenes.entries()) {
+    if (value.engine === 'veo-3.1-fast' && scene.durationSeconds > 10) {
+      ctx.addIssue({ code: 'custom', path: ['scenes', index, 'durationSeconds'], message: 'Veo 3.1 Fast aceita no máximo 10 segundos.' });
+    }
+    if (value.engine === 'omni-flash' && scene.durationSeconds > 15) {
+      ctx.addIssue({ code: 'custom', path: ['scenes', index, 'durationSeconds'], message: 'Omni Flash 1.2 aceita no máximo 15 segundos.' });
     }
   }
 });
@@ -262,6 +288,8 @@ export const createImageAdSchema = z.object({
   engine: z.enum(['nano-banana-2', 'nano-banana-pro']).default('nano-banana-2'),
   aspectRatio: z.enum(ASPECT_RATIOS).default('1:1'),
   count: z.number().int().min(1).max(4).default(1),
+  /** Prompts independentes para duas peças de uma mesma campanha (ex.: capa + imagem limpa). */
+  imagePrompts: z.tuple([z.string().trim().min(12).max(1600), z.string().trim().min(12).max(1600)]).optional(),
   productImageData: z.string().max(8_000_000).optional(),
   avatarImageData: z.string().max(8_000_000).optional(),
   avatarUrl: z.string().max(1000).optional(),

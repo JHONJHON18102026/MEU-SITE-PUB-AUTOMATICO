@@ -16,7 +16,7 @@ function seeded(seed = 42) {
 }
 
 describe('catálogo de características', () => {
-  it('tem os 19 grupos de opções mapeados na Influai (+ Detalhes extras no painel)', () => {
+  it('tem os 19 grupos de opções mapeados (+ Detalhes extras no painel)', () => {
     expect(ATTRIBUTE_GROUPS).toHaveLength(19);
   });
 
@@ -85,7 +85,9 @@ describe('montagem do prompt', () => {
   it('com produto e referências, explica o papel de cada imagem', () => {
     const p = buildAvatarPrompt({ ...base, hasProductImage: true, referenceCount: 2 });
     expect(p).toContain('product');
-    expect(p).toContain('2 additional attached reference');
+    expect(p).toContain('Treat the FIRST attached reference image as the primary source');
+    expect(p).toContain('Use the remaining 1 reference image(s) as secondary visual constraints');
+    expect(p).toContain('Do not substitute an unrelated person/object');
   });
 
   it('modo prompt usa a cena escrita pelo usuário', () => {

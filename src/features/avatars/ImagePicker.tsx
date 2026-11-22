@@ -10,6 +10,8 @@ export function ImagePicker({
   className,
   disabled,
   testId,
+  multiple,
+  onPickedMany,
 }: {
   onPicked: (img: PreparedImage) => void;
   children: ReactNode;
@@ -17,6 +19,8 @@ export function ImagePicker({
   className?: string;
   disabled?: boolean;
   testId?: string;
+  multiple?: boolean;
+  onPickedMany?: (imgs: PreparedImage[]) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
@@ -35,14 +39,17 @@ export function ImagePicker({
         ref={inputRef}
         data-testid={testId}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept="image/png,image/jpeg,image/webp,image/avif"
+        multiple={multiple}
         className="hidden"
         onChange={async (e) => {
-          const file = e.target.files?.[0];
+          const files = Array.from(e.target.files ?? []);
           e.target.value = '';
-          if (!file) return;
+          if (!files.length) return;
           try {
-            onPicked(await prepareImage(file));
+            const images = await Promise.all(files.map((file) => prepareImage(file)));
+            if (onPickedMany) onPickedMany(images);
+            else if (images[0]) onPicked(images[0]);
           } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Não consegui abrir essa imagem.');
           }

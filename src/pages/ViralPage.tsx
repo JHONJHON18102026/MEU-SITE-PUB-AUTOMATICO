@@ -382,7 +382,7 @@ export function ViralPage() {
     );
   }
 
-  // TELA PRINCIPAL DA BIBLIOTECA VIRAL (/viral) — Layout 1:1 Influai (palco cheio + barra compacta)
+  // TELA PRINCIPAL DA BIBLIOTECA VIRAL (/viral) — palco cheio + barra compacta.
   return (
     <div className="premium-workspace mx-auto w-full max-w-[1460px] space-y-[26px] px-6 py-14">
       <div className="relative min-h-[230px] overflow-hidden rounded-3xl border border-cyan-300/25 bg-[radial-gradient(circle_at_88%_8%,rgba(56,189,248,.24),transparent_38%),linear-gradient(135deg,#111a2f,#131024)] p-7 shadow-[0_28px_80px_rgba(13,89,120,.22)] md:min-h-[290px] md:p-9">
@@ -417,7 +417,7 @@ export function ViralPage() {
         ))}
       </div>
 
-      {/* Ordem e estilo exatos das 4 abas do VIRAL no Influai */}
+      {/* Ordem e estilo das 4 abas do VIRAL. */}
       <div className="premium-tabbar inline-flex h-9 w-fit max-w-full items-center gap-1 overflow-x-auto rounded-[8px] p-1 thin-scroll" role="tablist" aria-label="Abas da Biblioteca Viral">
         {[
           { id: 'trending' as const, label: 'Novidades explodindo', icon: Flame },
@@ -440,7 +440,7 @@ export function ViralPage() {
         ))}
       </div>
 
-      {/* Faixa roxa obsidian igual ao Influai /viral */}
+      {/* Faixa roxa obsidian da área VIRAL. */}
       <div className="relative top-[3px] flex min-h-[73px] flex-col gap-3 rounded-[10px] border border-accent/25 bg-accent-soft/45 px-4 py-2.5 dark:border-[#36284f] dark:bg-[#181522] sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-fg-muted sm:max-w-[700px] sm:text-[13px]">
           <strong className="text-fg">Vitrine do teste grátis:</strong> 8 perfis e produtos virais liberados de <strong className="text-fg">1.453</strong>. Clonar, minerar perfis e ver tudo fica nos planos do Studio.
@@ -509,7 +509,7 @@ export function ViralPage() {
 
       {tab === 'products' && (
         <div className="space-y-5">
-          {/* Card destaque globo idêntico ao Influai Produtos minerados (steps/2763) */}
+          {/* Card de destaque com globo para Produtos minerados. */}
           <div className="grid items-center gap-6 rounded-2xl border border-border bg-surface p-6 md:grid-cols-[1.2fr_1fr] lg:h-[302px]">
             <div className="-translate-y-9 space-y-4">
               <div>
@@ -550,7 +550,7 @@ export function ViralPage() {
               </p>
             </div>
 
-            {/* Globo pontilhado vetorial elegante espelhado do Influai */}
+            {/* Globo pontilhado vetorial. */}
             <div className="relative ml-auto mr-[-1.5rem] flex size-80 -translate-y-8 items-center justify-center lg:size-[350px]" aria-hidden>
               <svg viewBox="0 0 220 220" className="size-full">
                 <defs>

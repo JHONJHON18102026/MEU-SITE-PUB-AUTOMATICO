@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
-import { Bell, ChevronRight, GraduationCap, KeyRound, LogOut, Menu, PanelLeft, Sun, UserRound, CheckCheck, Trash2 } from 'lucide-react';
+import { Bell, ChevronRight, KeyRound, LogOut, Menu, PanelLeft, Sun, UserRound, CheckCheck, Trash2 } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useUi } from '@/store/ui';
 import { useSession } from '@/store/session';
@@ -28,7 +28,7 @@ export function Topbar() {
   const initial = (profile?.name || session?.user.email || '?').charAt(0).toUpperCase();
   const onAvatars = pathname.startsWith('/avatars');
   const routeLabels: Record<string, string> = {
-    dashboard: 'Home', avatars: 'Avatares', projects: 'Projetos', viral: 'VIRAL', 'ai-ugc': 'AI UGC', studio: 'Studio', tutorials: 'Tutoriais', ferramentas: 'Ferramentas', setup: 'Configuração',
+    dashboard: 'Home', 'agente-diretor': 'Agente Diretor', avatars: 'Avatares', projects: 'Projetos', viral: 'VIRAL', 'ai-ugc': 'AI UGC', studio: 'Studio', ferramentas: 'Ferramentas', setup: 'Configuração',
   };
   const routeParts = pathname.split('/').filter(Boolean);
   const routeCrumbs = routeParts.map((part, index) => ({
@@ -84,7 +84,7 @@ export function Topbar() {
             {profile?.coins_balance ?? '—'}
           </div>
 
-          {/* Botão de tema compacto idêntico ao do Influai (bolinha roxa + sol dourado) */}
+          {/* Botão compacto de alternância de tema. */}
           <button
             type="button"
             onClick={toggleTheme}
@@ -100,20 +100,6 @@ export function Topbar() {
           <span className="hidden lg:inline-flex items-center gap-1 text-[11px] font-semibold text-fg-muted">
             PT
           </span>
-
-          <NavLink
-            to="/tutorials"
-            className={({ isActive }) =>
-              clsx(
-                'grid size-9 place-items-center rounded-xl border border-transparent transition-all',
-                isActive ? 'border-accent/25 bg-accent-soft text-accent-light' : 'text-fg-muted hover:border-white/10 hover:bg-white/[0.04] hover:text-fg',
-              )
-            }
-            aria-label="Central de tutoriais"
-            title="Tutoriais"
-          >
-            <GraduationCap className="size-[16px]" />
-          </NavLink>
 
           <div ref={notifRef} className="relative">
             <button

@@ -46,7 +46,7 @@ const state = {
   avatars: [],
   generations: [],
   projects: [],
-  lastUgcRequest: null,
+  lastUgcBody: null,
   viralFolders: [{ id: 'f-aleatorios', user_id: USER.id, name: 'Aleatórios', formats: ['ADS', 'Hook+Demo', 'Remake Viral'], created_at: new Date().toISOString() }],
   viralItems: [],
   studioProjects: [
@@ -110,11 +110,12 @@ const rawImg = await sharp({
   .toBuffer();
 const testImage = applyWatermark ? await applyWatermark(rawImg) : rawImg;
 
-function makeAvatar(i, body) {
+function makeAvatar(i, body, generationId) {
   const id = `00000000-0000-4000-8000-${String(Date.now() + i).padStart(12, '0').slice(-12)}`;
   return {
     id,
     user_id: USER.id,
+    generation_id: generationId,
     name: i === 0 ? 'Influencer IA' : `Influencer IA ${i + 1}`,
     image_url: `${SB}/storage/v1/object/public/avatars/${USER.id}/${id}.png`,
     prompt: body.prompt || 'características',
@@ -183,14 +184,27 @@ async function installMocks(page) {
     await new Promise((r) => setTimeout(r, 900)); // deixa o "gerando" aparecer
     const cost = 2 * body.count;
     state.balance -= cost;
-    const avatars = Array.from({ length: body.count }, (_, i) => makeAvatar(i, body));
+    const generationId = crypto.randomUUID();
+    const safeParams = {
+      ...body,
+      basePhoto: body.basePhoto ? { name: body.basePhoto.name, mimeType: body.basePhoto.mimeType } : null,
+      productImage: body.productImage ? { name: body.productImage.name, mimeType: body.productImage.mimeType } : null,
+      referenceImages: (body.referenceImages ?? []).map((image, index) => ({ name: image.name ?? `Referência ${index + 1}`, mimeType: image.mimeType })),
+    };
+    const avatars = Array.from({ length: body.count }, (_, i) => makeAvatar(i, body, generationId));
     state.avatars = [...avatars, ...state.avatars];
     const generation = {
-      id: crypto.randomUUID(), kind: 'avatar_image', status: 'done', cost, params: body,
+      id: generationId, kind: 'avatar_image', status: 'done', cost, params: safeParams,
       result_count: avatars.length, error: null, created_at: new Date().toISOString(), completed_at: new Date().toISOString(),
     };
     state.generations = [generation, ...state.generations];
     return json(route, 200, { generation, avatars, balance: state.balance, refunded: 0 });
+  });
+
+  await page.route(`${BASE}/api/avatars/gallery**`, (route) => {
+    const scope = new URL(route.request().url()).searchParams.get('scope');
+    const avatars = scope === 'community' ? state.avatars.filter((avatar) => avatar.is_public) : state.avatars;
+    return json(route, 200, { avatars });
   });
 
   await page.route(`${BASE}/api/avatars/*`, (route) => {
@@ -215,8 +229,9 @@ async function installMocks(page) {
 
   await page.route(`${BASE}/api/ai-ugc/create`, async (route) => {
     const body = JSON.parse(route.request().postData() || '{}');
-    state.lastUgcRequest = body;
-    const cost = (body.scenes?.length ?? 1) * 10;
+    state.lastUgcBody = body;
+    const perScene = body.engine === 'omni-flash' ? 30 : 10;
+    const cost = (body.scenes?.length ?? 1) * perScene;
     state.balance = Math.max(0, state.balance - cost);
     const project = {
       id: `00000000-0000-4000-9000-${String(Date.now()).padStart(12, '0').slice(-12)}`,
@@ -525,7 +540,7 @@ async function run() {
     const context = await browser.newContext({ viewport: { width: 1600, height: 940 }, locale: 'pt-BR' });
     const page = await context.newPage();
     page.on('pageerror', (e) => consoleErrors.push(e.message));
-    page.on('console', (m) => m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text()) && consoleErrors.push(m.text()));
+    page.on('console', (m) => m.type() === 'error' && !/favicon|Failed to load resource|wss:\/\/fake-projeto\.supabase\.co\/realtime/.test(m.text()) && consoleErrors.push(m.text()));
     await installMocks(page);
 
     console.log('\n1) Login');
@@ -563,26 +578,39 @@ async function run() {
     await page.getByRole('button', { name: /Mudar para tema escuro/ }).click();
     check((await page.evaluate(() => document.documentElement.dataset.theme)) === 'dark', 'E volta para escuro');
 
-    await page.getByRole('button', { name: 'Ver todas (12)' }).click();
-    check(await page.locator('main').getByRole('link', { name: /Image Ads/ }).isVisible(), 'Botão Ver todas na Home revela todas as 12 ferramentas');
-    await page.getByRole('button', { name: 'Mostrar menos' }).click();
+    check(await page.getByRole('link', { name: /Explorar o Studio/ }).isVisible(), 'Home aponta para o Studio sem depender do antigo bloco de ferramentas populares');
+    check((await page.getByText(/Ferramentas populares/).count()) === 0, 'Home não repete o bloco antigo de ferramentas populares');
 
     await page.getByRole('button', { name: 'Personalizar menu' }).click();
     const customDlg = page.getByRole('dialog', { name: 'Personalizar menu' });
     await customDlg.waitFor();
     const customChecks = await customDlg.locator('input[type="checkbox"]').count();
-    check(customChecks === 5, `Modal Personalizar menu exibe ${customChecks} itens reais marcáveis`);
+    check(customChecks === 6, `Modal Personalizar menu exibe ${customChecks} itens reais marcáveis`);
     await customDlg.getByRole('button', { name: 'Pronto' }).click();
-
-    await page.getByRole('link', { name: /Vídeo do produto/ }).click();
-    await page.waitForURL('**/ai-ugc/link');
-    await page.getByRole('heading', { name: /TRANSFORME QUALQUER PRODUTO/ }).waitFor();
-    check(true, 'Card Vídeo do produto abre página dedicada /ai-ugc/link');
 
     console.log('\n3) Influencer IA — painel de características');
     await page.goto(`${BASE}/avatars?panel=motion`);
-    check(await page.getByText('Motion Control · Movimentos Virais').isVisible(), 'Atalho ?panel=motion abre direto a aba Motion Control');
+    check(await page.getByText('Templates personalizados').isVisible(), 'Atalho legado ?panel=motion abre o novo painel de templates');
+    check(await page.getByRole('tab', { name: 'Imagens geradas' }).isVisible() && await page.getByRole('tab', { name: 'Vídeos gerados' }).isVisible() && (await page.getByRole('tab', { name: /Motion Control/ }).count()) === 0, 'Compositor mostra Imagens e Vídeos gerados sem a aba removida Motion Control');
     await page.getByRole('tab', { name: 'Criar Influencer' }).click();
+    const presetSwitch = page.getByRole('switch', { name: 'Aplicar opções da lateral ao canvas' });
+    check((await presetSwitch.getAttribute('aria-checked')) === 'false', 'Painel esquerdo começa desativado para geração livre no canvas');
+    await page.getByRole('tab', { name: 'Templates IA' }).click();
+    check(await page.getByText('BIBLIOTECA DE TEMPLATES').isVisible(), 'Templates ficam na lateral, independentes da chave de influencer');
+    check(await page.getByRole('button', { name: /Aplicar prompt no canvas/ }).isEnabled(), 'Template é aplicado sem gerar pela lateral');
+    await page.getByRole('tab', { name: 'Criar Influencer' }).click();
+    await page.getByTestId('prompt-composer').getByRole('tab', { name: 'Vídeo' }).click();
+    check(await page.getByRole('tab', { name: 'Criar Influencer' }).getAttribute('aria-selected') === 'true', 'Selecionar Vídeo no canvas mantém a aba esquerda Criar Influencer');
+    check(await page.getByRole('button', { name: 'Modelo de vídeo' }).isVisible() && (await page.getByRole('button', { name: 'Modelo de imagem' }).count()) === 0, 'Modo Vídeo mostra modelos de vídeo e oculta os de imagem');
+    await page.getByTestId('prompt-composer').getByRole('tab', { name: 'Imagem' }).click();
+    check(await page.getByRole('button', { name: 'Modelo de imagem' }).isVisible() && (await page.getByRole('button', { name: 'Modelo de vídeo' }).count()) === 0, 'Modo Imagem mostra modelos de imagem e oculta os de vídeo');
+    await presetSwitch.click();
+    check(await page.getByTestId('generate-from-panel').isEnabled(), 'Ligar a chave ativa a validação do influencer no rodapé à esquerda');
+    for (const label of ['Vídeos gerados', 'Imagens geradas']) {
+      const mediaTab = page.getByRole('tab', { name: new RegExp(label) });
+      await mediaTab.click();
+      check((await mediaTab.getAttribute('aria-selected')) === 'true', `A aba de resultados "${label}" alterna corretamente`);
+    }
     await page.getByRole('button', { name: /^Tipo de personagem/ }).waitFor();
     const groupButtons = await page.locator('aside[aria-label="Criar influencer"] section > button[aria-expanded]').count();
     check(groupButtons === 20, `19 grupos de características + Detalhes extras no painel (${groupButtons})`);
@@ -594,15 +622,8 @@ async function run() {
       .then(() => true)
       .catch(() => false);
     check(thumbsOk, 'Todas as 24 fotos dos tipos de personagem carregam no painel');
-    const showcaseOk = await page
-      .waitForFunction(() => {
-        const imgs = [...document.querySelectorAll('[data-testid="avatar-grid"] img')];
-        return imgs.length === 9 && imgs.every((i) => i.complete && i.naturalWidth > 0);
-      }, null, { timeout: 8000 })
-      .then(() => true)
-      .catch(() => false);
-    check(showcaseOk, 'Todos os 9 modelos prontos carregam na aba Explorar > Modelos');
-    check(await page.getByRole('tab', { name: /Comunidade \(0\)/ }).isVisible(), 'Explorar separa sub-abas Modelos e Comunidade');
+    check((await page.locator('[data-testid="avatar-grid"]').count()) === 0, 'Biblioteca de presets não fica duplicada na página Avatar');
+    check((await page.getByRole('tab', { name: /Avatares da Comunidade/ }).count()) === 0, 'Galeria de comunidade não ocupa o canvas Avatar');
     await page.screenshot({ path: path.join(shotsDir, '04-influencer-ia.png') });
 
     await page.getByRole('button', { name: /^Etnia/ }).click();
@@ -641,8 +662,17 @@ async function run() {
     await page.getByTestId('base-photo-input').setInputFiles({ name: 'rosto.png', mimeType: 'image/png', buffer: rawImg });
     await page.getByText('Foto base enviada').waitFor();
     check(true, 'Envio de foto base mostra a prévia ("Foto base enviada")');
+    check(await page.getByTestId('prompt-composer').getByRole('button', { name: 'Escolher influencer' }).isVisible(), 'Foto de referência fica fora do slot INFLUENCER até ser validada');
+    check((await presetSwitch.getAttribute('aria-checked')) === 'true', 'Chave permanece ligada durante a personalização do influencer');
+    await presetSwitch.click();
+    check((await page.getByTestId('generate-from-panel').isDisabled()), 'Desligar a chave desativa a validação e as opções da esquerda');
+    await presetSwitch.click();
+    check((await presetSwitch.getAttribute('aria-checked')) === 'true', 'Chave liga as opções da lateral');
+    await presetSwitch.click();
+    check((await presetSwitch.getAttribute('aria-checked')) === 'false', 'Chave desliga as opções da lateral');
 
     console.log('\n4) Barra de prompt + geração');
+    await page.getByRole('tab', { name: 'Imagem' }).click();
     await page.getByLabel('Descreva o que você quer criar').fill('tomando suplemento na cozinha');
     await page.getByRole('button', { name: 'Melhorar' }).click();
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Descreva o que você quer criar"]')?.value.includes('luz da manhã'));
@@ -667,16 +697,29 @@ async function run() {
     check((await page.getByTestId('generate-from-prompt').textContent()).includes('4'), 'Botão GERAR mostra o custo certo (4 créditos)');
 
     await page.getByTestId('generate-from-prompt').click();
-    await page.getByRole('status', { name: 'Gerando imagem' }).first().waitFor();
-    check(true, 'Aparecem os cartões "Gerando com IA…" enquanto espera');
+    await page.getByText('GERANDO IMAGEM…').waitFor();
+    check(true, 'O compositor informa quando a imagem está sendo gerada');
     await page.screenshot({ path: path.join(shotsDir, '05-gerando.png') });
     await page.getByText(/imagem\(ns\) pronta\(s\)/).first().waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Abrir imagem Influencer IA' }).first().waitFor();
+    check(true, 'A imagem gerada fica disponível na galeria de resultados');
     const body = state.lastGenerateBody;
     check(body.mode === 'prompt' && body.count === 2, 'Pedido enviado: modo prompt, 2 imagens');
-    check(Boolean(body.basePhoto?.data) && Boolean(body.productImage?.data) && body.referenceImages.length === 1, 'Pedido leva foto base, produto e 1 referência');
-    check(body.characterWorld.startsWith('Avó mineira'), 'Pedido leva o mundo do personagem');
+    check(body.prompt === 'Mulher sorrindo segurando o pote do suplemento numa cozinha clara, luz da manhã entrando pela janela, enquadramento meio corpo.', 'Canvas envia o prompt escrito, mesmo com a chave desligada');
+    check(!body.basePhoto?.data && Boolean(body.productImage?.data) && body.referenceImages.length === 1, 'Com a chave desligada, envia produto e referência sem aplicar a foto-base');
+    check(body.referenceImages[0]?.name === 'ref.png', 'Canvas envia o nome e os dados da imagem de referência');
+    check(Object.keys(body.attributes).length === 0 && body.characterWorld === '', 'Com a chave desligada, não envia atributos ou mundo do influencer');
+    await page.getByRole('button', { name: 'Abrir imagem Influencer IA' }).first().click();
+    const generatedImageDialog = page.getByRole('dialog', { name: 'Influencer IA' });
+    await generatedImageDialog.getByRole('img', { name: 'Influencer IA' }).waitFor();
+    await generatedImageDialog.getByTestId('used-generation-details').waitFor();
+    await generatedImageDialog.getByText('produto.png').waitFor();
+    await generatedImageDialog.getByText('ref.png').waitFor();
+    check(true, 'Imagem gerada abre e o detalhe mostra prompt, produto e referências usados');
+    await generatedImageDialog.getByRole('button', { name: 'Fechar' }).click();
     await page.getByTestId('credits-balance').getByText('16').waitFor();
     check(true, 'Saldo cai de 20 para 16 depois de gerar');
+    await page.getByRole('tab', { name: /Meus Avatares/ }).click();
     const imgs = await page.getByTestId('avatar-grid').locator('img').count();
     check(imgs === 2, `As 2 imagens aparecem em "Meus avatares" (${imgs})`);
     await page.waitForTimeout(400);
@@ -690,16 +733,21 @@ async function run() {
     }
     await page.screenshot({ path: path.join(shotsDir, '07-detalhe.png') });
     await dialog.getByRole('button', { name: 'Usar este rosto como base' }).click();
-    await page.getByAltText('AVATAR').waitFor();
-    check(true, '"Usar este rosto como base" coloca o avatar no slot AVATAR');
+    await page.getByTestId('prompt-composer').getByAltText('INFLUENCER').waitFor();
+    check(true, '"Usar este rosto como base" coloca o avatar no slot INFLUENCER');
 
     console.log('\n6) Histórico e erros');
-    await page.getByRole('tab', { name: 'Histórico' }).click();
+    check((await page.getByRole('tab', { name: 'Histórico' }).count()) === 0, 'Histórico não fica duplicado na aba Avatar');
+    await page.goto(`${BASE}/projects`);
+    await page.getByRole('heading', { name: 'Meus Projetos' }).waitFor();
+    await page.getByRole('tab', { name: /Histórico/ }).click();
     await page.getByTestId('history-list').waitFor();
-    check((await page.getByTestId('history-list').locator('li').count()) === 1, 'Histórico mostra a geração feita');
+    check((await page.getByTestId('history-list').locator('li').count()) === 1, 'Histórico em Projetos mostra a geração feita');
 
     state.failNextWith = { status: 402, code: 'INSUFFICIENT_CREDITS', message: 'Você precisa de 4 créditos para gerar 2 imagem(ns).' };
-    await page.getByTestId('generate-from-panel').click();
+    await page.goto(`${BASE}/avatars`);
+    await page.getByRole('tab', { name: 'Explorar' }).click();
+    await page.getByTestId('generate-from-prompt').click();
     await page.getByText('Você precisa de 4 créditos').first().waitFor();
     check(true, 'Erro de créditos insuficientes aparece em português para o usuário');
 
@@ -707,7 +755,7 @@ async function run() {
     check(await page.getByText('Influencer pronto').isVisible(), 'Central de notificações registra a geração');
     await page.keyboard.press('Escape');
 
-    console.log('\n7) Entrega 2 — AI UGC (Abas Influai com páginas dedicadas), Projetos e Tutoriais');
+    console.log('\n7) Entrega 2 — AI UGC com páginas dedicadas e Projetos');
     await page.goto(`${BASE}/ai-ugc`);
     await page.getByRole('link', { name: 'ADS', exact: true }).click();
     await page.waitForURL('**/ai-ugc/ads');
@@ -738,13 +786,7 @@ async function run() {
     check(await projectsGrid.getByText(/Personagem Falante ·/).first().isVisible(), 'Projeto criado aparece em Meus Projetos e debita saldo (16 -> 6)');
     await page.screenshot({ path: path.join(shotsDir, '11-projetos.png') });
 
-    await page.locator('header').getByRole('link', { name: 'Central de tutoriais' }).click();
-    await page.waitForURL('**/tutorials');
-    await page.getByRole('heading', { name: 'Central de Tutoriais' }).waitFor();
-    await page.screenshot({ path: path.join(shotsDir, '12-tutoriais.png') });
-    check(true, 'Central de Tutoriais abre pela barra superior');
-
-    console.log('\n7B) Entrega 3 — Hook+Demo, Slideshows, Motion Control e Image Ads');
+    console.log('\n7B) Entrega 3 — Hook+Demo, Slideshows, Templates de Avatar e Image Ads');
     state.balance = 50;
     await page.goto(`${BASE}/ai-ugc/hook-demo`);
     await page.reload();
@@ -769,28 +811,59 @@ async function run() {
     await projectsGrid.getByText(/Slideshow ·/).first().waitFor();
     check(await projectsGrid.getByText(/Slideshow ·/).first().isVisible(), 'Slideshow gerado aparece no filtro Slideshows (30 -> 20)');
 
-    await page.goto(`${BASE}/avatars?panel=motion`);
-    await page.getByRole('tab', { name: 'Animar avatar' }).waitFor();
-    await page.getByText('Aponta para o texto + sorri').waitFor();
-    await page.getByRole('button', { name: 'Veo 3.1 Fast' }).waitFor();
-    await page.getByRole('button', { name: 'Omni Flash 1.2' }).waitFor();
-    await page.getByRole('button', { name: 'Veo 3.1 Fast' }).click();
-    check(await page.getByRole('button', { name: 'Veo 3.1 Fast' }).getAttribute('aria-pressed') === 'true', 'Veo 3.1 Fast é selecionável como motor alternativo de Animar avatar');
-    await page.screenshot({ path: path.join(shotsDir, '15-motion-control.png') });
-    await page.getByRole('complementary', { name: 'Criar influencer' }).locator('input[type="file"]').setInputFiles({ name: 'motion-rosto.png', mimeType: 'image/png', buffer: rawImg });
-    await page.getByText('motion-rosto.png').waitFor();
-    check(true, 'Motion Control aceita foto enviada e mostra o arquivo selecionado');
-    await page.getByTestId('motion-create-btn').click();
+    state.balance = 40;
+    await page.goto(`${BASE}/avatars`);
+    await page.getByRole('tab', { name: 'Criar Influencer' }).click();
+    const canvasSwitch = page.getByRole('switch', { name: 'Aplicar opções da lateral ao canvas' });
+    if ((await canvasSwitch.getAttribute('aria-checked')) === 'true') await canvasSwitch.click();
+    const removeCanvasAvatar = page.getByRole('button', { name: 'Remover influencer' });
+    if (await removeCanvasAvatar.count()) await removeCanvasAvatar.click();
+    await page.getByLabel('Descreva o que você quer criar').fill('Anime esta imagem de referência mantendo a pessoa e o look.');
+    await page.getByTestId('reference-input').setInputFiles({ name: 'motion-canvas.png', mimeType: 'image/png', buffer: rawImg });
+    await page.getByAltText('Referência 1').waitFor();
+    await page.getByTestId('prompt-composer').getByRole('tab', { name: 'Vídeo' }).click();
+    check(await page.getByRole('tab', { name: 'Criar Influencer' }).getAttribute('aria-selected') === 'true', 'Selecionar Vídeo mantém a coluna esquerda e o painel de presets inalterados');
+    const videoModel = page.getByRole('button', { name: 'Modelo de vídeo' });
+    await videoModel.click();
+    await page.getByRole('option', { name: /Veo 3.1 · lower priority/ }).click();
+    check((await page.getByRole('button', { name: 'Modelo de vídeo' }).textContent()).includes('Veo 3.1 · lower priority'), 'Modo Vídeo oferece e seleciona Veo 3.1 lower priority');
+    const videoCta = page.getByTestId('generate-from-prompt');
+    check((await videoCta.textContent()).trim() === 'GERAR', 'CTA de vídeo mostra apenas GERAR, sem preço');
+    await page.screenshot({ path: path.join(shotsDir, '15-avatar-video-templates.png') });
+    await videoCta.click();
     await page.waitForURL('**/avatars?media=videos');
-    await page.getByRole('tab', { name: 'Motion Control' }).waitFor();
-    await page.getByText(/Motion ·/).first().waitFor();
+    await page.getByText(/Avatar ·/).first().waitFor();
+    const motionRequest = state.lastUgcBody;
     check(
-      (await page.getByText(/Motion ·/).first().isVisible()) && state.lastUgcRequest?.mode === 'motion' && state.lastUgcRequest?.origin === 'avatar' && state.lastUgcRequest?.mediaType === 'video' && state.lastUgcRequest?.engine === 'veo-3.1-fast' && typeof state.lastUgcRequest?.avatarImageData === 'string' && state.lastUgcRequest.avatarImageData.length > 0,
-      'Animar influencer envia a foto e salva o resultado em Vídeos gerados de Avatar (20 -> 10)',
+      motionRequest?.origin === 'avatar' && motionRequest?.mode === 'avatar-video' && motionRequest?.mediaType === 'video' && motionRequest?.engine === 'veo-3.1-fast' &&
+        motionRequest?.avatarPrompt?.includes('Anime esta imagem de referência') &&
+        motionRequest?.referenceImages?.length === 1 && motionRequest?.referenceImageNames?.[0] === 'motion-canvas.png' &&
+        !motionRequest?.avatarImageData,
+      'Com a chave desligada, GERAR usa prompt e referências do canvas sem injetar o influencer lateral',
     );
-    const motionProjectCard = state.projects.find((project) => project.mode === 'motion');
-    check(Boolean(motionProjectCard) && !state.projects.filter((project) => (project.origin || 'projects') === 'projects').includes(motionProjectCard), 'Motion criado em Avatar não entra na lista de Projetos');
+    await page.getByRole('switch', { name: 'Aplicar opções da lateral ao canvas' }).click();
+    const leftAvatarPhoto = await sharp({ create: { width: 360, height: 640, channels: 3, background: { r: 22, g: 126, b: 90 } } }).png().toBuffer();
+    await page.getByTestId('base-photo-input').setInputFiles({ name: 'influencer-lateral.png', mimeType: 'image/png', buffer: leftAvatarPhoto });
+    await page.getByText('Foto base enviada').waitFor();
+    await page.getByRole('button', { name: 'Modelo de vídeo' }).click();
+    await page.getByRole('option', { name: /Omni Flash 1.2/ }).click();
+    const omniVideoRequest = page.waitForResponse((response) => response.url().includes('/api/ai-ugc/create') && response.request().method() === 'POST');
+    await page.getByTestId('generate-from-prompt').click();
+    await omniVideoRequest;
+    await page.waitForURL('**/avatars?media=videos');
+    const sidebarAvatarRequest = state.lastUgcBody;
+    check(
+      sidebarAvatarRequest?.engine === 'omni-flash' && sidebarAvatarRequest?.avatarImageData &&
+        sidebarAvatarRequest?.avatarImageData !== sidebarAvatarRequest?.referenceImages?.[0],
+      'Com a chave ligada, o canvas usa o influencer da lateral e permite selecionar Omni Flash 1.2',
+    );
+    check(
+      state.projects.some((project) => project.mode === 'avatar-video' && project.origin === 'avatar' && project.mediaType === 'video') &&
+        !state.projects.filter((project) => (project.origin || 'projects') === 'projects').some((project) => project.mode === 'avatar-video'),
+      'Vídeos com templates ficam em Avatares e não são duplicados em Projetos',
+    );
 
+    state.balance = 10;
     await page.goto(`${BASE}/image-ads`);
     await page.getByTestId('image-ad-autofill').click();
     await page.getByText('MAIS VENDIDO').first().waitFor();
@@ -818,7 +891,8 @@ async function run() {
     await page.getByRole('link', { name: /Voltar para Minhas pastas/ }).click();
     await page.waitForURL('**/viral');
     await page.getByRole('tab', { name: 'Perfis minerados' }).click();
-    check(await page.getByText('Nota 97/100').isVisible(), 'Perfis minerados exibem nota de projeção viral (0–100)');
+    await page.getByText('Nota 97/100').waitFor();
+    check((await page.getByText('Nota 97/100').count()) > 0, 'Perfis minerados exibem nota de projeção viral (0–100)');
 
     await page.getByRole('tab', { name: 'Novidades explodindo' }).click();
     await page.getByRole('button', { name: /Ver vídeos e clonar/ }).first().click();
@@ -873,8 +947,8 @@ async function run() {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${BASE}/avatars`);
-    await page.getByText('SEU INFLUENCER').waitFor();
-    check(await page.getByRole('button', { name: 'Escolher avatar' }).isVisible(), 'Slot AVATAR fica visível no celular (390px)');
+    await page.getByRole('heading', { name: 'SEU INFLUENCER, SEU HIT VIRAL' }).waitFor();
+    check(await page.getByRole('button', { name: 'Escolher influencer' }).isVisible(), 'Slot INFLUENCER fica visível no celular (390px)');
     check(await page.getByRole('button', { name: 'Escolher produto' }).isVisible(), 'Slot PRODUTO fica visível no celular (390px)');
     await page.getByRole('button', { name: 'Abrir menu' }).click();
     await page.getByRole('dialog', { name: 'Menu de navegação' }).waitFor();

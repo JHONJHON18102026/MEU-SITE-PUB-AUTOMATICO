@@ -9,19 +9,23 @@ import {
   STUDIO_ACCOUNT_STAGES,
   STUDIO_CAPTION_STYLES,
   STUDIO_FORMATS,
-  TUTORIAL_ARTICLES,
   UGC_TEMPLATES,
   VIRAL_FOLDER_FORMATS,
   VIRAL_MOTIONS,
   VIRAL_TRENDING_VIDEOS,
 } from '../../shared/ugcCatalog';
-import { assertSafePublicHttpUrl, pickVeoModel } from '../../server/veo';
+import { assertSafePublicHttpUrl, pickVeoModel, resolveFlowVideoMode } from '../../server/veo';
 
 describe('cálculo de custos e quebra de cenas (Entregas 2 & 3)', () => {
   it('calcula 10 créditos/cena no Veo 3.1 Fast e +1/cena com voz personalizada', () => {
     expect(calculateUgcCost({ engine: 'veo-3.1-fast', sceneCount: 3, voiceType: 'default' })).toBe(30);
     expect(calculateUgcCost({ engine: 'veo-3.1-fast', sceneCount: 3, voiceType: 'preset' })).toBe(33);
-    expect(calculateUgcCost({ engine: 'omni-flash', sceneCount: 2, voiceType: 'clone' })).toBe(62);
+    expect(calculateUgcCost({ engine: 'omni-flash', sceneCount: 2, voiceType: 'clone' })).toBe(60);
+  });
+
+  it('cobra a conta 1 com a tabela Omni Flash: 30 créditos em 10s e 60 em 15s', () => {
+    expect(calculateUgcCost({ engine: 'omni-flash', sceneCount: 1, sceneDurations: [10] })).toBe(30);
+    expect(calculateUgcCost({ engine: 'omni-flash', sceneCount: 1, sceneDurations: [15] })).toBe(60);
   });
 
   it('calcula lote de imagens (Slideshows e Image Ads) em Nano Banana 2 (2) e Pro (3)', () => {
@@ -50,6 +54,13 @@ describe('descoberta Veo e proteção anti-SSRF', () => {
     expect(pickVeoModel(['gemini-3-flash'])).toBeUndefined();
   });
 
+  it('prioriza o frame inicial I2V sobre referências e preserva edição por vídeo', () => {
+    expect(resolveFlowVideoMode({ hasSourceVideo: true, hasStartFrame: true, hasElements: true })).toBe('edit');
+    expect(resolveFlowVideoMode({ hasSourceVideo: false, hasStartFrame: true, hasElements: true })).toBe('i2v');
+    expect(resolveFlowVideoMode({ hasSourceVideo: false, hasStartFrame: false, hasElements: true })).toBe('r2v');
+    expect(resolveFlowVideoMode({ hasSourceVideo: false, hasStartFrame: false, hasElements: false })).toBe('t2v');
+  });
+
   it('bloqueia IPs privados e protocolos não HTTP na leitura de links', () => {
     expect(() => assertSafePublicHttpUrl('http://127.0.0.1:8787')).toThrow();
     expect(() => assertSafePublicHttpUrl('http://192.168.1.1/admin')).toThrow();
@@ -59,10 +70,10 @@ describe('descoberta Veo e proteção anti-SSRF', () => {
   });
 });
 
-describe('catálogo local de modelos ADS, Motion, Image Ads e tutoriais', () => {
+describe('catálogo local de modelos ADS, Motion e Image Ads', () => {
   const pubDir = path.resolve(import.meta.dirname, '../../public');
 
-  it('todos os templates virais, motions, image ads e artigos apontam para arquivos válidos', () => {
+  it('todos os templates virais, motions e image ads apontam para arquivos válidos', () => {
     expect(UGC_TEMPLATES.length).toBeGreaterThanOrEqual(6);
     for (const t of UGC_TEMPLATES) {
       expect(fs.existsSync(path.join(pubDir, t.thumbnail.replace(/^\//, ''))), t.thumbnail).toBe(true);
@@ -90,6 +101,5 @@ describe('catálogo local de modelos ADS, Motion, Image Ads e tutoriais', () => 
     expect(STUDIO_CAPTION_STYLES).toHaveLength(12);
     expect(STUDIO_ACCOUNT_STAGES).toHaveLength(11);
     expect(STUDIO_FORMATS).toHaveLength(4);
-    expect(TUTORIAL_ARTICLES.length).toBeGreaterThanOrEqual(14);
   });
 });

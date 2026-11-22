@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import clsx from 'clsx';
-import { BookOpen, Compass, Wand2, X } from 'lucide-react';
+import { Compass, Wand2, X } from 'lucide-react';
 import { UGC_GUIDES } from '@shared/ugcCatalog';
 
 export function highlightGuideTarget(target: string) {
@@ -13,7 +12,7 @@ export function highlightGuideTarget(target: string) {
 }
 
 /**
- * Guia discreto idêntico ao Influai: vidro escuro translúcido, passos finos em linha e botão Mostrar onde.
+ * Guia discreto do FUTURO DIGITAL: vidro escuro, passos em linha e botão Mostrar onde.
  */
 export function StepGuideBanner({
   guideKey,
@@ -57,9 +56,6 @@ export function StepGuideBanner({
           {guide.title}
         </div>
         <div className="flex items-center gap-3.5 text-[11px]">
-          <Link to="/tutorials" className="inline-flex items-center gap-1 font-medium text-accent hover:underline dark:text-[#976dff]">
-            <BookOpen className="size-3.5" /> Tutorial com vídeo
-          </Link>
           <button
             type="button"
             onClick={() => setOpen(false)}

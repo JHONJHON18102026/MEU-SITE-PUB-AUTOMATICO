@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import clsx from 'clsx';
-import { ChevronDown, ChevronRight, Globe2, ImagePlus, Lock, Shuffle, Sparkles, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Globe2, ImagePlus, LoaderCircle, Lock, Minus, Plus, Shuffle, Sparkles, X } from 'lucide-react';
 import { ATTRIBUTE_GROUPS, type AttributeGroup } from '@shared/attributes';
-import { avatarCost } from '@shared/contracts';
+import { MAX_IMAGES_PER_REQUEST, avatarCost } from '@shared/contracts';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
 import { CoinIcon } from '@/components/ui/Brand';
+import { Modal } from '@/components/ui/Modal';
 import { useAvatarStudio } from './avatarStore';
 import { ImagePicker } from './ImagePicker';
-import { MotionPanel } from './MotionPanel';
+import { AvatarTemplatesPanel } from './AvatarTemplatesPanel';
 
 const WORLD_EXAMPLES = [
   'Mora em São Paulo, trabalha de casa, ama café e academia às 6h. Grava vídeos na cozinha clara e no quarto com luz natural.',
@@ -92,15 +92,14 @@ function GroupSection({ group }: { group: AttributeGroup }) {
   );
 }
 
-export function AttributePanel({ onGenerate, busy, forceMotion = false }: { onGenerate: () => void; busy: boolean; forceMotion?: boolean }) {
+export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; busy: boolean }) {
   const st = useAvatarStudio();
-  const motionActive = forceMotion || st.panelTab === 'motion';
   const [worldOpen, setWorldOpen] = useState(false);
   const [worldDraft, setWorldDraft] = useState(st.characterWorld);
   const [extraOpen, setExtraOpen] = useState(Boolean(st.extraDetails));
-  const cost = avatarCost(st.count);
   const activeFacePreview = st.basePhoto?.previewUrl ?? st.baseAvatar?.image_url ?? null;
   const activeFaceLabel = st.basePhoto ? 'Foto base enviada' : st.baseAvatar ? st.baseAvatar.name : null;
+  const cost = avatarCost(st.attributeCount);
 
   return (
     <aside
@@ -112,8 +111,9 @@ export function AttributePanel({ onGenerate, busy, forceMotion = false }: { onGe
         <h1 className="mt-0.5 text-[24px] font-black uppercase leading-none tracking-tight text-fg">
           INFLUENCER IA
         </h1>
-        <div className="mt-2.5 grid grid-cols-2 rounded-xl bg-surface-2/80 p-1 text-xs font-semibold" role="tablist">
+        <div className="mt-2.5 grid grid-cols-2 rounded-xl bg-surface-2/80 p-1 text-xs font-semibold" role="tablist" aria-label="Personalização e templates">
           <button
+            type="button"
             role="tab"
             aria-selected={st.panelTab === 'create'}
             onClick={() => st.set({ panelTab: 'create' })}
@@ -122,22 +122,43 @@ export function AttributePanel({ onGenerate, busy, forceMotion = false }: { onGe
             Criar Influencer
           </button>
           <button
+            type="button"
             role="tab"
-            aria-selected={motionActive}
-            onClick={() => st.set({ panelTab: 'motion' })}
-            className={clsx('rounded-lg py-1.5 transition', st.panelTab === 'motion' ? 'bg-bg text-fg shadow-sm' : 'text-fg-muted hover:text-fg')}
+            aria-selected={st.panelTab === 'templates'}
+            onClick={() => st.set({ panelTab: 'templates' })}
+            className={clsx('rounded-lg py-1.5 transition', st.panelTab === 'templates' ? 'bg-bg text-fg shadow-sm' : 'text-fg-muted hover:text-fg')}
           >
-            Animar avatar
+            Templates IA
+          </button>
+        </div>
+        <div className="mt-1 flex justify-center">
+          <button
+            type="button"
+            role="switch"
+            aria-label="Aplicar opções da lateral ao canvas"
+            aria-checked={st.useInfluencerPreset}
+            title={st.useInfluencerPreset ? 'Personalização da lateral ativada' : 'Personalização da lateral desativada'}
+            onClick={() => st.set({ useInfluencerPreset: !st.useInfluencerPreset })}
+            className={clsx('relative h-[18px] w-8 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg', st.useInfluencerPreset ? 'bg-accent' : 'bg-surface-3')}
+          >
+          <span className={clsx('absolute top-0.5 size-3.5 rounded-full bg-white shadow transition-transform', st.useInfluencerPreset ? 'translate-x-[15px]' : 'translate-x-0.5')} />
           </button>
         </div>
       </div>
 
-      {motionActive ? (
-        <MotionPanel onBack={() => st.set({ panelTab: 'create' })} />
-      ) : (
+      <div className={clsx('min-h-0 flex-1 flex-col', st.panelTab === 'templates' ? 'flex' : 'hidden')}>
+        <AvatarTemplatesPanel />
+      </div>
+      {st.panelTab !== 'templates' && (
         <>
+          {!st.useInfluencerPreset && (
+            <p role="status" className="mx-3 mb-2 rounded-xl border border-border bg-surface-2/60 px-3 py-2 text-[11px] leading-relaxed text-fg-muted">
+              Painel desativado. Ligue a chave acima para editar e validar o influencer.
+            </p>
+          )}
+          <fieldset disabled={!st.useInfluencerPreset} className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col border-0 p-0 disabled:opacity-50">
           <div className="max-h-[50vh] min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2.5 pb-2.5 pt-1.5 thin-scroll lg:max-h-none">
-            {/* Foto ou avatar base sincronizado com o slot AVATAR */}
+            {/* Foto ou influencer base sincronizado com o slot INFLUENCER */}
             {activeFacePreview ? (
               <div className="flex items-center gap-3 rounded-2xl border border-accent/50 bg-accent-soft p-2.5">
                 <img src={activeFacePreview} alt="Rosto base ativo" className="size-12 rounded-xl object-cover object-top" />
@@ -258,22 +279,54 @@ export function AttributePanel({ onGenerate, busy, forceMotion = false }: { onGe
               >
                 <Shuffle className="size-5" />
               </button>
+              <div className="flex h-12 shrink-0 items-center gap-0.5 rounded-xl border border-border bg-surface-2 px-1 text-[11px] font-semibold text-fg-muted" aria-label="Quantidade de gerações do influencer">
+                <button
+                  type="button"
+                  onClick={() => st.set({ attributeCount: Math.max(1, st.attributeCount - 1) })}
+                  disabled={busy || st.attributeCount <= 1}
+                  aria-label="Menos gerações do influencer"
+                  className="rounded-lg p-1.5 hover:bg-surface-3 hover:text-fg disabled:opacity-40"
+                >
+                  <Minus className="size-3.5" />
+                </button>
+                <span className="w-8 text-center tabular-nums" data-testid="attribute-generation-count">{st.attributeCount}/{MAX_IMAGES_PER_REQUEST}</span>
+                <button
+                  type="button"
+                  onClick={() => st.set({ attributeCount: Math.min(MAX_IMAGES_PER_REQUEST, st.attributeCount + 1) })}
+                  disabled={busy || st.attributeCount >= MAX_IMAGES_PER_REQUEST}
+                  aria-label="Mais gerações do influencer"
+                  className="rounded-lg p-1.5 hover:bg-surface-3 hover:text-fg disabled:opacity-40"
+                >
+                  <Plus className="size-3.5" />
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={onGenerate}
                 disabled={busy}
                 data-testid="generate-from-panel"
-                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-brand text-[15px] font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:brightness-110 disabled:opacity-60"
+                aria-label={busy ? 'Gerando influencer' : `Validar influencer, ${cost} créditos`}
+                aria-busy={busy}
+                className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand px-2 text-[12px] font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:brightness-110 disabled:opacity-60"
               >
-                <span>{busy ? 'Gerando…' : 'Gerar'}</span>
-                <Sparkles className="size-4" />
-                <span className="inline-flex items-center gap-1 text-sm font-bold">
-                  <CoinIcon className="size-4" />
-                  {cost}
-                </span>
+                {busy ? (
+                  <>
+                    <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+                    <span role="status">Gerando…</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Validar influencer</span>
+                    <Sparkles className="size-3.5 shrink-0" />
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold">
+                      <CoinIcon className="size-3.5" /> {cost}
+                    </span>
+                  </>
+                )}
               </button>
             </div>
           </div>
+          </fieldset>
         </>
       )}
 

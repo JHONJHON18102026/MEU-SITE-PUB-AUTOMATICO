@@ -9,7 +9,6 @@ import {
   Compass,
   Flame,
   Globe2,
-  History,
   ImageOff,
   Layers,
   Plus,
@@ -22,16 +21,14 @@ import {
 } from 'lucide-react';
 import type { AvatarDTO } from '@shared/contracts';
 import type { AttributeSelection } from '@shared/attributes';
-import type { GenerationDTO } from '@shared/contracts';
 import { useAvatarStudio, type GalleryTab } from './avatarStore';
-import { useCommunityAvatars, useGenerations, useMyAvatars } from './useAvatarData';
+import { useCommunityAvatars, useMyAvatars } from './useAvatarData';
 import { AvatarDetailModal } from './AvatarDetailModal';
 import { SHOWCASE_AVATARS } from './showcaseExamples';
 
 const TABS: { id: GalleryTab; label: string; icon: typeof Compass }[] = [
   { id: 'explore', label: 'Explorar', icon: Compass },
-  { id: 'history', label: 'Histórico', icon: History },
-  { id: 'mine', label: 'Meus avatares', icon: UserRound },
+  { id: 'mine', label: 'Meus Avatares', icon: UserRound },
 ];
 
 function ratioClass(r: string) {
@@ -41,7 +38,6 @@ function ratioClass(r: string) {
 function friendlyGenerationError(error: string) {
   const value = error.trim();
   const normalized = value.toLowerCase();
-
   if (normalized.includes('public_error_user_quota_reached') || normalized.includes('quota exceeded')) {
     return 'A cota desta conta do Flow foi atingida. Aguarde ou tente novamente com outra conta oficial.';
   }
@@ -71,7 +67,6 @@ function friendlyGenerationError(error: string) {
   if (!containsInternalDetails && value.length > 0 && value.length <= 160) return value;
   return 'Não foi possível concluir a geração. Tente novamente; tentativas com falha não devem consumir créditos.';
 }
-
 export function GalleryTabs() {
   const { tab, set } = useAvatarStudio();
   const mine = useMyAvatars();
@@ -97,12 +92,13 @@ export function GalleryTabs() {
   );
 }
 
-export function ExploreSubTabs() {
+export function ExploreSubTabs({ communityOnly = false }: { communityOnly?: boolean }) {
   const { exploreSub, set } = useAvatarStudio();
   const community = useCommunityAvatars();
+  const presetCount = SHOWCASE_AVATARS.length + community.data.length;
   return (
     <div className="inline-flex rounded-full bg-surface-2 p-1 text-xs font-semibold ring-1 ring-inset ring-border" role="tablist" aria-label="Filtro de explorar">
-      <button
+      {!communityOnly && <button
         role="tab"
         aria-selected={exploreSub === 'modelos'}
         onClick={() => set({ exploreSub: 'modelos' })}
@@ -111,18 +107,18 @@ export function ExploreSubTabs() {
           exploreSub === 'modelos' ? 'bg-brand text-white shadow-sm' : 'text-fg-muted hover:text-fg',
         )}
       >
-        <Sparkles className="size-3.5" /> Modelos ({SHOWCASE_AVATARS.length})
-      </button>
+        <Sparkles className="size-3.5" /> Presets de Avatares ({presetCount})
+      </button>}
       <button
         role="tab"
-        aria-selected={exploreSub === 'comunidade'}
+        aria-selected={communityOnly || exploreSub === 'comunidade'}
         onClick={() => set({ exploreSub: 'comunidade' })}
         className={clsx(
           'flex items-center gap-1.5 rounded-full px-4 py-1.5 transition',
-          exploreSub === 'comunidade' ? 'bg-brand text-white shadow-sm' : 'text-fg-muted hover:text-fg',
+          communityOnly || exploreSub === 'comunidade' ? 'bg-brand text-white shadow-sm' : 'text-fg-muted hover:text-fg',
         )}
       >
-        <Globe2 className="size-3.5" /> Comunidade ({community.data.length})
+        <Globe2 className="size-3.5" /> Avatares da Comunidade ({community.data.length})
       </button>
     </div>
   );
@@ -142,7 +138,7 @@ function AvatarGrid({ items, pending, onOpen, emptyText }: { items: AvatarDTO[];
 
   function handleUseBase(a: AvatarDTO) {
     set({ baseAvatar: a, basePhoto: null });
-    toast.success(`Rosto "${a.name}" carregado no slot AVATAR.`);
+    toast.success(`Influencer "${a.name}" carregado.`);
   }
 
   function handleRecreate(a: AvatarDTO) {
@@ -195,13 +191,13 @@ function AvatarGrid({ items, pending, onOpen, emptyText }: { items: AvatarDTO[];
   );
 }
 
-function HistoryList({ items }: { items: GenerationDTO[] }) {
+export function AvatarGenerationHistory({ items }: { items: import('@shared/contracts').GenerationDTO[] }) {
   if (!items.length) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
-        <p className="text-sm font-semibold text-fg">Você ainda não criou nenhum influencer</p>
+        <p className="text-sm font-semibold text-fg">Nenhuma geração no histórico</p>
         <p className="mt-1.5 max-w-md text-xs text-fg-muted">
-          Escolha as opções no painel e clique em Gerar, ou recrie um modelo em Explorar.
+          As gerações feitas na aba Avatares aparecerão aqui.
         </p>
       </div>
     );
@@ -241,7 +237,7 @@ function HistoryList({ items }: { items: GenerationDTO[] }) {
   );
 }
 
-/** Aba "Meus avatares" espelhada da tela Avatar Personalizado do Influai (Foto 3 + steps/2809). */
+/** Aba "Meus Avatares" do estúdio de criação. */
 function MyAvatarsPanel({
   items,
   pending,
@@ -297,10 +293,10 @@ function MyAvatarsPanel({
 
   return (
     <div className="bg-bg">
-      {/* Cabeçalho horizontal idêntico ao Influai */}
+      {/* Cabeçalho horizontal da galeria. */}
       <header className="border-b border-border bg-bg/95">
         <div className="flex h-14 items-center justify-between gap-4 px-6">
-          <h2 className="text-lg font-semibold tracking-tight text-fg">Avatar Personalizado</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-fg">Meus Avatares</h2>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -364,8 +360,8 @@ function MyAvatarsPanel({
           )}
         </div>
 
-        {/* Barra de catálogo Avatar Realista | Avatar Estilizado + Busca + Favoritos */}
-        <div className="space-y-4">
+        {/* O catálogo pertence à aba Explorar; Meus Avatares mostra somente itens do usuário. */}
+        {false && <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="inline-flex rounded-lg bg-surface-2 p-1 text-xs font-medium" role="tablist">
               {(
@@ -486,18 +482,20 @@ function MyAvatarsPanel({
               );
             })}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
 }
 
-export function Gallery({ hideTabs, hideExploreSwitch }: { hideTabs?: boolean; hideExploreSwitch?: boolean }) {
+export function Gallery({ hideTabs, hideExploreSwitch, communityOnly = false }: { hideTabs?: boolean; hideExploreSwitch?: boolean; communityOnly?: boolean }) {
   const { tab, exploreSub, set, pendingCount } = useAvatarStudio();
   const [open, setOpen] = useState<AvatarDTO | null>(null);
   const mine = useMyAvatars();
   const community = useCommunityAvatars();
-  const history = useGenerations();
+  // Presets oficiais + influencers publicados pela comunidade. A consulta de
+  // comunidade já filtra `is_public = true`, portanto privados nunca entram.
+  const presets = [...SHOWCASE_AVATARS, ...community.data];
 
   return (
     <section aria-label="Galeria">
@@ -506,7 +504,7 @@ export function Gallery({ hideTabs, hideExploreSwitch }: { hideTabs?: boolean; h
       <div className={clsx(!hideTabs && 'mt-4')}>
         {tab === 'explore' && (
           <div className="space-y-4">
-            {!hideExploreSwitch && (
+            {!hideExploreSwitch && !communityOnly && (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="inline-flex rounded-full bg-surface-2 p-1 text-xs font-semibold ring-1 ring-inset ring-border" role="tablist" aria-label="Filtro de explorar">
                   <button
@@ -518,7 +516,7 @@ export function Gallery({ hideTabs, hideExploreSwitch }: { hideTabs?: boolean; h
                       exploreSub === 'modelos' ? 'bg-brand text-white shadow-sm' : 'text-fg-muted hover:text-fg',
                     )}
                   >
-                    <Sparkles className="size-3.5" /> Modelos ({SHOWCASE_AVATARS.length})
+                    <Sparkles className="size-3.5" /> Presets de Avatares ({presets.length})
                   </button>
                   <button
                     role="tab"
@@ -529,17 +527,17 @@ export function Gallery({ hideTabs, hideExploreSwitch }: { hideTabs?: boolean; h
                       exploreSub === 'comunidade' ? 'bg-brand text-white shadow-sm' : 'text-fg-muted hover:text-fg',
                     )}
                   >
-                    <Globe2 className="size-3.5" /> Comunidade ({community.data.length})
+                    <Globe2 className="size-3.5" /> Avatares da Comunidade ({community.data.length})
                   </button>
                 </div>
                 <span className="text-xs text-fg-subtle">
-                  {exploreSub === 'modelos' ? 'Clique para abrir, usar como rosto base ou recriar' : 'Criações marcadas como públicas pelos usuários'}
+                  {exploreSub === 'modelos' ? 'Avatares oficiais — clique para usar, recriar ou animar' : 'Somente avatares marcados como públicos pelos usuários'}
                 </span>
               </div>
             )}
 
-            {exploreSub === 'modelos' ? (
-              <AvatarGrid items={SHOWCASE_AVATARS} pending={0} onOpen={setOpen} emptyText="Sem modelos disponíveis." />
+            {!communityOnly && exploreSub === 'modelos' ? (
+              <AvatarGrid items={presets} pending={community.loading ? 1 : 0} onOpen={setOpen} emptyText="Sem presets disponíveis." />
             ) : community.loading ? (
               <div className="skeleton h-64 rounded-2xl" />
             ) : (
@@ -547,17 +545,16 @@ export function Gallery({ hideTabs, hideExploreSwitch }: { hideTabs?: boolean; h
                 items={community.data}
                 pending={0}
                 onOpen={setOpen}
-                emptyText="A Comunidade ainda está vazia. Para aparecer aqui, desmarque 'Criação privada' ao gerar."
+                emptyText="A comunidade ainda está vazia. Para aparecer aqui, publique seu avatar ao gerar."
               />
             )}
           </div>
         )}
-        {tab === 'history' && (history.loading ? <div className="skeleton h-40 rounded-2xl" /> : <HistoryList items={history.data} />)}
         {tab === 'mine' && (
           <MyAvatarsPanel items={mine.data} pending={pendingCount} loading={mine.loading} onOpen={setOpen} />
         )}
-        {(mine.error || community.error || history.error) && (
-          <p className="mt-3 px-6 text-sm text-danger">Erro ao carregar: {mine.error || community.error || history.error}</p>
+        {(mine.error || community.error) && (
+          <p className="mt-3 px-6 text-sm text-danger">Erro ao carregar: {mine.error || community.error}</p>
         )}
       </div>
 

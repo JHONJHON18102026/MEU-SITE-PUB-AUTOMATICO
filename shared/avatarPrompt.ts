@@ -45,10 +45,17 @@ export function buildAvatarPrompt(input: PromptInput): string {
   const framing = FRAMINGS.find((f) => f.id === input.framing)?.prompt ?? FRAMINGS[1].prompt;
   const lines: string[] = [];
 
+  if (input.referenceCount > 0 || input.hasBasePhoto || input.hasProductImage) {
+    lines.push(
+      'SCENE PRIORITY: Follow the user-written scene for requested actions, pose, clothing, location, framing, lighting, and camera. ' +
+        'Use attached images only for the identity or product they represent. Do not copy their pose, clothing, or background when the written scene changes them.',
+    );
+  }
+
   if (input.hasBasePhoto) {
     lines.push(
       'Use the person in the FIRST attached image as the identity reference: keep the same face, ' +
-        'facial structure and recognizable features.',
+        'facial structure and recognizable features, while following the written scene for everything else.',
     );
   }
 
@@ -71,12 +78,13 @@ export function buildAvatarPrompt(input: PromptInput): string {
   }
   if (input.referenceCount > 0) {
     lines.push(
-      `Use the ${input.referenceCount} additional attached reference image(s) only for style, setting and outfit inspiration.`,
+      input.hasBasePhoto
+        ? `Use the ${input.referenceCount} additional reference image(s) for the objects or details they depict; keep the base photo identity and follow the written scene for pose, clothing, framing, and setting.`
+        : `Treat the FIRST attached reference image as the primary source for the subject. If it contains a person, preserve that exact person's recognizable identity, face shape, eyes, skin tone, hair, age, and body; if it contains an object, preserve that exact object's defining design. Do not substitute an unrelated person/object or blend in a new identity. Preserve identity, but follow the written prompt whenever it changes clothing, pose, composition, or background. Use the remaining ${Math.max(0, input.referenceCount - 1)} reference image(s) as secondary visual constraints.`,
     );
   }
 
-  lines.push(`Framing: ${framing}.`);
-  lines.push(QUALITY_SUFFIX);
+  lines.push(`Framing: ${framing}.`);  lines.push(QUALITY_SUFFIX);
   return lines.join('\n');
 }
 
@@ -85,5 +93,13 @@ export function suggestAvatarName(selection: AttributeSelection, index: number):
   const type = selection.characterType?.[0];
   const typeLabel = type ? findOption('characterType', type)?.label : undefined;
   const base = typeLabel && typeLabel !== 'Realista' ? typeLabel : 'Influencer IA';
-  return index > 0 ? `${base} ${index + 1}` : base;
+  // Cards criados com a ficha não podem parecer presets genéricos.
+  // Acrescentamos um traço escolhido pelo usuário ao nome, mantendo o nome
+  // histórico "Influencer IA" quando só o tipo padrão foi selecionado.
+  const identity = selection.ethnicity?.[0] ?? selection.hair?.[0] ?? selection.eyeColor?.[0];
+  const identityLabel = identity
+    ? findOption('ethnicity', identity)?.label ?? findOption('hair', identity)?.label ?? findOption('eyeColor', identity)?.label
+    : undefined;
+  const namedBase = identityLabel ? `${base} · ${identityLabel}` : base;
+  return index > 0 ? `${namedBase} ${index + 1}` : namedBase;
 }

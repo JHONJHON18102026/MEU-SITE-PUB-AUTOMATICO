@@ -8,7 +8,6 @@ import { CoinIcon } from '@/components/ui/Brand';
 import { ImagePicker } from '@/features/avatars/ImagePicker';
 import { MUSIC_MOODS, TALKING_EMOTIONS, UGC_TEMPLATES, type UgcTemplate } from '@shared/ugcCatalog';
 import {
-  VIDEO_ENGINES,
   VOICE_OPTIONS,
   calculateUgcCost,
   type UgcSceneDraft,
@@ -18,7 +17,7 @@ import {
 import { useCreateUgcProject } from '@/features/projects/previewProjectsStore';
 import { useSession } from '@/store/session';
 import { buildAutoAdsDraft } from './ugcCartridges';
-import type { PreparedImage } from '@/lib/image';
+import { type PreparedImage } from '@/lib/image';
 
 const STEPS = [
   '1. Template',
@@ -69,12 +68,18 @@ export function AdsWizardModal({
   const [voiceType, setVoiceType] = useState<VoiceOptionId>('default');
   const [musicMood, setMusicMood] = useState<string>(MUSIC_MOODS[1]);
   const [engine, setEngine] = useState<VideoEngineId>('veo-3.1-fast');
+  const [sceneDuration, setSceneDuration] = useState(8);
   const [resolution, setResolution] = useState<'720p' | '1080p'>('1080p');
 
   useEffect(() => {
     if (!open) return;
     setStep(initialTemplate ? 1 : 0);
     setSelectedTpl(initialTemplate);
+    // Cada abertura começa sem referências. A miniatura do template é apenas
+    // uma prévia do catálogo e nunca deve ser enviada ao motor como frame.
+    setStartFrame(null);
+    setEndFrame(null);
+    setElementImages([]);
     if (initialTemplate) {
       setOrientation(initialTemplate.orientation);
       const draft = buildAutoAdsDraft(initialTemplate, productName);
@@ -106,7 +111,8 @@ export function AdsWizardModal({
     );
   }
 
-  const cost = calculateUgcCost({ engine, sceneCount: scenes.length, voiceType });
+  const lowerPriority = unlimited && engine !== 'omni-flash';
+  const cost = lowerPriority ? 0 : calculateUgcCost({ engine, sceneCount: scenes.length, voiceType, durationSeconds: sceneDuration });
 
   async function submit() {
     const proj = await createProject({
@@ -127,10 +133,13 @@ export function AdsWizardModal({
       referenceImages: referenceMode === 'elements'
         ? [ ...(startFrame ? [startFrame.data] : []), ...elementImages.map((image) => image.data) ].slice(0, 3)
         : undefined,
+      referenceImageNames: referenceMode === 'elements'
+        ? [ ...(startFrame ? [startFrame.name] : []), ...elementImages.map((image) => image.name) ].slice(0, 3)
+        : [startFrame?.name, endFrame?.name].filter((name): name is string => Boolean(name)),
       scenes: scenes.map((s) => ({
         text: s.text.trim() || `Veja como ${productName || 'este produto'} funciona na prática.`,
         action: s.action || actionText,
-        durationSeconds: 8,
+        durationSeconds: lowerPriority ? 8 : sceneDuration,
       })),
     });
     if (proj) {
@@ -144,22 +153,19 @@ export function AdsWizardModal({
   const footer = (
     <div className="flex w-full flex-wrap items-center justify-between gap-2">
       <div className="flex items-center gap-2 text-xs text-fg-muted">
-        {unlimited ? (
-          <span className="rounded-lg border border-accent/40 bg-accent-soft px-2 py-1 text-xs font-semibold text-fg" title="Plano Ilimitado usa lowerpriority e fixa vídeos em 8 segundos">
-            lowerpriority · 8s · ilimitado
-          </span>
-        ) : (
-          <select
-            value={engine}
-            onChange={(e) => setEngine(e.target.value as VideoEngineId)}
-            aria-label="Motor de vídeo"
-            className="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs font-semibold text-fg"
-          >
-            {VIDEO_ENGINES.map((e) => (
-              <option key={e.id} value={e.id}>{e.label} · {e.creditsPerScene}/cena</option>
-            ))}
-          </select>
-        )}
+        <select
+          value={engine}
+          onChange={(e) => {
+            const next = e.target.value as VideoEngineId;
+            setEngine(next);
+            setSceneDuration(next === 'omni-flash' ? 10 : 8);
+          }}
+          aria-label="Motor de vídeo"
+          className="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs font-semibold text-fg"
+        >
+          {unlimited ? <option value="veo-3.1-fast">lowerpriority · conta 2 · 0 créditos</option> : <option value="veo-3.1-fast">Veo 3.1 Fast · 10/cena</option>}
+          <option value="omni-flash">Omni Flash 1.2 · conta 1 · 30/60</option>
+        </select>
         <select
           value={resolution}
           onChange={(e) => setResolution(e.target.value as '720p' | '1080p')}
@@ -177,8 +183,8 @@ export function AdsWizardModal({
         {step < STEPS.length - 1 ? (
           <Button variant="primary" disabled={step === 1 && !referencesReady} onClick={() => setStep((s) => s + 1)}>Próximo</Button>
         ) : (
-          <Button variant="brand" onClick={() => void submit()} loading={busy} data-testid="wizard-generate-video" aria-label={unlimited ? 'Gerar vídeo no plano ilimitado' : `Gerar vídeo por ${cost} créditos`} title={unlimited ? 'Gerar vídeo · plano ilimitado · lowerpriority · 8s' : `Gerar vídeo · ${cost} créditos`}>
-            <Film className="size-4" /> {unlimited ? 'Gerar Vídeo · Ilimitado' : <>Gerar Vídeo · <CoinIcon className="size-3.5" /> {cost}</>}
+          <Button variant="brand" onClick={() => void submit()} loading={busy} data-testid="wizard-generate-video" aria-label={lowerPriority ? 'Gerar vídeo no plano ilimitado' : `Gerar vídeo por ${cost} créditos`} title={lowerPriority ? 'Gerar vídeo · plano ilimitado · lowerpriority · 8s' : `Gerar vídeo · ${cost} créditos`}>
+            <Film className="size-4" /> {lowerPriority ? 'Gerar Vídeo · Ilimitado' : <>Gerar Vídeo · <CoinIcon className="size-3.5" /> {cost}</>}
           </Button>
         )}
       </div>
@@ -326,6 +332,11 @@ export function AdsWizardModal({
             </button>
           </div>
 
+          {selectedTpl ? (
+            <p className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-xs text-fg-muted">
+              A imagem do template é somente uma prévia. Apenas as imagens que você anexar abaixo serão enviadas ao vídeo.
+            </p>
+          ) : null}
           {referenceMode === 'frames' ? (
             <div className="grid gap-4 md:grid-cols-2">
               <ImagePicker
@@ -401,11 +412,13 @@ export function AdsWizardModal({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold">Quantidade de cenas ({unlimited ? '8s cada' : 'até 10s cada'})</h3>
+              <h3 className="text-sm font-bold">Quantidade de cenas ({lowerPriority ? '8s cada' : `${sceneDuration}s cada`})</h3>
               <p className="text-xs text-fg-muted">
-                {unlimited
+                {lowerPriority
                   ? 'Plano Ilimitado: motor lowerpriority, vídeos fixos em 8s e sem desconto de créditos.'
-                  : `Omni Flash 1.2: ${VIDEO_ENGINES.find((e) => e.id === engine)?.creditsPerScene} créditos por cena.`}
+                  : engine === 'omni-flash'
+                    ? `Omni Flash 1.2 · conta 1: ${sceneDuration > 10 ? 60 : 30} créditos por cena.`
+                    : 'Veo 3.1 Fast · até 10 segundos por cena.'}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -414,6 +427,23 @@ export function AdsWizardModal({
               <Button variant="secondary" size="sm" onClick={() => updateSceneCount(scenes.length + 1)}>+</Button>
             </div>
           </div>
+          {!lowerPriority && (
+            <label className="flex items-center gap-2 text-xs font-semibold text-fg-muted">
+              Duração do Omni Flash
+              <select
+                value={sceneDuration}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setSceneDuration(next);
+                  setScenes((curr) => curr.map((item) => ({ ...item, estimatedSeconds: next })));
+                }}
+                className="rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-xs font-semibold text-fg"
+                aria-label="Duração de cada cena"
+              >
+                {engine === 'omni-flash' ? <><option value={10}>10 segundos · 30 créditos</option><option value={15}>15 segundos · 60 créditos</option></> : <option value={8}>8 segundos</option>}
+              </select>
+            </label>
+          )}
           <div className="space-y-2">
             {scenes.map((s, i) => (
               <div key={i} className="rounded-xl border border-border bg-surface-2 p-3">
@@ -517,10 +547,10 @@ export function AdsWizardModal({
             <div><span className="text-fg-subtle">Produto/Projeto:</span> <strong>{productName || selectedTpl?.title || 'Anúncio ADS'}</strong></div>
             <div><span className="text-fg-subtle">Modelo:</span> <strong>{creativeAi ? 'IA Criativa do zero' : selectedTpl?.title ?? 'Personalizado'}</strong></div>
             <div><span className="text-fg-subtle">Referências:</span> <strong>{referenceMode === 'frames' ? `Frames${endFrame ? ' inicial + final' : ' inicial'}` : `${elementImages.length} elemento(s)`}</strong></div>
-            <div><span className="text-fg-subtle">Formato / Motor:</span> <strong>{orientation} · {engine} ({resolution})</strong></div>
-            <div><span className="text-fg-subtle">Cenas / Duração:</span> <strong>{scenes.length} cena(s) (~{scenes.length * 8}s)</strong></div>
+            <div><span className="text-fg-subtle">Formato / Motor:</span> <strong>{orientation} · {lowerPriority ? 'veo-3.1-lowerpriority' : engine === 'omni-flash' ? 'omni-flash-1.2' : engine} ({resolution})</strong></div>
+            <div><span className="text-fg-subtle">Cenas / Duração:</span> <strong>{scenes.length} cena(s) (~{scenes.length * (lowerPriority ? 8 : sceneDuration)}s)</strong></div>
             <div><span className="text-fg-subtle">Voz / Música:</span> <strong>{voiceType} · {musicMood}</strong></div>
-            <div><span className="text-fg-subtle">Custo total:</span> <strong className="text-accent">{cost} créditos</strong></div>
+            <div><span className="text-fg-subtle">Custo total:</span> <strong className="text-accent">{lowerPriority ? '0 créditos (ilimitado)' : `${cost} créditos`}</strong></div>
           </div>
         </div>
       )}
