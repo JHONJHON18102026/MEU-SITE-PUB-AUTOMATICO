@@ -12,6 +12,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import sharp from 'sharp';
 import { getClient, mapGeminiError, pickModel, resolveModels } from './gemini';
 import { env } from './env';
 import { rustChatCompletion, rustEnabled } from './rustMotor';
@@ -23,6 +24,79 @@ const execFileAsync = promisify(execFile);
 
 const VEO_FAST_PREFS = [/veo-3\.1.*fast/, /veo-3\.0.*fast/, /veo.*fast/, /veo-3/, /veo/];
 const VEO_PRO_PREFS = [/veo-3\.1(?!.*fast)/, /veo-3\.0(?!.*fast)/, /veo-3/, /veo/];
+
+export async function finishOnReferenceFrame(
+  video: Buffer,
+  frameBase64: string,
+  aspectRatio: '9:16' | '16:9',
+  durationSeconds: number,
+): Promise<Buffer> {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fd-end-frame-'));
+  const { width, height } = aspectRatio === '9:16' ? { width: 720, height: 1280 } : { width: 1280, height: 720 };
+  const duration = Math.max(4, Math.min(10, durationSeconds));
+  const transition = 0.3;
+  // Mantém o vídeo em movimento até o fim. A fusão ocupa apenas os últimos
+  // quadros e termina no último frame de uma linha do tempo a 30 fps.
+  const offset = Math.max(0, duration - transition - (1 / 30));
+  try {
+    const input = path.join(tmp, 'input.mp4');
+    const endFrame = path.join(tmp, 'end.jpg');
+    const output = path.join(tmp, 'output.mp4');
+    await fs.writeFile(input, video);
+    await fs.writeFile(
+      endFrame,
+      await sharp(Buffer.from(frameBase64, 'base64'))
+        .rotate()
+        .resize({ width, height, fit: 'cover', position: 'centre' })
+        .jpeg({ quality: 94 })
+        .toBuffer(),
+    );
+    const filter = [
+      `[0:v]fps=30,scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p,settb=AVTB,setpts=PTS-STARTPTS[v0]`,
+      `[1:v]fps=30,scale=${width}:${height},format=yuv420p,settb=AVTB,setpts=PTS-STARTPTS[v1]`,
+      `[v0][v1]xfade=transition=fade:duration=${transition}:offset=${offset},format=yuv420p[v]`,
+    ].join(';');
+    await execFileAsync('ffmpeg', [
+      '-y', '-i', input, '-loop', '1', '-t', String(duration), '-i', endFrame,
+      '-filter_complex', filter,
+      '-map', '[v]', '-map', '0:a?', '-t', String(duration),
+      '-c:v', 'libx264', '-preset', 'fast', '-c:a', 'aac', '-movflags', '+faststart', output,
+    ]);
+    return await fs.readFile(output);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+export async function joinBidirectionalReferenceClips(
+  startClip: Buffer,
+  endClip: Buffer,
+  aspectRatio: '9:16' | '16:9',
+): Promise<Buffer> {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fd-bidirectional-'));
+  const { width, height } = aspectRatio === '9:16' ? { width: 720, height: 1280 } : { width: 1280, height: 720 };
+  try {
+    const startPath = path.join(tmp, 'start.mp4');
+    const endPath = path.join(tmp, 'end.mp4');
+    const output = path.join(tmp, 'output.mp4');
+    await Promise.all([fs.writeFile(startPath, startClip), fs.writeFile(endPath, endClip)]);
+    const normalize = `fps=30,scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p,settb=AVTB`;
+    const filter = [
+      `[0:v]${normalize},trim=duration=6,setpts=(PTS-STARTPTS)*0.7[v0]`,
+      `[1:v]${normalize},trim=duration=6,reverse,setpts=(PTS-STARTPTS)*0.7[v1]`,
+      '[v0][v1]xfade=transition=fade:duration=0.4:offset=3.8,format=yuv420p[v]',
+    ].join(';');
+    await execFileAsync('ffmpeg', [
+      '-y', '-i', startPath, '-i', endPath,
+      '-filter_complex', filter,
+      '-map', '[v]', '-an', '-t', '8',
+      '-c:v', 'libx264', '-preset', 'fast', '-movflags', '+faststart', output,
+    ]);
+    return await fs.readFile(output);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
 
 export function pickVeoModel(available: string[], engine: VideoEngineId = 'veo-3.1-fast'): string | undefined {
   return pickModel(available, engine === 'omni-flash' ? VEO_PRO_PREFS : VEO_FAST_PREFS);
@@ -338,20 +412,58 @@ export async function generateVeoSceneBuffer(opts: {
   aspectRatio: '9:16' | '16:9';
   imageBytesBase64?: string;
   imageMimeType?: string;
+  endImageBytesBase64?: string;
+  endImageMimeType?: string;
+  referenceImages?: Array<{ data: string; mimeType: string }>;
   durationSeconds?: number;
   modelOverride?: string;
 }): Promise<Buffer> {
   if (rustEnabled()) {
+    const hasElements = Boolean(opts.referenceImages?.length);
+    const hasStartFrame = Boolean(opts.imageBytesBase64);
+    const localEndFrameFallback = Boolean(opts.endImageBytesBase64 && opts.modelOverride === 'veo');
     const base: Record<string, unknown> = {
       model: opts.modelOverride ?? env.rustVideoModel,
       prompt: opts.prompt,
-      mode: opts.imageBytesBase64 ? 'i2v' : 't2v',
-      seconds: opts.durationSeconds ?? 8,
+      mode: hasElements ? 'r2v' : hasStartFrame ? 'i2v' : 't2v',
+      seconds: localEndFrameFallback ? 6 : (opts.durationSeconds ?? 8),
       aspect_ratio: opts.aspectRatio,
     };
-    if (opts.imageBytesBase64) {
-      base.reference_images = [{ mime_type: opts.imageMimeType ?? 'image/jpeg', data: opts.imageBytesBase64 }];
-    }
+    const needsImages = hasElements || hasStartFrame || Boolean(opts.endImageBytesBase64);
+    const referenceDir = needsImages ? await fs.mkdtemp(path.join(os.tmpdir(), 'fd-reference-')) : null;
+    try {
+      if (referenceDir && opts.imageBytesBase64) {
+        const referencePath = path.join(referenceDir, 'start.jpg');
+        const frameSize = opts.aspectRatio === '9:16' ? { width: 720, height: 1280 } : { width: 1280, height: 720 };
+        const frame = await sharp(Buffer.from(opts.imageBytesBase64, 'base64'))
+          .rotate()
+          .resize({ ...frameSize, fit: 'cover', position: 'centre' })
+          .jpeg({ quality: 94 })
+          .toBuffer();
+        await fs.writeFile(referencePath, frame);
+        base.start_image = referencePath;
+      }
+      if (referenceDir && opts.endImageBytesBase64 && !localEndFrameFallback) {
+        const referencePath = path.join(referenceDir, 'end.jpg');
+        const frameSize = opts.aspectRatio === '9:16' ? { width: 720, height: 1280 } : { width: 1280, height: 720 };
+        const frame = await sharp(Buffer.from(opts.endImageBytesBase64, 'base64'))
+          .rotate()
+          .resize({ ...frameSize, fit: 'cover', position: 'centre' })
+          .jpeg({ quality: 94 })
+          .toBuffer();
+        await fs.writeFile(referencePath, frame);
+        base.end_image = referencePath;
+      }
+      if (referenceDir && opts.referenceImages?.length) {
+        const paths: string[] = [];
+        for (const [index, image] of opts.referenceImages.entries()) {
+          const ext = image.mimeType === 'image/png' ? 'png' : image.mimeType === 'image/webp' ? 'webp' : 'jpg';
+          const referencePath = path.join(referenceDir, `element-${index + 1}.${ext}`);
+          await fs.writeFile(referencePath, Buffer.from(image.data, 'base64'));
+          paths.push(referencePath);
+        }
+        base.reference_images = paths;
+      }
     const res = await fetch(`${env.rustMotorUrl}/v1/videos/generations`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(base),
       signal: AbortSignal.timeout(10 * 60_000),
@@ -360,9 +472,30 @@ export async function generateVeoSceneBuffer(opts: {
     if (!res.ok) throw new ApiError('GENERATION_FAILED', body?.error?.message || `Motor Rust respondeu HTTP ${res.status}.`);
     const savedPath = body?.saved_path;
     if (!savedPath) throw new ApiError('GENERATION_FAILED', 'Motor Rust não devolveu o caminho do vídeo.');
-    try { return await readFile(savedPath); } catch {
+    try {
+      const generated = await readFile(savedPath);
+      if (localEndFrameFallback && opts.endImageBytesBase64) {
+        const endGenerated = await generateVeoSceneBuffer({
+          prompt: `${opts.prompt}\nGenerate one continuous shot departing naturally from this exact final composition. Preserve the same identity, wardrobe, environment and visual details. No cuts, no still frame and no collage.`,
+          engine: opts.engine,
+          aspectRatio: opts.aspectRatio,
+          imageBytesBase64: opts.endImageBytesBase64,
+          imageMimeType: opts.endImageMimeType,
+          durationSeconds: 6,
+          modelOverride: 'veo',
+        });
+        return await joinBidirectionalReferenceClips(generated, endGenerated, opts.aspectRatio);
+      }
+      return generated;
+    } catch {
       throw new ApiError('GENERATION_FAILED', `O vídeo foi gerado, mas não pôde ser lido no servidor: ${savedPath}`);
     }
+    } finally {
+      if (referenceDir) await fs.rm(referenceDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+  if (opts.endImageBytesBase64 || opts.referenceImages?.length) {
+    throw new ApiError('GENERATION_FAILED', 'Frames inicial/final e Elementos exigem o motor Flow local ativo.');
   }
   const ai = getClient();
   const model = await resolveVeoModel(opts.engine);
@@ -413,7 +546,41 @@ export async function generateVeoSceneBuffer(opts: {
   throw new ApiError('GENERATION_FAILED', 'O Veo concluiu sem retornar bytes de vídeo.');
 }
 
-/** Concatena múltiplas cenas MP4 via FFmpeg local; se 1 cena ou sem FFmpeg, retorna a primeira cena. */
+/** Completa até oito segundos quando o gerador entrega poucos quadros a menos. */
+export async function normalizeEightSecondVideo(buffer: Buffer): Promise<Buffer> {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fd-duration-'));
+  try {
+    const input = path.join(tmp, 'input.mp4');
+    const output = path.join(tmp, 'output.mp4');
+    await fs.writeFile(input, buffer);
+    const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', input]);
+    const duration = Number(stdout.trim());
+    if (!Number.isFinite(duration) || duration < 7.5 || duration > 8.5) throw new Error(`Duração inesperada: ${stdout.trim()}s`);
+    if (duration >= 8) return buffer;
+    await execFileAsync('ffmpeg', ['-y', '-i', input, '-vf', 'tpad=stop_mode=clone:stop_duration=0.5', '-af', 'apad', '-t', '8', '-c:v', 'libx264', '-preset', 'fast', '-c:a', 'aac', '-movflags', '+faststart', output]);
+    return await fs.readFile(output);
+  } catch (error) {
+    throw new Error(`Não foi possível ajustar a duração do vídeo: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/** Extrai uma capa real do começo do vídeo concluído. */
+export async function extractVideoThumbnail(buffer: Buffer): Promise<Buffer> {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fd-thumbnail-'));
+  try {
+    const input = path.join(tmp, 'input.mp4');
+    const output = path.join(tmp, 'thumbnail.jpg');
+    await fs.writeFile(input, buffer);
+    await execFileAsync('ffmpeg', ['-y', '-ss', '0.15', '-i', input, '-frames:v', '1', '-q:v', '2', output]);
+    return await fs.readFile(output);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/** Concatena as cenas; falhas não podem ser apresentadas como vídeo completo. */
 export async function stitchVideoBuffers(buffers: Buffer[]): Promise<Buffer> {
   if (buffers.length === 1) return buffers[0]!;
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fd-ugc-'));
@@ -429,8 +596,8 @@ export async function stitchVideoBuffers(buffers: Buffer[]): Promise<Buffer> {
     const outFile = path.join(tmp, 'final.mp4');
     await execFileAsync('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', outFile]);
     return await fs.readFile(outFile);
-  } catch {
-    return buffers[0]!;
+  } catch (error) {
+    throw new Error(`Não foi possível juntar as cenas: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
   }

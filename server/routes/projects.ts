@@ -16,11 +16,13 @@ projectRoutes.get('/', async (c) => {
   const userId = c.get('userId');
   const page = Math.max(1, Number(c.req.query('page') ?? '1') || 1);
   const limit = Math.min(48, Math.max(1, Number(c.req.query('limit') ?? '24') || 24));
+  const origin = c.req.query('origin') === 'avatar' ? 'avatar' : 'projects';
   const admin = getAdmin();
   const { data, error } = await admin
     .from('video_projects')
     .select('*')
     .eq('user_id', userId)
+    .eq('origin', origin)
     .order('created_at', { ascending: false })
     .range((page - 1) * limit, page * limit);
   if (error) throw new ApiError('INTERNAL', error.message);

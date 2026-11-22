@@ -12,7 +12,7 @@
  */
 import { GoogleGenAI, type Part } from '@google/genai';
 import { env } from './env';
-import { rustEnabled, rustGenerateImage } from './rustMotor';
+import { rustChatCompletion, rustEnabled, rustGenerateImage } from './rustMotor';
 import { ApiError } from './errors';
 import type { AspectRatio, EngineId, ImageInput } from '../shared/contracts';
 
@@ -116,7 +116,12 @@ export async function generateImage(opts: {
   modelOverride?: string;
 }): Promise<ImageResult> {
   if (rustEnabled()) {
-    return rustGenerateImage({ prompt: opts.prompt, aspectRatio: opts.aspectRatio, model: opts.modelOverride ?? (opts.engine === 'nano-banana-pro' ? 'google_flow' : undefined) });
+    return rustGenerateImage({
+      prompt: opts.prompt,
+      aspectRatio: opts.aspectRatio,
+      model: opts.modelOverride ?? (opts.engine === 'nano-banana-pro' ? 'google_flow' : undefined),
+      images: opts.images,
+    });
   }
   const ai = getClient();
   const models = await resolveModels();
@@ -155,18 +160,28 @@ export async function generateImage(opts: {
 
 // ---------------------------------------------------------------- texto
 const ENHANCE_INSTRUCTIONS =
-  'Você é um diretor de arte de anúncios UGC. Reescreva a ideia do usuário como uma descrição de cena ' +
-  'curta e visual (1 a 3 frases), em português do Brasil, com ambiente, luz, ação e enquadramento. ' +
-  'Não invente marcas. Não use aspas. Responda só com a descrição.';
+  'Reescreva a ideia como uma cena de anúncio UGC, visual e concisa, em português do Brasil. ' +
+  'Inclua ação, ambiente e luz sem inventar marcas. Responda em até 2 frases, sem introdução nem aspas.';
 
 export async function enhancePrompt(idea: string): Promise<string> {
+  if (rustEnabled()) {
+    const out = await rustChatCompletion({
+      prompt: idea,
+      system: ENHANCE_INSTRUCTIONS,
+      model: 'gemini-4-argon',
+      temperature: 0.2,
+      maxTokens: 120,
+    });
+    if (!out.trim()) throw new ApiError('GENERATION_FAILED', 'O motor oficial devolveu uma resposta vazia.');
+    return out.trim();
+  }
   const ai = getClient();
   const { text: model } = await resolveModels();
   try {
     const response = await ai.models.generateContent({
       model,
       contents: [{ role: 'user', parts: [{ text: idea }] }],
-      config: { systemInstruction: ENHANCE_INSTRUCTIONS, temperature: 0.8, maxOutputTokens: 300 },
+      config: { systemInstruction: ENHANCE_INSTRUCTIONS, temperature: 0.2, maxOutputTokens: 120 },
     });
     const out = (response.text ?? '').trim();
     if (!out) throw new Error('resposta vazia');

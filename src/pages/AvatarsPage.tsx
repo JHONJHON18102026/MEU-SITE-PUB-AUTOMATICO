@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { AttributePanel } from '@/features/avatars/AttributePanel';
 import { PromptComposer } from '@/features/avatars/PromptComposer';
 import { ExploreSubTabs, Gallery, GalleryTabs } from '@/features/avatars/Gallery';
+import { GeneratedMediaTabs } from '@/features/avatars/GeneratedMediaTabs';
 import { useAvatarStudio } from '@/features/avatars/avatarStore';
 import { useGenerateAvatar } from '@/features/avatars/useGenerateAvatar';
 import { SHOWCASE_AVATARS } from '@/features/avatars/showcaseExamples';
@@ -27,6 +28,10 @@ export function AvatarsPage() {
     const modelo = params.get('modelo');
     const patch: Parameters<typeof setStudio>[0] = {};
     if (t === 'mine' || t === 'history' || t === 'explore') patch.tab = t;
+    if (params.get('media')) {
+      patch.tab = 'explore';
+      patch.panelTab = 'create';
+    }
     if (sub === 'modelos' || sub === 'comunidade') patch.exploreSub = sub;
     if (panel === 'motion' || panel === 'create') patch.panelTab = panel;
     if (modelo) {
@@ -106,6 +111,7 @@ export function AvatarsPage() {
                   <Lock className="size-3" />
                   <span>Criação privada por padrão. Marque “Mostrar na Comunidade” no painel ao lado se quiser compartilhar.</span>
                 </div>
+              <GeneratedMediaTabs />
               </div>
 
               <div className="mt-3">

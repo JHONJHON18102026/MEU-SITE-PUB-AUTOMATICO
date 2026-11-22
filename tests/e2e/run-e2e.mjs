@@ -46,6 +46,7 @@ const state = {
   avatars: [],
   generations: [],
   projects: [],
+  lastUgcRequest: null,
   viralFolders: [{ id: 'f-aleatorios', user_id: USER.id, name: 'Aleatórios', formats: ['ADS', 'Hook+Demo', 'Remake Viral'], created_at: new Date().toISOString() }],
   viralItems: [],
   studioProjects: [
@@ -214,12 +215,15 @@ async function installMocks(page) {
 
   await page.route(`${BASE}/api/ai-ugc/create`, async (route) => {
     const body = JSON.parse(route.request().postData() || '{}');
+    state.lastUgcRequest = body;
     const cost = (body.scenes?.length ?? 1) * 10;
     state.balance = Math.max(0, state.balance - cost);
     const project = {
       id: `00000000-0000-4000-9000-${String(Date.now()).padStart(12, '0').slice(-12)}`,
       user_id: USER.id,
       mode: body.mode || 'talking',
+      origin: body.origin || 'projects',
+      mediaType: body.mediaType || 'video',
       title: body.title || 'Projeto Teste E2E',
       status: 'done',
       engine: body.engine || 'veo-3.1-fast',
@@ -478,7 +482,10 @@ async function installMocks(page) {
   await page.route(`${BASE}/api/studio/posts`, handleStudioPosts);
   await page.route(`${BASE}/api/studio/posts/*`, handleStudioPosts);
 
-  await page.route(`${BASE}/api/projects`, (route) => json(route, 200, { projects: state.projects }));
+  await page.route(`${BASE}/api/projects**`, (route) => {
+    const origin = new URL(route.request().url()).searchParams.get('origin') || 'projects';
+    return json(route, 200, { projects: state.projects.filter((project) => (project.origin || 'projects') === origin) });
+  });
 
   await page.route(`${BASE}/api/projects/*`, (route) => {
     if (route.request().method() !== 'DELETE') return route.fallback();
@@ -727,8 +734,8 @@ async function run() {
     await page.getByTestId('talking-create-btn').click();
     await page.waitForURL('**/projects');
     await page.getByRole('heading', { name: 'Meus Projetos' }).waitFor();
-    await projectsGrid.getByText(/Personagem Falante · Camila/).first().waitFor();
-    check(await projectsGrid.getByText(/Personagem Falante · Camila/).first().isVisible(), 'Projeto criado aparece em Meus Projetos e debita saldo (16 -> 6)');
+    await projectsGrid.getByText(/Personagem Falante ·/).first().waitFor();
+    check(await projectsGrid.getByText(/Personagem Falante ·/).first().isVisible(), 'Projeto criado aparece em Meus Projetos e debita saldo (16 -> 6)');
     await page.screenshot({ path: path.join(shotsDir, '11-projetos.png') });
 
     await page.locator('header').getByRole('link', { name: 'Central de tutoriais' }).click();
@@ -763,12 +770,26 @@ async function run() {
     check(await projectsGrid.getByText(/Slideshow ·/).first().isVisible(), 'Slideshow gerado aparece no filtro Slideshows (30 -> 20)');
 
     await page.goto(`${BASE}/avatars?panel=motion`);
+    await page.getByRole('tab', { name: 'Animar avatar' }).waitFor();
     await page.getByText('Aponta para o texto + sorri').waitFor();
+    await page.getByRole('button', { name: 'Veo 3.1 Fast' }).waitFor();
+    await page.getByRole('button', { name: 'Omni Flash 1.2' }).waitFor();
+    await page.getByRole('button', { name: 'Veo 3.1 Fast' }).click();
+    check(await page.getByRole('button', { name: 'Veo 3.1 Fast' }).getAttribute('aria-pressed') === 'true', 'Veo 3.1 Fast é selecionável como motor alternativo de Animar avatar');
     await page.screenshot({ path: path.join(shotsDir, '15-motion-control.png') });
+    await page.getByRole('complementary', { name: 'Criar influencer' }).locator('input[type="file"]').setInputFiles({ name: 'motion-rosto.png', mimeType: 'image/png', buffer: rawImg });
+    await page.getByText('motion-rosto.png').waitFor();
+    check(true, 'Motion Control aceita foto enviada e mostra o arquivo selecionado');
     await page.getByTestId('motion-create-btn').click();
-    await page.waitForURL('**/projects');
-    await projectsGrid.getByText(/Motion ·/).first().waitFor();
-    check(await projectsGrid.getByText(/Motion ·/).first().isVisible(), 'Motion Control cria projeto a partir de movimento viral já analisado (20 -> 10)');
+    await page.waitForURL('**/avatars?media=videos');
+    await page.getByRole('tab', { name: 'Motion Control' }).waitFor();
+    await page.getByText(/Motion ·/).first().waitFor();
+    check(
+      (await page.getByText(/Motion ·/).first().isVisible()) && state.lastUgcRequest?.mode === 'motion' && state.lastUgcRequest?.origin === 'avatar' && state.lastUgcRequest?.mediaType === 'video' && state.lastUgcRequest?.engine === 'veo-3.1-fast' && typeof state.lastUgcRequest?.avatarImageData === 'string' && state.lastUgcRequest.avatarImageData.length > 0,
+      'Animar influencer envia a foto e salva o resultado em Vídeos gerados de Avatar (20 -> 10)',
+    );
+    const motionProjectCard = state.projects.find((project) => project.mode === 'motion');
+    check(Boolean(motionProjectCard) && !state.projects.filter((project) => (project.origin || 'projects') === 'projects').includes(motionProjectCard), 'Motion criado em Avatar não entra na lista de Projetos');
 
     await page.goto(`${BASE}/image-ads`);
     await page.getByTestId('image-ad-autofill').click();

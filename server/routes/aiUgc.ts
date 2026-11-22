@@ -15,12 +15,15 @@ import { generateImage } from '../gemini';
 import { getAdmin } from '../supabaseAdmin';
 import { applyWatermark } from '../watermark';
 import { signedMediaUrl, VIDEO_BUCKET } from '../storage';
+import { toImageInput } from '../imageInput';
 import {
   extractProductFromUrl,
   generateHooksWithGemini,
   generateSlidesWithGemini,
   generateUgcScripts,
   generateVeoSceneBuffer,
+  extractVideoThumbnail,
+  normalizeEightSecondVideo,
   stitchVideoBuffers,
 } from '../veo';
 import {
@@ -43,16 +46,6 @@ import type { AspectRatio, EngineId, ImageInput } from '../../shared/contracts';
 import type { AppEnv } from '../app';
 
 export const aiUgcRoutes = new Hono<AppEnv>();
-
-function toImageInput(raw?: string): ImageInput | null {
-  if (!raw?.trim()) return null;
-  const match = raw.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
-  if (match && match[1] && match[2]) {
-    return { mimeType: match[1] as ImageInput['mimeType'], data: match[2] };
-  }
-  if (raw.startsWith('/')) return null;
-  return { mimeType: 'image/jpeg', data: raw };
-}
 
 function buildScenePrompt(req: CreateUgcVideoRequest, scene: { text: string; action?: string }, idx: number): string {
   const ratio = req.aspectRatio === '16:9' ? '16:9 horizontal commercial' : '9:16 vertical UGC smartphone';
@@ -112,7 +105,10 @@ async function processVideoProject(projectId: string, userId: string, generation
   const admin = getAdmin();
   const unlimited = await isUnlimitedUser(userId);
   const aspectForVeo: '9:16' | '16:9' = req.aspectRatio === '16:9' || req.aspectRatio === '4:3' ? '16:9' : '9:16';
-  const imgInput = toImageInput(req.avatarImageData) ?? toImageInput(req.productImageData);
+  const legacyImage = toImageInput(req.avatarImageData) ?? toImageInput(req.productImageData);
+  const startFrame = toImageInput(req.startFrameImageData) ?? (req.referenceMode ? null : legacyImage);
+  const endFrame = toImageInput(req.endFrameImageData);
+  const elementImages = (req.referenceImages ?? []).map((raw) => toImageInput(raw)).filter((image): image is ImageInput => Boolean(image));
   const costPerScene = Math.round(totalCost / req.scenes.length);
 
   const sceneOutputs: ProjectSceneDTO[] = req.scenes.map((s, index) => ({
@@ -130,18 +126,35 @@ async function processVideoProject(projectId: string, userId: string, generation
   for (let i = 0; i < req.scenes.length; i++) {
     const s = req.scenes[i]!;
     try {
-      const buf = await generateVeoSceneBuffer({
-        prompt: buildScenePrompt(req, s, i),
+      const generated = await generateVeoSceneBuffer({
+        prompt: [
+          buildScenePrompt(req, s, i),
+          req.referenceMode === 'elements'
+            ? [
+              'Use the uploaded Element references as identity and appearance constraints. Render one coherent cinematic scene, never a collage, contact sheet, split screen, or visible reference board. Preserve the same face, hair, clothing, colors, product design, and distinctive details throughout the shot.',
+              startFrame ? 'The first frame must match the uploaded opening image exactly in subject identity, wardrobe, framing, environment, and composition, then continue with natural motion following the storyboard references.' : '',
+            ].filter(Boolean).join(' ')
+            : req.referenceMode === 'frames'
+              ? 'Start exactly from the uploaded initial frame and, when supplied, finish exactly on the uploaded final frame. Preserve identity, wardrobe, environment, composition, and object details while creating a natural transition.'
+              : '',
+        ].filter(Boolean).join('\n'),
         engine: req.engine ?? 'veo-3.1-fast',
         aspectRatio: aspectForVeo,
-        imageBytesBase64: imgInput?.data,
-        imageMimeType: imgInput?.mimeType,
+        imageBytesBase64: startFrame?.data,
+        imageMimeType: startFrame?.mimeType,
+        endImageBytesBase64: endFrame?.data,
+        endImageMimeType: endFrame?.mimeType,
+        referenceImages: elementImages,
         durationSeconds: unlimited ? 8 : (s.durationSeconds ?? 8),
         // Omni Flash 1.2 é pago por créditos; o plano Ilimitado usa lowerpriority sem cobrança.
-        modelOverride: unlimited ? 'lowerpriority' : (req.engine === 'omni-flash' ? 'omni-flash-1.2' : undefined),
+        // A chave "veo" mantém o plano ilimitado na família low-priority.
+        // O motor pode promover internamente para a variante FL quando necessário.
+        modelOverride: unlimited ? 'veo' : (req.engine === 'omni-flash' ? 'omni-flash-1.2' : undefined),
       });
+      const buf = unlimited ? await normalizeEightSecondVideo(generated) : generated;
       const scenePath = `${userId}/${projectId}/scene-${i}.mp4`;
-      await admin.storage.from(VIDEO_BUCKET).upload(scenePath, buf, { contentType: 'video/mp4', upsert: true });
+      const uploaded = await admin.storage.from(VIDEO_BUCKET).upload(scenePath, buf, { contentType: 'video/mp4', upsert: true });
+      if (uploaded.error) throw new Error(`Falha ao salvar cena: ${uploaded.error.message}`);
       const sceneUrl = await signedMediaUrl(scenePath);
       sceneOutputs[i] = { ...sceneOutputs[i]!, status: 'done', video_url: sceneUrl };
       readyBuffers.push(buf);
@@ -155,17 +168,23 @@ async function processVideoProject(projectId: string, userId: string, generation
 
   let finalVideoUrl: string | null = null;
   let finalStoragePath: string | null = null;
+  let thumbnailUrl: string | null = null;
   if (readyBuffers.length) {
     const stitched = await stitchVideoBuffers(readyBuffers);
     finalStoragePath = `${userId}/${projectId}/final.mp4`;
     const up = await admin.storage.from(VIDEO_BUCKET).upload(finalStoragePath, stitched, { contentType: 'video/mp4', upsert: true });
-    if (!up.error) finalVideoUrl = await signedMediaUrl(finalStoragePath);
+    if (up.error) throw new Error(`Falha ao salvar vídeo final: ${up.error.message}`);
+    finalVideoUrl = await signedMediaUrl(finalStoragePath);
+    const thumbnailPath = `${userId}/${projectId}/thumbnail.jpg`;
+    const thumbnail = await extractVideoThumbnail(readyBuffers[0]!);
+    const thumbnailUpload = await admin.storage.from(VIDEO_BUCKET).upload(thumbnailPath, thumbnail, { contentType: 'image/jpeg', upsert: true });
+    if (!thumbnailUpload.error) thumbnailUrl = await signedMediaUrl(thumbnailPath);
   }
 
   const refunded = failedCount * costPerScene;
   if (refunded > 0) await refundUserCredits({ userId, amount: refunded, refId: generationId });
 
-  const status = readyBuffers.length ? 'done' : 'failed';
+  const status = readyBuffers.length === req.scenes.length ? 'done' : 'failed';
   const now = new Date().toISOString();
   await admin
     .from('video_projects')
@@ -173,6 +192,7 @@ async function processVideoProject(projectId: string, userId: string, generation
       status,
       refunded,
       video_url: finalVideoUrl,
+      ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}),
       storage_path: finalStoragePath,
       scenes: sceneOutputs,
       error: readyBuffers.length ? lastError : (lastError ?? 'Todas as cenas falharam. Créditos devolvidos.'),
@@ -414,6 +434,23 @@ aiUgcRoutes.post('/create', async (c) => {
     throw new ApiError('INVALID_INPUT', `Dados inválidos: ${parsed.error.issues[0]?.message ?? 'revise o projeto'}`);
   }
   const req = parsed.data;
+  // Valide antes de criar projeto ou debitar créditos; nunca gere sem uma imagem enviada.
+  toImageInput(req.avatarImageData);
+  toImageInput(req.productImageData);
+  toImageInput(req.startFrameImageData);
+  toImageInput(req.endFrameImageData);
+  for (const image of req.referenceImages ?? []) toImageInput(image);
+  if (!req.referenceMode && req.avatarImageData && req.productImageData) {
+    throw new ApiError('INVALID_INPUT', 'Neste modo de vídeo, envie apenas uma imagem de referência por vez.');
+  }
+  if (req.referenceMode === 'frames') {
+    if (!req.startFrameImageData) throw new ApiError('INVALID_INPUT', 'Envie o frame inicial.');
+    if (req.referenceImages?.length) throw new ApiError('INVALID_INPUT', 'O modo Frames não aceita imagens de Elementos.');
+  }
+  if (req.referenceMode === 'elements') {
+    if (!(req.referenceImages?.length)) throw new ApiError('INVALID_INPUT', 'Envie pelo menos uma imagem em Elementos.');
+    if (req.endFrameImageData) throw new ApiError('INVALID_INPUT', 'O modo Elementos aceita apenas um frame inicial opcional.');
+  }
   const cost = calculateUgcCost({ engine: req.engine, sceneCount: req.scenes.length, voiceType: req.voiceType });
   const generationId = randomUUID();
   const projectId = randomUUID();
@@ -449,6 +486,25 @@ aiUgcRoutes.post('/create', async (c) => {
     duration_seconds: s.durationSeconds ?? 8,
   }));
 
+  let initialThumbnail = req.avatarUrl || '/showcase/modelo-01.webp';
+  const referenceThumbnail = toImageInput(req.startFrameImageData)
+    ?? toImageInput(req.referenceImages?.[0])
+    ?? toImageInput(req.avatarImageData)
+    ?? toImageInput(req.productImageData);
+  if (referenceThumbnail) {
+    const ext = referenceThumbnail.mimeType === 'image/png' ? 'png' : referenceThumbnail.mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const thumbnailPath = `${userId}/${projectId}/reference-thumbnail.${ext}`;
+    const thumbnailUpload = await admin.storage.from(VIDEO_BUCKET).upload(
+      thumbnailPath,
+      Buffer.from(referenceThumbnail.data, 'base64'),
+      { contentType: referenceThumbnail.mimeType, upsert: true },
+    );
+    if (!thumbnailUpload.error) {
+      const signedThumbnail = await signedMediaUrl(thumbnailPath);
+      if (signedThumbnail) initialThumbnail = signedThumbnail;
+    }
+  }
+
   const projIns = await admin
     .from('video_projects')
     .insert({
@@ -456,6 +512,8 @@ aiUgcRoutes.post('/create', async (c) => {
       user_id: userId,
       generation_id: generationId,
       mode: req.mode,
+      origin: req.origin,
+      media_type: req.mediaType,
       title: req.title,
       status: 'processing',
       engine: req.engine,
@@ -464,7 +522,7 @@ aiUgcRoutes.post('/create', async (c) => {
       scene_count: req.scenes.length,
       cost,
       refunded: 0,
-      thumbnail_url: req.avatarUrl || '/showcase/modelo-01.webp',
+      thumbnail_url: initialThumbnail,
       scenes: initialScenes,
       params: { language: req.language, voiceType: req.voiceType, captions: req.captions, emotion: req.emotion, brollCount: req.brollCount },
     })

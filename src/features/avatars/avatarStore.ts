@@ -114,6 +114,9 @@ export const useAvatarStudio = create<AvatarStudioState>()(
         characterWorld: s.characterWorld,
         openGroups: s.openGroups,
         prompt: s.prompt,
+        // O avatar salvo é só metadado + URL; persistir mantém o rosto-base ao voltar.
+        // Fotos enviadas ficam fora porque carregam dados binários pesados.
+        baseAvatar: s.baseAvatar,
         engine: s.engine,
         framing: s.framing,
         aspectRatio: s.aspectRatio,

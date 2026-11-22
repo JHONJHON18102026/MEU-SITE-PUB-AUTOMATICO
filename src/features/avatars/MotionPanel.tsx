@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { CoinIcon } from '@/components/ui/Brand';
 import { QuickAvatarSelect, type SelectedVisualSource } from './QuickAvatarSelect';
 import { SHOWCASE_AVATARS } from './showcaseExamples';
+import { useAvatarStudio } from './avatarStore';
 import { VIRAL_MOTIONS } from '@shared/ugcCatalog';
 import { VIDEO_ENGINES, calculateUgcCost, type VideoEngineId } from '@shared/ugcContracts';
 import { useCreateUgcProject } from '@/features/projects/previewProjectsStore';
@@ -18,23 +19,25 @@ import { useCreateUgcProject } from '@/features/projects/previewProjectsStore';
 export function MotionPanel({ onBack }: { onBack: () => void }) {
   const navigate = useNavigate();
   const { createProject, busy } = useCreateUgcProject();
+  const baseAvatar = useAvatarStudio((s) => s.baseAvatar);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
   const [character, setCharacter] = useState<SelectedVisualSource>({
-    label: SHOWCASE_AVATARS[0]!.name,
-    previewUrl: SHOWCASE_AVATARS[0]!.image_url,
+    label: baseAvatar?.name ?? SHOWCASE_AVATARS[0]!.name,
+    previewUrl: baseAvatar?.image_url ?? SHOWCASE_AVATARS[0]!.image_url,
     uploaded: null,
   });
   const [motionMode, setMotionMode] = useState<'preset' | 'upload'>('preset');
   const [presetId, setPresetId] = useState<string>(VIRAL_MOTIONS[0]!.id);
   const [customVideoName, setCustomVideoName] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
-  const [engine, setEngine] = useState<VideoEngineId>('veo-3.1-fast');
+  const [engine, setEngine] = useState<VideoEngineId>('omni-flash');
   const [resolution, setResolution] = useState<'720p' | '1080p'>('1080p');
   const [keepClothing, setKeepClothing] = useState(true);
 
   const preset = VIRAL_MOTIONS.find((m) => m.id === presetId) ?? VIRAL_MOTIONS[0]!;
   const cost = calculateUgcCost({ engine, sceneCount: 1 });
+  const motionEngines = [VIDEO_ENGINES.find((e) => e.id === 'omni-flash')!, VIDEO_ENGINES.find((e) => e.id === 'veo-3.1-fast')!];
 
   function resetFields() {
     setPresetId(VIRAL_MOTIONS[0]!.id);
@@ -55,6 +58,8 @@ export function MotionPanel({ onBack }: { onBack: () => void }) {
       motionMode === 'preset' ? preset.promptDescription : customPrompt.trim() || `Copy natural movement from ${customVideoName}`;
     const proj = await createProject({
       mode: 'motion',
+      origin: 'avatar',
+      mediaType: 'video',
       title: `Motion · ${character.label}`,
       engine,
       aspectRatio: '9:16',
@@ -72,7 +77,7 @@ export function MotionPanel({ onBack }: { onBack: () => void }) {
         },
       ],
     });
-    if (proj) navigate('/projects');
+    if (proj) navigate('/avatars?media=videos');
   }
 
   return (
@@ -172,11 +177,14 @@ export function MotionPanel({ onBack }: { onBack: () => void }) {
         <section className="space-y-2.5">
           <div className="text-xs font-bold text-fg-muted">3. MOTOR, QUALIDADE & ROUPA</div>
           <div className="grid grid-cols-2 gap-1.5">
-            {VIDEO_ENGINES.map((e) => (
+            {motionEngines.map((e) => (
               <button
                 key={e.id}
                 type="button"
                 onClick={() => setEngine(e.id)}
+                aria-label={e.label}
+                aria-pressed={engine === e.id}
+                title={e.description}
                 className={clsx(
                   'rounded-xl border p-2 text-left text-[11px]',
                   engine === e.id ? 'border-accent bg-accent-soft font-bold' : 'border-border bg-surface-2 text-fg-muted',
@@ -219,7 +227,7 @@ export function MotionPanel({ onBack }: { onBack: () => void }) {
             <RotateCcw className="size-4" />
           </button>
           <Button variant="brand" className="h-11 flex-1 whitespace-nowrap text-[12px]" onClick={() => void submit()} loading={busy} data-testid="motion-create-btn">
-            <Film className="size-4 shrink-0" /> Animar Motion
+            <Film className="size-4 shrink-0" /> Animar influencer
             <span className="inline-flex items-center gap-1 rounded-md bg-black/25 px-1.5 py-0.5 text-[11px]">
               <CoinIcon className="size-3.5" /> {cost}
             </span>

@@ -9,6 +9,7 @@ import { getUserIdFromToken } from './supabaseAdmin';
 import { missingKeys } from './env';
 import { enhancePrompt, resolveModels } from './gemini';
 import { rustEnabled } from './rustMotor';
+import { checkRustMotor } from './rustMotorSupervisor';
 import { avatarRoutes } from './routes/avatars';
 import { aiUgcRoutes } from './routes/aiUgc';
 import { projectRoutes } from './routes/projects';
@@ -36,6 +37,7 @@ app.get('/health', async (c) => {
   let models: { image: string; imagePro: string; text: string } | null = null;
   let modelError: string | null = null;
   const rust = rustEnabled();
+  const rustStatus = rust ? await checkRustMotor() : null;
   if (!rust && !missing.includes('GEMINI_API_KEY')) {
     try {
       const m = await resolveModels();
@@ -44,7 +46,16 @@ app.get('/health', async (c) => {
       modelError = err instanceof Error ? err.message : String(err);
     }
   }
-  return c.json({ ok: rust || (missing.length === 0 && !modelError), engine: rust ? 'rust' : 'gemini', missing: rust ? missing.filter((key) => !key.includes('GEMINI_API_KEY')) : missing, models, modelError: rust ? null : modelError });
+  return c.json({
+    ok: rust ? Boolean(rustStatus?.available) : (missing.length === 0 && !modelError),
+    engine: rust ? 'rust' : 'gemini',
+    motorConnected: rust ? Boolean(rustStatus?.available) : null,
+    motorError: rustStatus?.error ?? null,
+    availableModels: rustStatus?.models ?? null,
+    missing: rust ? missing.filter((key) => !key.includes('GEMINI_API_KEY')) : missing,
+    models,
+    modelError: rust ? null : modelError,
+  });
 });
 
 // Daqui para baixo, só usuário logado.

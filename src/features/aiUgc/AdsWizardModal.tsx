@@ -6,8 +6,6 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { CoinIcon } from '@/components/ui/Brand';
 import { ImagePicker } from '@/features/avatars/ImagePicker';
-import { SHOWCASE_AVATARS } from '@/features/avatars/showcaseExamples';
-import { useMyAvatars } from '@/features/avatars/useAvatarData';
 import { MUSIC_MOODS, TALKING_EMOTIONS, UGC_TEMPLATES, type UgcTemplate } from '@shared/ugcCatalog';
 import {
   VIDEO_ENGINES,
@@ -24,7 +22,7 @@ import type { PreparedImage } from '@/lib/image';
 
 const STEPS = [
   '1. Template',
-  '2. Imagem',
+  '2. Referências',
   '3. Ação',
   '4. Cenas',
   '5. Texto do áudio',
@@ -44,7 +42,6 @@ export function AdsWizardModal({
 }) {
   const navigate = useNavigate();
   const { createProject, busy } = useCreateUgcProject();
-  const myAvatars = useMyAvatars();
   const plan = useSession((s) => s.profile?.plan);
   const unlimited = plan === 'unlimited';
 
@@ -57,9 +54,10 @@ export function AdsWizardModal({
   const [creativeAi, setCreativeAi] = useState(false);
 
   const [productName, setProductName] = useState('');
-  const [productImg, setProductImg] = useState<PreparedImage | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string>(SHOWCASE_AVATARS[0]!.image_url);
-  const [customAvatar, setCustomAvatar] = useState<PreparedImage | null>(null);
+  const [referenceMode, setReferenceMode] = useState<'frames' | 'elements'>('frames');
+  const [startFrame, setStartFrame] = useState<PreparedImage | null>(null);
+  const [endFrame, setEndFrame] = useState<PreparedImage | null>(null);
+  const [elementImages, setElementImages] = useState<PreparedImage[]>([]);
 
   const [actionText, setActionText] = useState('');
   const [scenes, setScenes] = useState<UgcSceneDraft[]>([
@@ -122,12 +120,13 @@ export function AdsWizardModal({
       voiceType,
       musicMood,
       captions: true,
-      // O preview é uma data URL grande; a API reserva avatarUrl para URLs curtas.
-      // A imagem personalizada já segue corretamente em avatarImageData.
-      avatarUrl: customAvatar ? undefined : avatarUrl,
-      avatarImageData: customAvatar?.data,
       productName: productName.trim() || 'Produto',
-      productImageData: productImg?.data,
+      referenceMode,
+      startFrameImageData: startFrame?.data,
+      endFrameImageData: referenceMode === 'frames' ? endFrame?.data : undefined,
+      referenceImages: referenceMode === 'elements'
+        ? [ ...(startFrame ? [startFrame.data] : []), ...elementImages.map((image) => image.data) ].slice(0, 3)
+        : undefined,
       scenes: scenes.map((s) => ({
         text: s.text.trim() || `Veja como ${productName || 'este produto'} funciona na prática.`,
         action: s.action || actionText,
@@ -139,6 +138,8 @@ export function AdsWizardModal({
       navigate('/projects');
     }
   }
+
+  const referencesReady = referenceMode === 'frames' ? Boolean(startFrame) : elementImages.length > 0 || Boolean(startFrame);
 
   const footer = (
     <div className="flex w-full flex-wrap items-center justify-between gap-2">
@@ -174,7 +175,7 @@ export function AdsWizardModal({
           <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>Voltar</Button>
         )}
         {step < STEPS.length - 1 ? (
-          <Button variant="primary" onClick={() => setStep((s) => s + 1)}>Próximo</Button>
+          <Button variant="primary" disabled={step === 1 && !referencesReady} onClick={() => setStep((s) => s + 1)}>Próximo</Button>
         ) : (
           <Button variant="brand" onClick={() => void submit()} loading={busy} data-testid="wizard-generate-video" aria-label={unlimited ? 'Gerar vídeo no plano ilimitado' : `Gerar vídeo por ${cost} créditos`} title={unlimited ? 'Gerar vídeo · plano ilimitado · lowerpriority · 8s' : `Gerar vídeo · ${cost} créditos`}>
             <Film className="size-4" /> {unlimited ? 'Gerar Vídeo · Ilimitado' : <>Gerar Vídeo · <CoinIcon className="size-3.5" /> {cost}</>}
@@ -291,60 +292,90 @@ export function AdsWizardModal({
       )}
 
       {step === 1 && (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-5">
           <div>
-            <h3 className="text-sm font-bold">Avatar (Opcional)</h3>
-            <p className="mt-1 text-xs text-fg-muted">Escolha um modelo pronto, seus avatares ou envie uma foto.</p>
-            <div className="mt-3 grid grid-cols-3 gap-2 max-h-60 overflow-y-auto thin-scroll">
-              {[...myAvatars.data, ...SHOWCASE_AVATARS].slice(0, 9).map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => {
-                    setAvatarUrl(a.image_url);
-                    setCustomAvatar(null);
-                  }}
-                  className={clsx('relative overflow-hidden rounded-xl border', avatarUrl === a.image_url && !customAvatar ? 'border-accent ring-brand' : 'border-border')}
-                >
-                  <img src={a.image_url} alt={a.name} className="aspect-[3/4] w-full object-cover object-top" />
-                </button>
-              ))}
-            </div>
-            <ImagePicker
-              label="Enviar foto própria do avatar"
-              onPicked={(img) => setCustomAvatar(img)}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface-2 py-2.5 text-xs font-semibold hover:border-accent"
-            >
-              <ImagePlus className="size-4" /> {customAvatar ? `Foto: ${customAvatar.name}` : 'Fazer upload de rosto'}
-            </ImagePicker>
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="text-sm font-bold">Produto / Local *</h3>
+            <h3 className="text-sm font-bold">Produto / Projeto *</h3>
             <input
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
-              placeholder="Nome do produto (ex.: Sérum Facial Vitamina C)"
-              className="w-full rounded-xl border border-border bg-surface-2 px-3 py-2.5 text-sm outline-none focus:border-accent"
+              placeholder="Nome do produto ou projeto"
+              className="mt-2 w-full rounded-xl border border-border bg-surface-2 px-3 py-2.5 text-sm outline-none focus:border-accent"
             />
-            <ImagePicker
-              label="Enviar foto do produto"
-              onPicked={(img) => setProductImg(img)}
-              className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-surface-2 p-6 text-xs text-fg-muted hover:border-accent"
-            >
-              {productImg ? (
-                <img src={productImg.previewUrl} alt="Produto selecionado" className="h-28 rounded-xl object-contain" />
-              ) : (
-                <>
-                  <ImagePlus className="size-6 text-accent" />
-                  <span>Clique para enviar foto do produto (JPG, PNG ou WEBP)</span>
-                </>
-              )}
-            </ImagePicker>
-            <Button variant="secondary" className="w-full" onClick={applyOneClickAutofill}>
-              <Wand2 className="size-4 text-accent" /> Preencher anúncio automático (1 clique)
-            </Button>
           </div>
+
+          <div className="grid gap-3 md:grid-cols-2" role="radiogroup" aria-label="Modo de referência do vídeo">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={referenceMode === 'frames'}
+              onClick={() => setReferenceMode('frames')}
+              className={clsx('rounded-2xl border p-4 text-left transition', referenceMode === 'frames' ? 'border-accent bg-accent-soft ring-brand' : 'border-border bg-surface-2 hover:border-accent/60')}
+            >
+              <strong className="block text-sm text-fg">Frame inicial + frame final</strong>
+              <span className="mt-1 block text-xs text-fg-muted">O vídeo começa na primeira imagem e termina na segunda, como no Flow.</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={referenceMode === 'elements'}
+              onClick={() => setReferenceMode('elements')}
+              className={clsx('rounded-2xl border p-4 text-left transition', referenceMode === 'elements' ? 'border-accent bg-accent-soft ring-brand' : 'border-border bg-surface-2 hover:border-accent/60')}
+            >
+              <strong className="block text-sm text-fg">Elementos + abertura</strong>
+              <span className="mt-1 block text-xs text-fg-muted">Use uma imagem de abertura opcional e até 2 referências multimodais para manter personagem, roupa e storyboard consistentes.</span>
+            </button>
+          </div>
+
+          {referenceMode === 'frames' ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <ImagePicker
+                label="Enviar frame inicial"
+                onPicked={setStartFrame}
+                className="flex min-h-52 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border border-dashed border-border bg-surface-2 p-4 text-xs text-fg-muted hover:border-accent"
+              >
+                {startFrame ? <img src={startFrame.previewUrl} alt="Frame inicial" className="max-h-48 w-full rounded-xl object-contain" /> : <><ImagePlus className="size-7 text-accent" /><strong className="text-fg">Frame inicial *</strong><span>Imagem que abre o vídeo</span></>}
+              </ImagePicker>
+              <ImagePicker
+                label="Enviar frame final"
+                onPicked={setEndFrame}
+                className="flex min-h-52 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border border-dashed border-border bg-surface-2 p-4 text-xs text-fg-muted hover:border-accent"
+              >
+                {endFrame ? <img src={endFrame.previewUrl} alt="Frame final" className="max-h-48 w-full rounded-xl object-contain" /> : <><ImagePlus className="size-7 text-accent" /><strong className="text-fg">Frame final (opcional)</strong><span>Imagem exata onde o vídeo termina</span></>}
+              </ImagePicker>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <ImagePicker
+                label="Enviar imagem de abertura (opcional)"
+                onPicked={setStartFrame}
+                className="flex min-h-28 w-full items-center justify-center gap-3 overflow-hidden rounded-2xl border border-dashed border-accent/60 bg-accent-soft p-4 text-xs text-fg-muted hover:border-accent"
+              >
+                {startFrame ? <img src={startFrame.previewUrl} alt="Imagem de abertura" className="max-h-32 w-full rounded-xl object-contain" /> : <><ImagePlus className="size-6 text-accent" /><span><strong className="text-fg">Imagem 1 / abertura</strong><br />O vídeo começa por esta composição.</span></>}
+              </ImagePicker>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {elementImages.map((image, index) => (
+                  <div key={`${image.name}-${index}`} className="relative overflow-hidden rounded-2xl border border-border bg-surface-2 p-2">
+                    <img src={image.previewUrl} alt={`Elemento ${index + 1}`} className="h-44 w-full rounded-xl object-contain" />
+                    <button type="button" aria-label={`Remover elemento ${index + 1}`} onClick={() => setElementImages((images) => images.filter((_, i) => i !== index))} className="absolute right-3 top-3 grid size-7 place-items-center rounded-full bg-black/75 text-lg text-white">×</button>
+                    <div className="mt-2 truncate text-center text-xs font-semibold">Elemento {index + 1}</div>
+                  </div>
+                ))}
+              </div>
+              <ImagePicker
+                label="Adicionar imagem aos Elementos"
+                disabled={elementImages.length >= (startFrame ? 2 : 3)}
+                onPicked={(image) => setElementImages((images) => [...images, image].slice(0, 3))}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface-2 py-3 text-xs font-semibold hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ImagePlus className="size-4 text-accent" /> {elementImages.length >= (startFrame ? 2 : 3) ? 'Limite de referências atingido' : `Adicionar elemento (${elementImages.length}/${startFrame ? 2 : 3})`}
+              </ImagePicker>
+              <p className="text-xs text-fg-muted">A abertura entra primeiro; as demais imagens são referências da mesma cena, nunca uma colagem ou painel visível.</p>
+            </div>
+          )}
+
+          <Button variant="secondary" className="w-full" onClick={applyOneClickAutofill}>
+            <Wand2 className="size-4 text-accent" /> Preencher roteiro automático (1 clique)
+          </Button>
         </div>
       )}
 
@@ -485,6 +516,7 @@ export function AdsWizardModal({
           <div className="grid gap-2 text-xs sm:grid-cols-2">
             <div><span className="text-fg-subtle">Produto/Projeto:</span> <strong>{productName || selectedTpl?.title || 'Anúncio ADS'}</strong></div>
             <div><span className="text-fg-subtle">Modelo:</span> <strong>{creativeAi ? 'IA Criativa do zero' : selectedTpl?.title ?? 'Personalizado'}</strong></div>
+            <div><span className="text-fg-subtle">Referências:</span> <strong>{referenceMode === 'frames' ? `Frames${endFrame ? ' inicial + final' : ' inicial'}` : `${elementImages.length} elemento(s)`}</strong></div>
             <div><span className="text-fg-subtle">Formato / Motor:</span> <strong>{orientation} · {engine} ({resolution})</strong></div>
             <div><span className="text-fg-subtle">Cenas / Duração:</span> <strong>{scenes.length} cena(s) (~{scenes.length * 8}s)</strong></div>
             <div><span className="text-fg-subtle">Voz / Música:</span> <strong>{voiceType} · {musicMood}</strong></div>

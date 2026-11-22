@@ -120,6 +120,8 @@ export interface VideoProjectDTO {
   id: string;
   user_id: string;
   mode: UgcMode;
+  origin?: 'projects' | 'avatar';
+  mediaType?: 'video' | 'motion';
   title: string;
   status: 'processing' | 'done' | 'failed';
   engine: VideoEngineId;
@@ -157,6 +159,8 @@ export const generateScriptSchema = z.object({
 
 export const createUgcVideoSchema = z.object({
   mode: z.enum(['ads', 'link', 'talking', 'hook', 'motion', 'remake', 'studio']),
+  origin: z.enum(['projects', 'avatar']).default('projects'),
+  mediaType: z.enum(['video', 'motion']).default('video'),
   title: z.string().min(2).max(120),
   engine: z.enum(['veo-3.1-fast', 'omni-flash']).default('veo-3.1-fast'),
   aspectRatio: z.enum(ASPECT_RATIOS).default('9:16'),
@@ -171,6 +175,10 @@ export const createUgcVideoSchema = z.object({
   productName: z.string().max(160).optional(),
   productImageData: z.string().max(8_000_000).optional(),
   avatarImageData: z.string().max(8_000_000).optional(),
+  referenceMode: z.enum(['frames', 'elements']).optional(),
+  startFrameImageData: z.string().max(8_000_000).optional(),
+  endFrameImageData: z.string().max(8_000_000).optional(),
+  referenceImages: z.array(z.string().max(8_000_000)).max(3).optional(),
   brollCount: z.number().int().min(0).max(4).default(0),
   hookText: z.string().max(200).optional(),
   hookStyle: z.string().max(40).optional(),
@@ -189,6 +197,23 @@ export const createUgcVideoSchema = z.object({
     )
     .min(1)
     .max(MAX_SCENES_PER_VIDEO),
+}).superRefine((value, ctx) => {
+  if (value.referenceMode === 'frames') {
+    if (!value.startFrameImageData) {
+      ctx.addIssue({ code: 'custom', path: ['startFrameImageData'], message: 'Envie o frame inicial.' });
+    }
+    if (value.referenceImages?.length) {
+      ctx.addIssue({ code: 'custom', path: ['referenceImages'], message: 'O modo Frames não aceita imagens de Elementos.' });
+    }
+  }
+  if (value.referenceMode === 'elements') {
+    if (!value.referenceImages?.length) {
+      ctx.addIssue({ code: 'custom', path: ['referenceImages'], message: 'Envie pelo menos uma imagem em Elementos.' });
+    }
+    if (value.endFrameImageData) {
+      ctx.addIssue({ code: 'custom', path: ['endFrameImageData'], message: 'O modo Elementos aceita apenas um frame inicial opcional.' });
+    }
+  }
 });
 
 export const generateHooksSchema = z.object({

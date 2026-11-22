@@ -127,7 +127,7 @@ export function AttributePanel({ onGenerate, busy, forceMotion = false }: { onGe
             onClick={() => st.set({ panelTab: 'motion' })}
             className={clsx('rounded-lg py-1.5 transition', st.panelTab === 'motion' ? 'bg-bg text-fg shadow-sm' : 'text-fg-muted hover:text-fg')}
           >
-            Motion
+            Animar avatar
           </button>
         </div>
       </div>

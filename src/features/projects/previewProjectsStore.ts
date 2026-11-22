@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { api, ApiClientError } from '@/lib/api';
 import { useSession } from '@/store/session';
 import { useUi } from '@/store/ui';
@@ -73,6 +73,8 @@ export const usePreviewProjects = create<PreviewProjectsState>()(
           id: `preview-${now}`,
           user_id: 'preview',
           mode: req.mode,
+          origin: req.origin ?? 'projects',
+          mediaType: req.mediaType ?? 'video',
           title: req.title,
           status: 'done',
           engine: req.engine ?? 'veo-3.1-fast',
@@ -140,22 +142,23 @@ export const usePreviewProjects = create<PreviewProjectsState>()(
   ),
 );
 
-export function useProjectsData() {
+export function useProjectsData(origin: 'projects' | 'avatar' = 'projects') {
   const preview = usePreviewProjects();
+  const userId = useSession((state) => state.session?.user.id);
   const [remote, setRemote] = useState<VideoProjectDTO[]>([]);
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
 
-  const load = useCallback(async (nextPage = 1) => {
+  const load = useCallback(async (nextPage = 1, silent = false) => {
     if (!isSupabaseConfigured) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
-      const res = await api.listProjects(nextPage);
+      const res = await api.listProjects(nextPage, 24, origin);
       setRemote((current) => nextPage === 1 ? res.projects : [...current, ...res.projects]);
       setPage(nextPage);
       setHasMore(res.hasMore);
@@ -163,16 +166,47 @@ export function useProjectsData() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, []);
+  }, [origin]);
 
   useEffect(() => {
     void load();
   }, [load, preview.version]);
 
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !userId) return;
+    const channel = client
+      .channel(`video-projects:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'video_projects', filter: `user_id=eq.${userId}` },
+        (payload) => {
+          if (payload.eventType === 'DELETE') {
+            const removed = payload.old as Pick<VideoProjectDTO, 'id'>;
+            setRemote((projects) => projects.filter((project) => project.id !== removed.id));
+            return;
+          }
+          const changed = payload.new as VideoProjectDTO;
+          if ((changed.origin ?? 'projects') !== origin) return;
+          setRemote((projects) => {
+            const index = projects.findIndex((project) => project.id === changed.id);
+            if (index === -1) return [changed, ...projects];
+            const next = [...projects];
+            next[index] = changed;
+            return next;
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [userId, origin]);
+
   return {
-    projects: isSupabaseConfigured ? remote : preview.projects,
+    projects: isSupabaseConfigured ? remote : preview.projects.filter((project) => (project.origin ?? 'projects') === origin),
     loading,
     error,
     reload: () => load(1),
@@ -200,9 +234,10 @@ export function useCreateUgcProject() {
       setBusy(true);
       const proj = buildPreview();
       setBusy(false);
-      toast.success(`Projeto "${proj.title}" salvo em Projetos (Prévia local — conecte o .env para gerar com IA real).`);
+      const destination = proj.origin === 'avatar' ? 'Avatar > Motion Control' : 'Projetos';
+      toast.success(`"${proj.title}" salvo em ${destination} (Prévia local — conecte o .env para gerar com IA real).`);
       notify({
-        title: 'Projeto adicionado na prévia',
+        title: proj.origin === 'avatar' ? 'Motion adicionado em Avatar' : 'Projeto adicionado na prévia',
         description: `${proj.title} (${proj.scene_count} item(ns)). Conecte o .env para renderização real.`,
         kind: 'info',
       });
@@ -233,12 +268,13 @@ export function useCreateUgcProject() {
 
   function createProject(req: CreateUgcVideoRequest) {
     const cost = calculateUgcCost({ engine: req.engine ?? 'veo-3.1-fast', sceneCount: req.scenes.length, voiceType: req.voiceType });
+    const isAvatarCreation = req.origin === 'avatar';
     return runSubmission(
       cost,
       () => addPreviewProject(req),
       () => api.createUgcVideo(req),
-      'Vídeo UGC iniciado',
-      'Projeto entrou em produção! Acompanhe na tela Projetos.',
+      isAvatarCreation ? 'Motion salvo em Avatar' : 'Vídeo UGC iniciado',
+      isAvatarCreation ? 'Motion entrou em produção! Acompanhe em Avatar > Motion Control.' : 'Projeto entrou em produção! Acompanhe na tela Projetos.',
     );
   }
 

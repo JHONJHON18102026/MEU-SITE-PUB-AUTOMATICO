@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
@@ -51,6 +51,12 @@ export function ProjectsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [openProject, setOpenProject] = useState<VideoProjectDTO | null>(null);
   const [retryingIdx, setRetryingIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!openProject) return;
+    const fresh = projects.find((project) => project.id === openProject.id);
+    if (fresh) setOpenProject(fresh);
+  }, [projects, openProject?.id]);
 
   function selectFilter(next: ProjectFilter) {
     setTab(next);
@@ -260,11 +266,23 @@ export function ProjectsPage() {
                 )}
               >
                 <button type="button" onClick={() => setOpenProject(p)} className="relative block w-full text-left">
-                  <img
-                    src={p.thumbnail_url || '/showcase/modelo-01.webp'}
-                    alt={p.title}
-                    className={clsx('aspect-[9/14] w-full object-cover object-top', p.status === 'failed' && 'opacity-40 grayscale')}
-                  />
+                  {p.status === 'done' && p.video_url && p.mode !== 'image-ad' && p.mode !== 'slideshow' && !p.is_preview ? (
+                    <video
+                      src={p.video_url}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      aria-label={`Quadro do vídeo ${p.title}`}
+                      onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.min(0.5, event.currentTarget.duration || 0); }}
+                      className="aspect-[9/14] w-full object-cover object-top"
+                    />
+                  ) : (
+                    <img
+                      src={p.thumbnail_url || '/showcase/modelo-01.webp'}
+                      alt={p.title}
+                      className={clsx('aspect-[9/14] w-full object-cover object-top', p.status === 'failed' && 'opacity-40 grayscale')}
+                    />
+                  )}
                   <div className="absolute left-2.5 top-2.5 flex flex-wrap gap-1">
                     <span className="rounded-md bg-black/75 px-2 py-0.5 text-[10px] font-black uppercase text-white">
                       {MODE_LABEL[p.mode] ?? p.mode.toUpperCase()}

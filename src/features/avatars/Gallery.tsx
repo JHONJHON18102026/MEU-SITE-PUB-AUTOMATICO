@@ -38,6 +38,40 @@ function ratioClass(r: string) {
   return r === '1:1' ? 'aspect-square' : r === '16:9' ? 'aspect-video' : r === '4:3' ? 'aspect-[4/3]' : r === '3:4' ? 'aspect-[3/4]' : 'aspect-[9/16]';
 }
 
+function friendlyGenerationError(error: string) {
+  const value = error.trim();
+  const normalized = value.toLowerCase();
+
+  if (normalized.includes('public_error_user_quota_reached') || normalized.includes('quota exceeded')) {
+    return 'A cota desta conta do Flow foi atingida. Aguarde ou tente novamente com outra conta oficial.';
+  }
+  if (normalized.includes('unusual_activity_too_much_traffic') || normalized.includes('recaptcha')) {
+    return 'O Flow está limitando solicitações temporariamente. Aguarde um pouco e tente de novo.';
+  }
+  if (normalized.includes('precisa ser importado no flow') || normalized.includes('precisa ser importado')) {
+    return 'O vídeo-base não está disponível no Flow. Envie-o novamente ou escolha um vídeo da Biblioteca.';
+  }
+  if (normalized.includes('prev_media_id') || normalized.includes('source_video obrigatorio')) {
+    return 'Selecione um vídeo-base antes de iniciar o Motion Control.';
+  }
+  if (normalized.includes('prominent_person') || normalized.includes('prominent people')) {
+    return 'O provedor bloqueou esta geração pelas regras de conteúdo. Revise a pessoa e as referências.';
+  }
+  if (normalized.includes('requested entity was not found') || /http\s*404/.test(normalized)) {
+    return 'O provedor não encontrou a mídia ou operação solicitada. Escolha outro vídeo-base e tente novamente.';
+  }
+  if (normalized.includes('invalid argument') || /http\s*400/.test(normalized)) {
+    return 'O provedor não aceitou algum dado do pedido. Revise o vídeo-base e tente novamente.';
+  }
+  if (normalized.includes('fetch failed') || normalized.includes('networkerror')) {
+    return 'Não foi possível conectar ao serviço de geração. Verifique a conexão e tente de novo.';
+  }
+
+  const containsInternalDetails = /[{}\[\]]|public_error_|requestdata|workflowid|mediametadata| at https?:\/\//i.test(value);
+  if (!containsInternalDetails && value.length > 0 && value.length <= 160) return value;
+  return 'Não foi possível concluir a geração. Tente novamente; tentativas com falha não devem consumir créditos.';
+}
+
 export function GalleryTabs() {
   const { tab, set } = useAvatarStudio();
   const mine = useMyAvatars();
@@ -192,7 +226,7 @@ function HistoryList({ items }: { items: GenerationDTO[] }) {
                 </div>
                 <div className="text-xs text-fg-subtle">
                   {new Date(g.created_at).toLocaleString('pt-BR')} · {p.count ?? 1} imagem(ns) · {p.aspectRatio}
-                  {g.status === 'failed' && g.error ? ` · ${g.error}` : ''}
+                  {g.status === 'failed' && g.error ? ` · ${friendlyGenerationError(g.error)}` : ''}
                 </div>
               </div>
               <div className="text-right text-xs">
