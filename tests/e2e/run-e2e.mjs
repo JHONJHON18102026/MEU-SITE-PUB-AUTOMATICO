@@ -891,6 +891,7 @@ async function run() {
     await page.getByRole('link', { name: /Voltar para Minhas pastas/ }).click();
     await page.waitForURL('**/viral');
     await page.getByRole('tab', { name: 'Perfis minerados' }).click();
+    await page.waitForFunction(() => new URL(window.location.href).searchParams.get('tab') === 'profiles');
     await page.getByText('Nota 97/100').waitFor();
     check((await page.getByText('Nota 97/100').count()) > 0, 'Perfis minerados exibem nota de projeção viral (0–100)');
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
@@ -56,7 +56,7 @@ export function ViralPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const readTab = (value: string | null): ViralTab => value === 'products' || value === 'profiles' || value === 'folders' ? value : 'trending';
-  const [tab, setTab] = useState<ViralTab>(() => readTab(searchParams.get('tab')));
+  const tab = readTab(searchParams.get('tab'));
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderOpen, setNewFolderOpen] = useState(false);
 
@@ -71,13 +71,7 @@ export function ViralPage() {
   const [productMarket, setProductMarket] = useState('EUA e Brasil');
   const [productSort, setProductSort] = useState('score');
 
-  useEffect(() => {
-    const next = readTab(searchParams.get('tab'));
-    if (next !== tab) setTab(next);
-  }, [searchParams, tab]);
-
   function selectTab(next: ViralTab) {
-    setTab(next);
     const params = new URLSearchParams(searchParams);
     if (next === 'trending') params.delete('tab');
     else params.set('tab', next);
