@@ -3,8 +3,39 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { ImageInput } from '../shared/contracts';
+import { ApiError } from './errors';
 
 export type RustImageResult = { buffer: Buffer; mimeType: string; model: string };
+
+// Flow automation shares one authenticated Chrome/CDP session. Keep all Hust
+// operations in FIFO order so an image, video, or LLM task cannot steal the
+// other request's active Flow project or temporary media output.
+const MAX_QUEUED_RUST_OPERATIONS = 24;
+let queuedRustOperations = 0;
+let rustOperationTail: Promise<void> = Promise.resolve();
+
+export async function withRustEngineQueue<T>(operation: () => Promise<T>, label: string): Promise<T> {
+  if (queuedRustOperations >= MAX_QUEUED_RUST_OPERATIONS) {
+    throw new ApiError('RATE_LIMITED', 'O motor Hust está com a fila cheia. Aguarde uma geração terminar e tente novamente.');
+  }
+
+  const queuedAt = Date.now();
+  const previous = rustOperationTail;
+  let release!: () => void;
+  rustOperationTail = new Promise<void>((resolve) => { release = resolve; });
+  const position = ++queuedRustOperations;
+  if (position > 1) console.info(`[hust] ${label} aguardando na fila (posição ${position}).`);
+
+  await previous;
+  const waitMs = Date.now() - queuedAt;
+  if (waitMs > 0) console.info(`[hust] ${label} iniciou após ${waitMs} ms na fila.`);
+  try {
+    return await operation();
+  } finally {
+    queuedRustOperations -= 1;
+    release();
+  }
+}
 
 function endpoint(path: string): string {
   if (!env.rustMotorUrl) throw new Error('RUST_MOTOR_URL não configurada.');
@@ -29,7 +60,7 @@ async function requestJson(path: string, init: RequestInit, timeoutMs = 10 * 60_
   } finally { clearTimeout(timer); }
 }
 
-export async function rustGenerateImage(opts: {
+export function rustGenerateImage(opts: {
   prompt: string;
   aspectRatio: string;
   model?: string;
@@ -37,6 +68,7 @@ export async function rustGenerateImage(opts: {
   images?: ImageInput[];
   imageDescriptions?: string[];
 }): Promise<RustImageResult> {
+  return withRustEngineQueue(async () => {
   const images = opts.images ?? [];
   const referenceDir = images.length ? await fs.mkdtemp(path.join(os.tmpdir(), 'fd-image-reference-')) : null;
   try {
@@ -75,9 +107,10 @@ export async function rustGenerateImage(opts: {
   } finally {
     if (referenceDir) await fs.rm(referenceDir, { recursive: true, force: true }).catch(() => undefined);
   }
+  }, 'imagem');
 }
 
-export async function rustChatCompletion(opts: {
+export function rustChatCompletion(opts: {
   prompt: string;
   system?: string;
   model?: string;
@@ -85,6 +118,7 @@ export async function rustChatCompletion(opts: {
   maxTokens?: number;
   images?: ImageInput[];
 }): Promise<string> {
+  return withRustEngineQueue(async () => {
   const userContent = opts.images?.length
     ? [
         ...opts.images.flatMap((image, index) => [
@@ -110,6 +144,7 @@ export async function rustChatCompletion(opts: {
   const text = body?.choices?.[0]?.message?.content;
   if (typeof text !== 'string' || !text.trim()) throw new Error('Motor Rust não devolveu texto.');
   return text;
+  }, 'texto');
 }
 
 export const rustEnabled = () => Boolean(env.rustMotorUrl);

@@ -15,7 +15,7 @@ import { promisify } from 'node:util';
 import sharp from 'sharp';
 import { getClient, mapGeminiError, pickModel, resolveModels } from './gemini';
 import { env } from './env';
-import { rustChatCompletion, rustEnabled } from './rustMotor';
+import { rustChatCompletion, rustEnabled, withRustEngineQueue } from './rustMotor';
 import { readFile } from 'node:fs/promises';
 import { ApiError } from './errors';
 import { splitSpeechIntoScenes, type StudioBrandbookDTO, type VideoEngineId, type ViralManifestDTO } from '../shared/ugcContracts';
@@ -414,7 +414,7 @@ export function resolveFlowVideoMode(input: { hasSourceVideo: boolean; hasStartF
   return 't2v';
 }
 
-export async function generateVeoSceneBuffer(opts: {
+type GenerateVeoSceneBufferOptions = {
   prompt: string;
   engine: VideoEngineId;
   aspectRatio: '9:16' | '16:9';
@@ -428,7 +428,16 @@ export async function generateVeoSceneBuffer(opts: {
   referenceImages?: Array<{ data: string; mimeType: string }>;
   durationSeconds?: number;
   modelOverride?: string;
-}): Promise<Buffer & { flowMediaId?: string; flowAccountId?: string }> {
+};
+
+type GeneratedVeoSceneBuffer = Buffer & { flowMediaId?: string; flowAccountId?: string };
+
+export function generateVeoSceneBuffer(opts: GenerateVeoSceneBufferOptions): Promise<GeneratedVeoSceneBuffer> {
+  if (!rustEnabled()) return generateVeoSceneBufferInternal(opts);
+  return withRustEngineQueue(() => generateVeoSceneBufferInternal(opts), 'vídeo');
+}
+
+async function generateVeoSceneBufferInternal(opts: GenerateVeoSceneBufferOptions): Promise<GeneratedVeoSceneBuffer> {
   if (rustEnabled()) {
     const hasSourceVideo = Boolean(opts.sourceVideoMediaId || opts.sourceVideoBytesBase64);
     const effectiveReferences = [...(opts.referenceImages ?? [])];
@@ -518,7 +527,7 @@ export async function generateVeoSceneBuffer(opts: {
       generated.flowMediaId = typeof body?.media_id === 'string' ? body.media_id : undefined;
       generated.flowAccountId = typeof body?.account_id === 'string' ? body.account_id : undefined;
       if (localEndFrameFallback && opts.endImageBytesBase64) {
-        const endGenerated = await generateVeoSceneBuffer({
+        const endGenerated = await generateVeoSceneBufferInternal({
           prompt: `${opts.prompt}\nGenerate one continuous shot departing naturally from this exact final composition. Preserve the same identity, wardrobe, environment and visual details. No cuts, no still frame and no collage.`,
           engine: opts.engine,
           aspectRatio: opts.aspectRatio,
