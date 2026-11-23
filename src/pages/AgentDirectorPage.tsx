@@ -99,6 +99,10 @@ export function AgentDirectorPage() {
   const isTikTokShop = presetId.startsWith('tiktok-shop-');
   const isTikTokInfluencerMode = presetId === 'tiktok-shop-influencer';
   const referenceCount = isTikTokShop ? (productRef ? 1 : 0) + (isTikTokInfluencerMode && presenterRef ? 1 : 0) : refs.length;
+  const missingRequiredReference = isTikTokShop ? !productRef : referenceMode === 'frames' && refs.length === 0;
+  const missingReferenceMessage = isTikTokShop
+    ? 'Anexe uma foto do produto para habilitar a criação do plano.'
+    : 'Anexe o frame inicial obrigatório para habilitar a criação do plano.';
 
   function applySkill(skill: (typeof DIRECTOR_SKILLS)[number]) {
     if (skill.route) {
@@ -155,8 +159,8 @@ export function AgentDirectorPage() {
 
   async function createPlan() {
     if (briefing.trim().length < 12) return;
-    if (isTikTokShop && !productRef) {
-      toast.error('Anexe primeiro a foto do produto para o Diretor analisar.');
+    if (missingRequiredReference) {
+      toast.error(isTikTokShop ? 'Anexe primeiro a foto do produto para o Diretor analisar.' : 'Anexe primeiro o frame inicial para o Diretor analisar.');
       return;
     }
     setLoading(true);
@@ -293,7 +297,11 @@ export function AgentDirectorPage() {
                 <button type="button" onClick={() => inputRef.current?.click()} className="group flex min-h-28 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-accent/35 bg-accent/[.035] px-5 py-5 transition hover:border-accent/70 hover:bg-accent/[.07]"><span className="grid size-10 place-items-center rounded-xl bg-accent/10 text-accent group-hover:bg-accent group-hover:text-white"><UploadCloud className="size-4" /></span><span className="mt-2 text-xs font-bold">{referenceMode === 'frames' ? 'Anexar frame inicial e quadro final opcional' : 'Anexar personagem, produto ou storyboard'}</span><span className="mt-1 text-[10px] text-fg-subtle">{referenceMode === 'frames' ? 'Até 2 imagens' : 'Até 8 imagens'}</span></button>
                 {refs.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{refs.map((item, index) => <div key={`${item.file.name}-${index}`} className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 p-2"><img src={item.preview} alt="" className="size-9 rounded-lg object-cover" /><span className="min-w-0 flex-1 truncate text-[10px] font-semibold">{referenceMode === 'frames' ? (index === 0 ? 'Frame inicial · ' : 'Frame final · ') : 'Elemento · '}{item.file.name}</span><button type="button" onClick={() => setRefs((current) => current.filter((_, i) => i !== index))} className="rounded-lg p-1 text-fg-subtle hover:text-danger"><X className="size-3" /></button></div>)}</div>}
               </>}
-            </div>            <div className="flex justify-end border-t border-white/10 pt-5"><button type="button" disabled={briefing.trim().length < 12 || loading} onClick={createPlan} className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 text-xs font-black text-white shadow-[0_12px_30px_rgba(121,85,232,.28)] transition hover:-translate-y-0.5 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{loading ? 'Diretor analisando…' : <><Sparkles className="size-4" /> Criar plano de produção <ArrowRight className="size-3.5" /></>}</button></div>
+            </div>
+            <div className="flex flex-col items-end gap-2 border-t border-white/10 pt-5">
+              {missingRequiredReference && <p role="status" className="text-right text-[10px] text-fg-subtle">{missingReferenceMessage}</p>}
+              <button type="button" disabled={briefing.trim().length < 12 || loading || missingRequiredReference} onClick={createPlan} className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 text-xs font-black text-white shadow-[0_12px_30px_rgba(121,85,232,.28)] transition hover:-translate-y-0.5 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{loading ? 'Diretor analisando…' : <><Sparkles className="size-4" /> Criar plano de produção <ArrowRight className="size-3.5" /></>}</button>
+            </div>
           </div>
         </section>
 
