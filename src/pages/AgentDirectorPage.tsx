@@ -1,14 +1,62 @@
-import { useRef, useState } from 'react';
-import { ArrowRight, Bot, Clock3, Copy, ImagePlus, ShieldCheck, Sparkles, Target, UploadCloud, WandSparkles, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowRight, Bot, Clock3, Copy, ImagePlus, ShieldCheck, Sparkles, Target, Trash2, UploadCloud, WandSparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { api, type DirectorPlan } from '@/lib/api';
 import type { DirectorPresetId } from '@shared/directorContracts';
-import { prepareImage } from '@/lib/image';
+import { prepareImage, type PreparedImage } from '@/lib/image';
 import { saveDirectorCanvasHandoff, useAvatarStudio } from '@/features/avatars/avatarStore';
 
-type RefFile = { file: File; preview: string };
+type RefFile = { image: PreparedImage; preview: string };
 type ReferenceMode = 'frames' | 'elements';
+
+const DIRECTOR_DRAFT_KEY = 'fd-agent-director-draft-v1';
+const DIRECTOR_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+type DirectorDraft = {
+  savedAt: number;
+  briefing: string; presetId: DirectorPresetId; objective: string; format: (typeof FORMATS)[number];
+  duration: (typeof DURATIONS)[number]; referenceMode: ReferenceMode; refs: RefFile[];
+  productRef: RefFile | null; presenterRef: RefFile | null; plan: DirectorPlan | null;
+};
+
+function restorePreparedImage(value: unknown): PreparedImage | null {
+  if (!value || typeof value !== 'object') return null;
+  const image = value as Partial<PreparedImage>;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(String(image.mimeType)) || typeof image.data !== 'string' || typeof image.name !== 'string') return null;
+  return { mimeType: image.mimeType as PreparedImage['mimeType'], data: image.data, name: image.name, previewUrl: `data:${image.mimeType};base64,${image.data}` };
+}
+
+function loadDirectorDraft(): Omit<DirectorDraft, 'savedAt'> | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(DIRECTOR_DRAFT_KEY);
+    if (!raw) return null;
+    const stored = JSON.parse(raw) as Partial<DirectorDraft>;
+    if (typeof stored.savedAt !== 'number' || Date.now() - stored.savedAt > DIRECTOR_DRAFT_TTL_MS) {
+      window.sessionStorage.removeItem(DIRECTOR_DRAFT_KEY);
+      return null;
+    }
+    const restoreRef = (value: unknown): RefFile | null => {
+      if (!value || typeof value !== 'object') return null;
+      const image = restorePreparedImage((value as { image?: unknown }).image);
+      return image ? { image, preview: image.previewUrl } : null;
+    };
+    const format = FORMATS.includes(stored.format as (typeof FORMATS)[number]) ? stored.format as (typeof FORMATS)[number] : '9:16';
+    const duration = DURATIONS.includes(stored.duration as (typeof DURATIONS)[number]) ? stored.duration as (typeof DURATIONS)[number] : 8;
+    const refs = Array.isArray(stored.refs) ? stored.refs.map(restoreRef).filter((item): item is RefFile => Boolean(item)) : [];
+    return {
+      briefing: typeof stored.briefing === 'string' ? stored.briefing : '',
+      presetId: typeof stored.presetId === 'string' ? stored.presetId as DirectorPresetId : 'custom',
+      objective: typeof stored.objective === 'string' ? stored.objective : OBJECTIVES[0]!,
+      format, duration, referenceMode: stored.referenceMode === 'elements' ? 'elements' : 'frames', refs,
+      productRef: restoreRef(stored.productRef), presenterRef: restoreRef(stored.presenterRef),
+      plan: stored.plan && typeof stored.plan === 'object' ? stored.plan : null,
+    };
+  } catch {
+    window.sessionStorage.removeItem(DIRECTOR_DRAFT_KEY);
+    return null;
+  }
+}
 
 const OBJECTIVES = ['Anúncio UGC', 'Vídeo de produto', 'Conteúdo viral', 'Personagem consistente'];
 const FORMATS = ['9:16', '16:9', '1:1'] as const;
@@ -84,18 +132,20 @@ export function AgentDirectorPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const productInputRef = useRef<HTMLInputElement>(null);
   const presenterInputRef = useRef<HTMLInputElement>(null);
-  const [briefing, setBriefing] = useState('');
-  const [presetId, setPresetId] = useState<DirectorPresetId>('custom');
-  const [objective, setObjective] = useState(OBJECTIVES[0]!);
-  const [format, setFormat] = useState<(typeof FORMATS)[number]>('9:16');
-  const [duration, setDuration] = useState<(typeof DURATIONS)[number]>(8);
-  const [referenceMode, setReferenceMode] = useState<ReferenceMode>('frames');
-  const [refs, setRefs] = useState<RefFile[]>([]);
-  const [productRef, setProductRef] = useState<RefFile | null>(null);
-  const [presenterRef, setPresenterRef] = useState<RefFile | null>(null);
-  const [plan, setPlan] = useState<DirectorPlan | null>(null);
+  const [initialDraft] = useState(loadDirectorDraft);
+  const [briefing, setBriefing] = useState(initialDraft?.briefing ?? '');
+  const [presetId, setPresetId] = useState<DirectorPresetId>(initialDraft?.presetId ?? 'custom');
+  const [objective, setObjective] = useState(initialDraft?.objective ?? OBJECTIVES[0]!);
+  const [format, setFormat] = useState<(typeof FORMATS)[number]>(initialDraft?.format ?? '9:16');
+  const [duration, setDuration] = useState<(typeof DURATIONS)[number]>(initialDraft?.duration ?? 8);
+  const [referenceMode, setReferenceMode] = useState<ReferenceMode>(initialDraft?.referenceMode ?? 'frames');
+  const [refs, setRefs] = useState<RefFile[]>(initialDraft?.refs ?? []);
+  const [productRef, setProductRef] = useState<RefFile | null>(initialDraft?.productRef ?? null);
+  const [presenterRef, setPresenterRef] = useState<RefFile | null>(initialDraft?.presenterRef ?? null);
+  const [plan, setPlan] = useState<DirectorPlan | null>(initialDraft?.plan ?? null);
   const [loading, setLoading] = useState(false);
   const [handingOff, setHandingOff] = useState(false);
+  const [draftStorageError, setDraftStorageError] = useState(false);
   const isTikTokShop = presetId.startsWith('tiktok-shop-');
   const isTikTokInfluencerMode = presetId === 'tiktok-shop-influencer';
   const referenceCount = isTikTokShop ? (productRef ? 1 : 0) + (isTikTokInfluencerMode && presenterRef ? 1 : 0) : refs.length;
@@ -103,6 +153,24 @@ export function AgentDirectorPage() {
   const missingReferenceMessage = isTikTokShop
     ? 'Anexe uma foto do produto para habilitar a criação do plano.'
     : 'Anexe o frame inicial obrigatório para habilitar a criação do plano.';
+
+  useEffect(() => {
+    try {
+      const compactRef = (ref: RefFile | null) => ref ? { image: { mimeType: ref.image.mimeType, data: ref.image.data, name: ref.image.name } } : null;
+      window.sessionStorage.setItem(DIRECTOR_DRAFT_KEY, JSON.stringify({
+        savedAt: Date.now(), briefing, presetId, objective, format, duration, referenceMode,
+        refs: refs.map((ref) => compactRef(ref)), productRef: compactRef(productRef), presenterRef: compactRef(presenterRef), plan,
+      }));
+      if (draftStorageError) setDraftStorageError(false);
+    } catch {
+      if (!draftStorageError) setDraftStorageError(true);
+    }
+  }, [briefing, presetId, objective, format, duration, referenceMode, refs, productRef, presenterRef, plan, draftStorageError]);
+
+  function clearPlan() {
+    setPlan(null);
+    toast.success('Plano removido. Briefing e referências continuam salvos para criar outro.');
+  }
 
   function applySkill(skill: (typeof DIRECTOR_SKILLS)[number]) {
     if (skill.route) {
@@ -116,14 +184,13 @@ export function AgentDirectorPage() {
     if (skill.aspectRatio) setFormat(skill.aspectRatio);
     setReferenceMode(skill.referenceMode);
     if (skill.referenceMode === 'frames') setRefs((current) => current.slice(0, 2));
-    setPlan(null);
     if (skill.id.startsWith('tiktok-shop-')) {
       setRefs([]);
       if (skill.id !== 'tiktok-shop-influencer' || presetId !== 'tiktok-shop-influencer') setPresenterRef(null);
     }
   }
 
-  function addFiles(files: FileList | null) {
+  async function addFiles(files: FileList | null) {
     if (!files) return;
     const maxFiles = referenceMode === 'frames' ? 2 : 8;
     const selected = Array.from(files);
@@ -131,30 +198,45 @@ export function AgentDirectorPage() {
     if (supported.length < selected.length) toast.error('Alguns arquivos foram ignorados. Use PNG, JPG, WEBP ou AVIF.');
     const remaining = Math.max(0, maxFiles - refs.length);
     if (supported.length > remaining) toast.error('Limite de imagens atingido para este tipo de referência.');
-    const added = supported.slice(0, remaining).map((file) => ({ file, preview: URL.createObjectURL(file) }));
-    setRefs((current) => [...current, ...added]);
+    try {
+      const added = await Promise.all(supported.slice(0, remaining).map(async (file) => {
+        const image = await prepareImage(file);
+        return { image, preview: image.previewUrl };
+      }));
+      setRefs((current) => [...current, ...added]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não consegui preparar as imagens.');
+    }
   }
 
-  function selectProduct(files: FileList | null) {
+  async function selectProduct(files: FileList | null) {
     const file = files?.[0];
     if (!file) return;
     if (!['image/png', 'image/jpeg', 'image/webp', 'image/avif'].includes(file.type)) {
       toast.error('Use uma imagem PNG, JPG, WEBP ou AVIF para o produto.');
       return;
     }
-    setProductRef({ file, preview: URL.createObjectURL(file) });
-    setPlan(null);
+    try {
+      const image = await prepareImage(file);
+      setProductRef({ image, preview: image.previewUrl });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não consegui preparar a foto do produto.');
+    }
   }
 
-  function selectPresenter(files: FileList | null) {
+  async function selectPresenter(files: FileList | null) {
     const file = files?.[0];
     if (!file) return;
     if (!['image/png', 'image/jpeg', 'image/webp', 'image/avif'].includes(file.type)) {
       toast.error('Use uma imagem PNG, JPG, WEBP ou AVIF para a pessoa de referência.');
       return;
     }
-    setPresenterRef({ file, preview: URL.createObjectURL(file) });
-    setPlan(null);
+    try {
+      const image = await prepareImage(file);
+      setPresenterRef({ image, preview: image.previewUrl });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não consegui preparar a foto da pessoa.');
+    }
   }
 
   async function createPlan() {
@@ -171,12 +253,9 @@ export function AgentDirectorPage() {
             ...(isTikTokInfluencerMode && presenterRef ? [{ ...presenterRef, role: 'Pessoa de referência' }] : []),
           ]
         : refs.map((reference) => ({ ...reference, role: 'Referência visual' }));
-      // Redimensiona antes de enviar: fotos de celular em base64 podem ultrapassar
-      // o limite do contrato mesmo quando o arquivo original parece aceitável.
-      const references = await Promise.all(sourceReferences.map(async ({ file, role }) => {
-        const image = await prepareImage(file);
-        return { name: `${role} · ${image.name}`.slice(0, 120), dataUrl: `data:${image.mimeType};base64,${image.data}` };
-      }));
+      // As referências já foram redimensionadas ao anexar e ficam persistidas
+      // no rascunho para sobreviver à navegação entre o Diretor e o canvas.
+      const references = sourceReferences.map(({ image, role }) => ({ name: `${role} · ${image.name}`.slice(0, 120), dataUrl: `data:${image.mimeType};base64,${image.data}` }));
       const result = await api.createDirectorPlan({ presetId, briefing, objective, aspectRatio: format, durationSeconds: duration, references });
       const audioDirection = 'Áudio obrigatório: todo diálogo, fala e narração devem ser exclusivamente em português do Brasil (pt-BR), com pronúncia brasileira. Se o roteiro trouxer falas em outro idioma, traduza-as para pt-BR antes de falá-las.';
       const flowVideoPrompt = result.plan.flowVideoPrompt?.trim();
@@ -215,11 +294,9 @@ export function AgentDirectorPage() {
     }
     setHandingOff(true);
     try {
-      const productImage = isTikTokShop ? await prepareImage(productRef!.file) : null;
-      const presenterImage = isTikTokInfluencerMode && presenterRef ? await prepareImage(presenterRef.file) : null;
-      const preparedReferences = isTikTokShop
-        ? []
-        : await Promise.all(refs.map(({ file }) => prepareImage(file)));
+      const productImage = isTikTokShop ? productRef!.image : null;
+      const presenterImage = isTikTokInfluencerMode && presenterRef ? presenterRef.image : null;
+      const preparedReferences = isTikTokShop ? [] : refs.map(({ image }) => image);
       const referenceImages = preparedReferences.slice(0, 3);
       const composerMode: 'video' | 'image' = target === 'video' ? 'video' : 'image';
       const canvasHandoff = {
@@ -272,7 +349,7 @@ export function AgentDirectorPage() {
         <section className="h-full rounded-[24px] border border-white/10 bg-surface shadow-[0_20px_55px_rgba(0,0,0,.18)]">
           <header className="flex items-center gap-3 border-b border-white/10 px-5 py-4 md:px-6"><span className="grid size-10 place-items-center rounded-xl bg-accent text-white"><WandSparkles className="size-4" /></span><div><h2 className="text-sm font-black">Descreva a produção</h2><p className="mt-0.5 text-[11px] text-fg-muted">Escreva naturalmente. O Diretor transforma a ideia em plano técnico.</p></div></header>
           <div className="space-y-5 p-5 md:p-6">
-            <label className="block"><span className="mb-2 flex justify-between text-[11px] font-bold"><span>O que você quer criar?</span><span className="font-medium text-fg-subtle">{briefing.length}/1200</span></span><textarea value={briefing} maxLength={1200} onChange={(e) => { setBriefing(e.target.value); setPlan(null); }} placeholder="Ex.: Quero um anúncio UGC de protetor solar com uma criadora jovem, mostrando o produto e terminando com uma chamada para compra..." className="min-h-36 w-full resize-y rounded-2xl border border-border bg-surface-2 px-4 py-3.5 text-sm leading-6 outline-none transition placeholder:text-fg-subtle focus:border-accent/70 focus:ring-4 focus:ring-accent/10" /></label>
+            <label className="block"><span className="mb-2 flex justify-between text-[11px] font-bold"><span>O que você quer criar?</span><span className="font-medium text-fg-subtle">{briefing.length}/1200</span></span><textarea value={briefing} maxLength={1200} onChange={(e) => setBriefing(e.target.value)} placeholder="Ex.: Quero um anúncio UGC de protetor solar com uma criadora jovem, mostrando o produto e terminando com uma chamada para compra..." className="min-h-36 w-full resize-y rounded-2xl border border-border bg-surface-2 px-4 py-3.5 text-sm leading-6 outline-none transition placeholder:text-fg-subtle focus:border-accent/70 focus:ring-4 focus:ring-accent/10" /></label>
             <div className="grid gap-4 md:grid-cols-3">
               <label><span className="mb-2 block text-[11px] font-bold">Objetivo</span><select value={objective} onChange={(e) => setObjective(e.target.value)} className="h-11 w-full rounded-xl border border-border bg-surface-2 px-3 text-xs outline-none focus:border-accent">{OBJECTIVES.map((item) => <option key={item}>{item}</option>)}</select></label>
               <label><span className="mb-2 block text-[11px] font-bold">Formato</span><select value={format} onChange={(e) => setFormat(e.target.value as typeof format)} className="h-11 w-full rounded-xl border border-border bg-surface-2 px-3 text-xs outline-none focus:border-accent">{FORMATS.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -286,7 +363,7 @@ export function AgentDirectorPage() {
                   <div className="rounded-xl border border-border bg-surface-2 p-3">
                     <div className="text-[11px] font-bold">Produto <span className="text-danger">· obrigatório</span></div>
                     <p className="mt-1 text-[9px] leading-4 text-fg-subtle">Envie uma foto focada no produto; ela irá para o slot Produto no canvas.</p>
-                    {productRef ? <div className="mt-2 flex items-center gap-2"><img src={productRef.preview} alt="Referência do produto" className="size-14 rounded-lg object-cover" /><span className="min-w-0 flex-1 truncate text-[10px]">{productRef.file.name}</span><button type="button" onClick={() => { setProductRef(null); setPlan(null); }} aria-label="Remover foto do produto" className="rounded-lg p-1 text-fg-subtle hover:text-danger"><X className="size-3.5" /></button></div> : <button type="button" onClick={() => productInputRef.current?.click()} className="mt-2 flex min-h-16 w-full items-center justify-center rounded-lg border border-dashed border-accent/35 px-3 text-[10px] font-semibold text-fg-muted hover:border-accent">Adicionar foto do produto</button>}
+                    {productRef ? <div className="mt-2 flex items-center gap-2"><img src={productRef.preview} alt="Referência do produto" className="size-14 rounded-lg object-cover" /><span className="min-w-0 flex-1 truncate text-[10px]">{productRef.image.name}</span><button type="button" onClick={() => setProductRef(null)} aria-label="Remover foto do produto" className="rounded-lg p-1 text-fg-subtle hover:text-danger"><X className="size-3.5" /></button></div> : <button type="button" onClick={() => productInputRef.current?.click()} className="mt-2 flex min-h-16 w-full items-center justify-center rounded-lg border border-dashed border-accent/35 px-3 text-[10px] font-semibold text-fg-muted hover:border-accent">Adicionar foto do produto</button>}
                     {productRef && <button type="button" onClick={() => productInputRef.current?.click()} className="mt-2 text-[9px] font-semibold text-accent">Trocar foto do produto</button>}
                   </div>
                   {isTikTokInfluencerMode && <>
@@ -294,29 +371,30 @@ export function AgentDirectorPage() {
                     <div className="rounded-xl border border-border bg-surface-2 p-3">
                       <div className="text-[11px] font-bold">Personagem <span className="text-fg-subtle">· opcional</span></div>
                       <p className="mt-1 text-[9px] leading-4 text-fg-subtle">Envie uma foto separada da pessoa para preencher o slot Influencer.</p>
-                      {presenterRef ? <div className="mt-2 flex items-center gap-2"><img src={presenterRef.preview} alt="Referência da pessoa" className="size-14 rounded-lg object-cover" /><span className="min-w-0 flex-1 truncate text-[10px]">{presenterRef.file.name}</span><button type="button" onClick={() => { setPresenterRef(null); setPlan(null); }} aria-label="Remover foto do personagem" className="rounded-lg p-1 text-fg-subtle hover:text-danger"><X className="size-3.5" /></button></div> : <button type="button" onClick={() => presenterInputRef.current?.click()} className="mt-2 flex min-h-16 w-full items-center justify-center rounded-lg border border-dashed border-accent/35 px-3 text-[10px] font-semibold text-fg-muted hover:border-accent">Adicionar foto do personagem</button>}
+                      {presenterRef ? <div className="mt-2 flex items-center gap-2"><img src={presenterRef.preview} alt="Referência da pessoa" className="size-14 rounded-lg object-cover" /><span className="min-w-0 flex-1 truncate text-[10px]">{presenterRef.image.name}</span><button type="button" onClick={() => setPresenterRef(null)} aria-label="Remover foto do personagem" className="rounded-lg p-1 text-fg-subtle hover:text-danger"><X className="size-3.5" /></button></div> : <button type="button" onClick={() => presenterInputRef.current?.click()} className="mt-2 flex min-h-16 w-full items-center justify-center rounded-lg border border-dashed border-accent/35 px-3 text-[10px] font-semibold text-fg-muted hover:border-accent">Adicionar foto do personagem</button>}
                       {presenterRef && <button type="button" onClick={() => presenterInputRef.current?.click()} className="mt-2 text-[9px] font-semibold text-accent">Trocar foto do personagem</button>}
                     </div>
                   </>}
                 </div>
               ) : <>
-                <div className="mb-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { setReferenceMode('frames'); setRefs((current) => current.slice(0, 2)); setPlan(null); }} className={`rounded-xl border p-3 text-left transition ${referenceMode === 'frames' ? 'border-accent bg-accent/10' : 'border-border bg-surface-2 hover:border-accent/50'}`}><span className="block text-[11px] font-bold">Frames</span><span className="mt-1 block text-[9px] leading-4 text-fg-muted">Imagem inicial obrigatória; final opcional.</span></button><button type="button" onClick={() => { setReferenceMode('elements'); setPlan(null); }} className={`rounded-xl border p-3 text-left transition ${referenceMode === 'elements' ? 'border-accent bg-accent/10' : 'border-border bg-surface-2 hover:border-accent/50'}`}><span className="block text-[11px] font-bold">Elementos</span><span className="mt-1 block text-[9px] leading-4 text-fg-muted">Até 8 imagens para manter personagem e produto.</span></button></div>
+                <div className="mb-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { setReferenceMode('frames'); setRefs((current) => current.slice(0, 2)); }} className={`rounded-xl border p-3 text-left transition ${referenceMode === 'frames' ? 'border-accent bg-accent/10' : 'border-border bg-surface-2 hover:border-accent/50'}`}><span className="block text-[11px] font-bold">Frames</span><span className="mt-1 block text-[9px] leading-4 text-fg-muted">Imagem inicial obrigatória; final opcional.</span></button><button type="button" onClick={() => setReferenceMode('elements')} className={`rounded-xl border p-3 text-left transition ${referenceMode === 'elements' ? 'border-accent bg-accent/10' : 'border-border bg-surface-2 hover:border-accent/50'}`}><span className="block text-[11px] font-bold">Elementos</span><span className="mt-1 block text-[9px] leading-4 text-fg-muted">Até 8 imagens para manter personagem e produto.</span></button></div>
                 <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/avif" multiple className="hidden" onChange={(event) => addFiles(event.target.files)} />
                 <button type="button" onClick={() => inputRef.current?.click()} className="group flex min-h-28 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-accent/35 bg-accent/[.035] px-5 py-5 transition hover:border-accent/70 hover:bg-accent/[.07]"><span className="grid size-10 place-items-center rounded-xl bg-accent/10 text-accent group-hover:bg-accent group-hover:text-white"><UploadCloud className="size-4" /></span><span className="mt-2 text-xs font-bold">{referenceMode === 'frames' ? 'Anexar frame inicial e quadro final opcional' : 'Anexar personagem, produto ou storyboard'}</span><span className="mt-1 text-[10px] text-fg-subtle">{referenceMode === 'frames' ? 'Até 2 imagens' : 'Até 8 imagens'}</span></button>
-                {refs.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{refs.map((item, index) => <div key={`${item.file.name}-${index}`} className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 p-2"><img src={item.preview} alt="" className="size-9 rounded-lg object-cover" /><span className="min-w-0 flex-1 truncate text-[10px] font-semibold">{referenceMode === 'frames' ? (index === 0 ? 'Frame inicial · ' : 'Frame final · ') : 'Elemento · '}{item.file.name}</span><button type="button" onClick={() => setRefs((current) => current.filter((_, i) => i !== index))} className="rounded-lg p-1 text-fg-subtle hover:text-danger"><X className="size-3" /></button></div>)}</div>}
+                {refs.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{refs.map((item, index) => <div key={`${item.image.name}-${index}`} className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 p-2"><img src={item.preview} alt="" className="size-9 rounded-lg object-cover" /><span className="min-w-0 flex-1 truncate text-[10px] font-semibold">{referenceMode === 'frames' ? (index === 0 ? 'Frame inicial · ' : 'Frame final · ') : 'Elemento · '}{item.image.name}</span><button type="button" onClick={() => setRefs((current) => current.filter((_, i) => i !== index))} className="rounded-lg p-1 text-fg-subtle hover:text-danger"><X className="size-3" /></button></div>)}</div>}
               </>}
             </div>
             <div className="flex flex-col items-end gap-2 border-t border-white/10 pt-5">
+              {draftStorageError && <p role="status" className="text-right text-[10px] text-danger">Não consegui salvar todos os anexos neste navegador. Remova imagens extras ou menores e tente novamente.</p>}
               {missingRequiredReference && <p role="status" className="text-right text-[10px] text-fg-subtle">{missingReferenceMessage}</p>}
-              <button type="button" disabled={briefing.trim().length < 12 || loading || missingRequiredReference} onClick={createPlan} className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 text-xs font-black text-white shadow-[0_12px_30px_rgba(121,85,232,.28)] transition hover:-translate-y-0.5 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{loading ? 'Diretor analisando…' : <><Sparkles className="size-4" /> Criar plano de produção <ArrowRight className="size-3.5" /></>}</button>
+              <button type="button" disabled={briefing.trim().length < 12 || loading || missingRequiredReference} onClick={createPlan} className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 text-xs font-black text-white shadow-[0_12px_30px_rgba(121,85,232,.28)] transition hover:-translate-y-0.5 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{loading ? 'Diretor analisando…' : <><Sparkles className="size-4" /> {plan ? 'Recriar plano' : 'Criar plano de produção'} <ArrowRight className="size-3.5" /></>}</button>
             </div>
           </div>
         </section>
 
         <aside className="space-y-4">
           <section className="h-full rounded-[24px] border border-accent/20 bg-[linear-gradient(155deg,rgba(138,97,255,.12),rgba(18,18,29,.96)_42%)] p-5 shadow-[0_20px_55px_rgba(0,0,0,.18)]">
-            <div className="flex items-center justify-between"><div><div className="text-[10px] font-black uppercase tracking-[.16em] text-accent-light">Plano do Diretor</div>{plan && <h2 className="mt-1 text-base font-black">{plan.title}</h2>}</div>{plan && <span className="size-2.5 rounded-full bg-success shadow-[0_0_12px_rgba(39,201,143,.8)]" />}</div>
-            {plan ? <div className="mt-5 space-y-3">
+            <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.16em] text-accent-light">Plano do Diretor</div>{plan && <h2 className="mt-1 text-base font-black">{plan.title}</h2>}</div>{plan && <div className="flex shrink-0 items-center gap-2"><span className="size-2.5 rounded-full bg-success shadow-[0_0_12px_rgba(39,201,143,.8)]" /><button type="button" onClick={clearPlan} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[9px] font-bold text-fg-muted hover:border-danger/60 hover:text-danger"><Trash2 className="size-3" /> Limpar plano</button></div>}</div>
+            {plan ? <div className="mt-5 space-y-3"><p className="text-[10px] leading-4 text-fg-subtle">Este plano permanece salvo ao navegar. Edite o briefing e escolha <strong>Recriar plano</strong> para atualizar; use <strong>Limpar plano</strong> para remover apenas o resultado.</p>
               <div className="grid grid-cols-2 gap-2">{[[Target,'Objetivo',plan.objective],[Clock3,'Duração',`${plan.totalDurationSeconds}s`],[ImagePlus,'Referências',`${referenceCount} anexada(s)`],[Sparkles,'Motor',plan.engineLabel]].map(([Icon,label,value]) => { const I = Icon as typeof Target; return <div key={String(label)} className="rounded-xl border border-white/8 bg-white/[.025] p-3"><I className="size-3.5 text-accent" /><span className="mt-2 block text-[9px] uppercase text-fg-subtle">{String(label)}</span><span className="mt-0.5 block text-[10px] font-bold">{String(value)}</span></div>; })}</div>
               {plan.productAnalysis && <div className="rounded-xl border border-white/8 bg-white/[.025] p-3"><div className="text-[9px] font-bold uppercase tracking-[.12em] text-fg-subtle">Análise do produto</div><p className="mt-2 text-[10px] leading-4 text-fg-muted">{plan.productAnalysis}</p></div>}
               <div className="rounded-xl border border-accent/25 bg-accent/[.05] p-3"><div className="text-[10px] font-bold">Pronto para o canvas</div><p className="mt-1 text-[9px] leading-4 text-fg-muted">O Diretor só prepara o material. Escolha o que quer abrir; nada será gerado ou cobrado até você clicar em Gerar no canvas.</p>

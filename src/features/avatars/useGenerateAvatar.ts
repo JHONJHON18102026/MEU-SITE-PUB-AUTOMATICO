@@ -17,9 +17,9 @@ const strip = (img: { mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; data:
   img ? { mimeType: img.mimeType, data: img.data, name: img.name } : null;
 
 export function useGenerateAvatar() {
-  const pendingRequestsRef = useRef(0);
+  const pendingImagesRef = useRef(0);
   const attributeRequestPendingRef = useRef(false);
-  const [pendingRequests, setPendingRequests] = useState(0);
+  const [pendingImages, setPendingImages] = useState(0);
   const [lastResult, setLastResult] = useState<AvatarDTO[]>([]);
   const setBalance = useSession((s) => s.setBalance);
   const balance = useSession((s) => s.profile?.coins_balance ?? 0);
@@ -27,10 +27,12 @@ export function useGenerateAvatar() {
   const notify = useUi((s) => s.notify);
   const bump = useGalleryVersion((s) => s.bump);
   const generations = useGenerations();
-  const persistedPendingImageRequests = generations.data.filter(
-    (generation) => generation.kind === 'avatar_image' && generation.status === 'processing',
-  ).length;
-  const pendingImageRequests = Math.max(pendingRequests, persistedPendingImageRequests);
+  const persistedPendingImageCount = generations.data.reduce((count, generation) => {
+    if (generation.kind !== 'avatar_image' || generation.status !== 'processing') return count;
+    const requested = Number(generation.params?.count ?? 1);
+    return count + Math.max(1, Math.min(MAX_IMAGES_PER_REQUEST, Number.isFinite(requested) ? Math.floor(requested) : 1));
+  }, 0);
+  const pendingImageRequests = Math.max(pendingImages, persistedPendingImageCount);
 
   async function generate(mode: 'attributes' | 'prompt') {
     if (!isSupabaseConfigured) {
@@ -39,7 +41,9 @@ export function useGenerateAvatar() {
     }
     const st = useAvatarStudio.getState();
     if (mode === 'attributes' && attributeRequestPendingRef.current) return;
-    if (Math.max(pendingRequestsRef.current, persistedPendingImageRequests) >= MAX_PENDING_IMAGE_REQUESTS) {
+    const pendingBeforeRequest = Math.max(pendingImagesRef.current, persistedPendingImageCount);
+    const availableImageSlots = MAX_PENDING_IMAGE_REQUESTS - pendingBeforeRequest;
+    if (availableImageSlots <= 0) {
       toast.info('Já existem 4 pedidos de imagem em andamento. Aguarde uma geração terminar.');
       return;
     }
@@ -47,9 +51,13 @@ export function useGenerateAvatar() {
       toast.info('Ative o painel Criar Influencer no compositor para validar este personagem.');
       return;
     }
-    const requestedImageCount = mode === 'attributes'
+    const desiredImageCount = mode === 'attributes'
       ? Math.max(1, Math.min(MAX_IMAGES_PER_REQUEST, Math.floor(st.attributeCount)))
       : st.count;
+    const requestedImageCount = Math.max(1, Math.min(desiredImageCount, availableImageSlots));
+    if (requestedImageCount < desiredImageCount) {
+      toast.info(`Vou enviar ${requestedImageCount} imagem(ns), respeitando o limite de 4 imagens simultâneas.`);
+    }
     const cost = avatarCost(requestedImageCount);
     const useInfluencerPreset = st.useInfluencerPreset;
     const hasAttr = useInfluencerPreset && Object.values(st.selection).some((v) => (v?.length ?? 0) > 0);
@@ -67,8 +75,8 @@ export function useGenerateAvatar() {
     // Reserve synchronously so clicks made before React rerenders cannot
     // exceed the four-request concurrency limit.
     if (mode === 'attributes') attributeRequestPendingRef.current = true;
-    pendingRequestsRef.current += 1;
-    setPendingRequests(pendingRequestsRef.current);
+    pendingImagesRef.current += requestedImageCount;
+    setPendingImages(pendingImagesRef.current);
     useAvatarStudio.getState().set({ pendingCount: useAvatarStudio.getState().pendingCount + requestedImageCount });
     bump();
     try {
@@ -124,12 +132,12 @@ export function useGenerateAvatar() {
       bump();
     } finally {
       if (mode === 'attributes') attributeRequestPendingRef.current = false;
-      pendingRequestsRef.current = Math.max(0, pendingRequestsRef.current - 1);
-      setPendingRequests(pendingRequestsRef.current);
+      pendingImagesRef.current = Math.max(0, pendingImagesRef.current - requestedImageCount);
+      setPendingImages(pendingImagesRef.current);
       const current = useAvatarStudio.getState();
       current.set({ pendingCount: Math.max(0, current.pendingCount - requestedImageCount) });
     }
   }
 
-  return { generate, busy: pendingRequests > 0, pendingRequests: pendingImageRequests, lastResult };
+  return { generate, busy: pendingImages > 0, pendingRequests: pendingImageRequests, lastResult };
 }

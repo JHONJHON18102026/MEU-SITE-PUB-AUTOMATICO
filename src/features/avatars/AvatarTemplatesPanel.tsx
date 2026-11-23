@@ -90,6 +90,7 @@ export function AvatarTemplatesPanel() {
   const [skillIds, setSkillIds] = useState<string[]>([...BUILT_INS[0]!.skillIds]);
   const [preparing, setPreparing] = useState(false);
   const submitRef = useRef<() => Promise<void>>(async () => undefined);
+  const videoSubmitLockRef = useRef(false);
   const videoEngine = useAvatarStudio((s) => s.videoEngine);
   const videoCost = calculateUgcCost({ engine: videoEngine, sceneCount: 1 });
   const visibleTemplates = useMemo(() => [...BUILT_INS, ...savedTemplates].filter((template) => template.mode === mode), [mode, savedTemplates]);
@@ -120,7 +121,7 @@ export function AvatarTemplatesPanel() {
 
   useEffect(() => {
     setStudio({ videoSubmit: () => submitRef.current() });
-    return () => setStudio({ videoSubmit: null, videoBusy: false });
+    return () => setStudio({ videoSubmit: null });
   }, [setStudio]);
 
   function chooseTemplate(template: CustomAvatarTemplate) {
@@ -230,32 +231,35 @@ export function AvatarTemplatesPanel() {
   }
 
   async function generateCanvasVideo() {
-    if (preparing || busy) return;
-    let queuedProjects: Awaited<ReturnType<typeof api.listProjects>> | null = null;
-    if (isSupabaseConfigured) {
-      try {
-        queuedProjects = await api.listProjects(1, 100, 'avatar');
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Não consegui verificar a fila de vídeos.');
-        return;
-      }
-    }
-    const pendingVideoRequests = queuedProjects?.projects.filter(
-      (project) => project.status === 'processing' && project.mediaType !== 'motion',
-    ).length ?? 0;
-    if (pendingVideoRequests >= MAX_PENDING_VIDEO_REQUESTS) {
-      toast.info('Já existem 4 vídeos em andamento. Aguarde um terminar antes de enviar outro.');
-      return;
-    }
-    const studio = useAvatarStudio.getState();
-    const brief = studio.prompt.trim();
-    if (!brief) {
-      toast.error('Descreva a cena ou aplique um template antes de gerar.');
-      return;
-    }
+    if (videoSubmitLockRef.current || useAvatarStudio.getState().videoBusy || preparing || busy) return;
+    // Reserve this media queue synchronously before the network round-trip.
+    // React state alone leaves a short window where rapid clicks submit twice.
+    videoSubmitLockRef.current = true;
     setPreparing(true);
     setStudio({ videoBusy: true });
     try {
+      let queuedProjects: Awaited<ReturnType<typeof api.listProjects>> | null = null;
+      if (isSupabaseConfigured) {
+        try {
+          queuedProjects = await api.listProjects(1, 100, 'avatar');
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Não consegui verificar a fila de vídeos.');
+          return;
+        }
+      }
+      const pendingVideoRequests = queuedProjects?.projects.filter(
+        (project) => project.status === 'processing' && project.mediaType !== 'motion',
+      ).length ?? 0;
+      if (pendingVideoRequests >= MAX_PENDING_VIDEO_REQUESTS) {
+        toast.info('Já existem 4 vídeos em andamento. Aguarde um terminar antes de enviar outro.');
+        return;
+      }
+      const studio = useAvatarStudio.getState();
+      const brief = studio.prompt.trim();
+      if (!brief) {
+        toast.error('Descreva a cena ou aplique um template antes de gerar.');
+        return;
+      }
       // A foto enviada pela lateral só entra no vídeo se o painel Criar Influencer
       // estiver ligado. O avatar escolhido diretamente no canvas permanece independente.
       let avatarImageData = studio.useInfluencerPreset && studio.basePhoto
@@ -326,6 +330,7 @@ export function AvatarTemplatesPanel() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não consegui gerar o vídeo pelo canvas.');
     } finally {
+      videoSubmitLockRef.current = false;
       setPreparing(false);
       setStudio({ videoBusy: false });
     }

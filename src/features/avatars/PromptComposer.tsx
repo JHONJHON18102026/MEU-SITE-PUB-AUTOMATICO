@@ -300,11 +300,11 @@ export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, 
         </Slot>
         <button
           onClick={activeMedia === 'video' ? () => void st.videoSubmit?.() : onGenerate}
-          disabled={activeMedia === 'image' ? pendingImageRequests >= MAX_PENDING_IMAGE_REQUESTS : pendingVideoRequests >= MAX_PENDING_VIDEO_REQUESTS || !st.videoSubmit}
+          disabled={activeMedia === 'image' ? pendingImageRequests >= MAX_PENDING_IMAGE_REQUESTS : pendingVideoRequests >= MAX_PENDING_VIDEO_REQUESTS || videoBusy || !st.videoSubmit}
           type="button"
           data-testid="generate-from-prompt"
-          aria-label={activeMedia === 'video' ? `Gerar vídeo${pendingVideoRequests ? `, ${pendingVideoRequests} de ${MAX_PENDING_VIDEO_REQUESTS} pedidos em andamento` : ''}` : `Gerar imagem, ${cost} créditos${pendingImageRequests ? `, ${pendingImageRequests} de ${MAX_PENDING_IMAGE_REQUESTS} pedidos em andamento` : ''}`}
-          title={activeMedia === 'video' ? pendingVideoRequests >= MAX_PENDING_VIDEO_REQUESTS ? 'Aguarde um vídeo terminar para enviar outro pedido' : 'Gerar vídeo com o modelo selecionado' : pendingImageRequests >= MAX_PENDING_IMAGE_REQUESTS ? 'Aguarde uma geração de imagem terminar para enviar outro pedido' : `Gerar imagem · ${cost} créditos${pendingImageRequests ? ` · ${pendingImageRequests}/${MAX_PENDING_IMAGE_REQUESTS} pedidos em andamento` : ''}`}
+          aria-label={activeMedia === 'video' ? `Gerar vídeo${pendingVideoRequests ? `, ${pendingVideoRequests} de ${MAX_PENDING_VIDEO_REQUESTS} vídeos em andamento` : ''}` : `Gerar imagem, ${cost} créditos${pendingImageRequests ? `, ${pendingImageRequests} de ${MAX_PENDING_IMAGE_REQUESTS} imagens em andamento` : ''}`}
+          title={activeMedia === 'video' ? pendingVideoRequests >= MAX_PENDING_VIDEO_REQUESTS ? 'Já existem 4 vídeos em andamento' : 'Gerar vídeo com o modelo selecionado' : pendingImageRequests >= MAX_PENDING_IMAGE_REQUESTS ? 'Já existem 4 imagens em andamento' : `Gerar imagem · ${cost} créditos${pendingImageRequests ? ` · ${pendingImageRequests}/${MAX_PENDING_IMAGE_REQUESTS} imagens em andamento` : ''}`}
           className="flex min-h-[84px] w-[96px] shrink-0 flex-col items-center justify-center gap-1 self-stretch rounded-xl bg-brand text-sm font-black uppercase tracking-wide text-white glow-brand transition hover:brightness-110 disabled:opacity-60"
         >
           {(activeMedia === 'image' ? pendingImageRequests > 0 : pendingVideoRequests > 0 || videoBusy) && <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />}
