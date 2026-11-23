@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { ApiError } from '../errors';
 import { debitUserCredits, refundUserCredits } from '../credits';
 import { getAdmin } from '../supabaseAdmin';
+import { applyVideoWatermark, isOwnerUser } from '../watermark';
 import { generateVeoSceneBuffer, stitchVideoBuffers } from '../veo';
 import { calculateUgcCost, type ProjectSceneDTO, type VideoEngineId, type VideoProjectDTO } from '../../shared/ugcContracts';
 import { hydrateProjectMedia, removeProjectMedia, signedMediaUrl, VIDEO_BUCKET } from '../storage';
@@ -121,7 +122,7 @@ projectRoutes.post('/:id/retry-scene', async (c) => {
       }
       if (!identityReferences.length) throw new ApiError('INVALID_INPUT', 'A foto do personagem não foi registrada neste Motion.');
     }
-    const buf = await generateVeoSceneBuffer({
+    const generated = await generateVeoSceneBuffer({
       prompt: `Retry UGC ad scene: ${scene.action ?? ''} Dialogue: "${scene.text}"`,
       engine,
       aspectRatio: aspect,
@@ -131,6 +132,7 @@ projectRoutes.post('/:id/retry-scene', async (c) => {
       durationSeconds: scene.duration_seconds || 8,
       modelOverride,
     });
+    const buf = await isOwnerUser(userId) ? await applyVideoWatermark(generated) : generated;
     const scenePath = `${userId}/${id}/scene-${scene.index}.mp4`;
     await admin.storage.from(VIDEO_BUCKET).upload(scenePath, buf, { contentType: 'video/mp4', upsert: true });
     const sceneUrl = await signedMediaUrl(scenePath);
@@ -138,8 +140,8 @@ projectRoutes.post('/:id/retry-scene', async (c) => {
       ...scene,
       status: 'done',
       video_url: sceneUrl,
-      flow_media_id: buf.flowMediaId,
-      flow_account_id: buf.flowAccountId,
+      flow_media_id: generated.flowMediaId,
+      flow_account_id: generated.flowAccountId,
       error: null,
     };
 

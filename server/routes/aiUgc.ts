@@ -209,7 +209,7 @@ async function processVideoProject(projectId: string, userId: string, generation
         : req.origin === 'avatar' && req.engine === 'omni-flash'
           ? await trimVideoToDuration(generated, s.durationSeconds ?? 8)
           : generated;
-      const buf = isOwnerUser(userId) ? await applyVideoWatermark(normalized) : normalized;
+      const buf = await isOwnerUser(userId) ? await applyVideoWatermark(normalized) : normalized;
       const scenePath = `${userId}/${projectId}/scene-${i}.mp4`;
       const uploaded = await admin.storage.from(VIDEO_BUCKET).upload(scenePath, buf, { contentType: 'video/mp4', upsert: true });
       if (uploaded.error) throw new Error(`Falha ao salvar cena: ${uploaded.error.message}`);
@@ -358,7 +358,7 @@ async function runBatchImageProject(opts: {
           imageDescriptions: item.imageDescriptions,
           modelOverride: await isUnlimitedUser(opts.userId) ? 'lowerpriority' : undefined,
         });
-        const branded = isOwnerUser(opts.userId) ? await applyWatermark(res.buffer) : res.buffer;
+        const branded = (await isOwnerUser(opts.userId)) ? await applyWatermark(res.buffer) : res.buffer;
         const path = `${opts.userId}/${projectId}/item-${index}.png`;
         await admin.storage.from(VIDEO_BUCKET).upload(path, branded, { contentType: 'image/png', upsert: true });
         const publicUrl = await signedMediaUrl(path);
