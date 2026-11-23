@@ -245,10 +245,10 @@ export function useCreateUgcProject() {
       setBusy(true);
       const proj = buildPreview();
       setBusy(false);
-      const destination = proj.origin === 'avatar' ? 'Avatar > Motion Control' : 'Projetos';
+      const destination = proj.origin === 'avatar' ? 'Avatar > Vídeos gerados' : 'Projetos';
       toast.success(`"${proj.title}" salvo em ${destination} (Prévia local — conecte o .env para gerar com IA real).`);
       notify({
-        title: proj.origin === 'avatar' ? 'Motion adicionado em Avatar' : 'Projeto adicionado na prévia',
+        title: proj.origin === 'avatar' ? 'Vídeo adicionado em Avatar' : 'Projeto adicionado na prévia',
         description: `${proj.title} (${proj.scene_count} item(ns)). Conecte o .env para renderização real.`,
         kind: 'info',
       });
@@ -284,8 +284,8 @@ export function useCreateUgcProject() {
       cost,
       () => addPreviewProject(req),
       () => api.createUgcVideo(req),
-      isAvatarCreation ? 'Motion salvo em Avatar' : 'Vídeo UGC iniciado',
-      isAvatarCreation ? 'Motion entrou em produção! Acompanhe em Avatar > Motion Control.' : 'Projeto entrou em produção! Acompanhe na tela Projetos.',
+      isAvatarCreation ? 'Vídeo salvo em Avatar' : 'Vídeo UGC iniciado',
+      isAvatarCreation ? 'Vídeo de Avatar entrou em produção! Acompanhe em Avatar > Vídeos gerados.' : 'Projeto entrou em produção! Acompanhe na tela Projetos.',
     );
   }
 

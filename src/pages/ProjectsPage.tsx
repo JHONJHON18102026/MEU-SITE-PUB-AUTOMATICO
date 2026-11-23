@@ -519,9 +519,9 @@ export function ProjectsPage() {
                   </section>
                 {motionVideoAsset && (
                   <section className="rounded-2xl border border-accent/25 bg-accent/5 p-3">
-                    <div className="flex items-center gap-2 text-xs font-bold text-fg"><Film className="size-4 text-accent" /> Vídeo usado no Motion Control</div>
+                    <div className="flex items-center gap-2 text-xs font-bold text-fg"><Film className="size-4 text-accent" /> Vídeo-base usado</div>
                     <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface-2 p-2">
-                      <span className="truncate text-[11px] font-semibold text-fg" title={motionVideoAsset.name}>{motionVideoAsset.name || 'Vídeo de movimento'}</span>
+                      <span className="truncate text-[11px] font-semibold text-fg" title={motionVideoAsset.name}>{motionVideoAsset.name || 'Vídeo-base'}</span>
                       {motionVideoAsset.url && <a href={motionVideoAsset.url} target="_blank" rel="noreferrer" className="shrink-0 text-[10px] font-bold text-accent hover:underline">Abrir</a>}
                     </div>
                   </section>

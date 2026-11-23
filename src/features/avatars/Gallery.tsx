@@ -48,7 +48,7 @@ function friendlyGenerationError(error: string) {
     return 'O vídeo-base não está disponível no Flow. Envie-o novamente ou escolha um vídeo da Biblioteca.';
   }
   if (normalized.includes('prev_media_id') || normalized.includes('source_video obrigatorio')) {
-    return 'Selecione um vídeo-base antes de iniciar o Motion Control.';
+    return 'Selecione um vídeo-base antes de gerar.';
   }
   if (normalized.includes('prominent_person') || normalized.includes('prominent people')) {
     return 'O provedor bloqueou esta geração pelas regras de conteúdo. Revise a pessoa e as referências.';

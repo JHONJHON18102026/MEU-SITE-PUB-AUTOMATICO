@@ -140,14 +140,13 @@ const PLANS = [
 const TOOL_CATALOG = [
   { title: 'Criar avatar', body: 'Rosto, características e mundo do personagem.', to: '/avatars', tag: 'INFLUENCER IA', icon: Bot, color: '#27c98f', image: '/showcase/hero-influencer.webp' },
   { title: 'Avatar com produto', body: 'Faça o influencer segurar e apresentar seu produto.', to: '/avatars?product=1', tag: 'INFLUENCER IA', icon: ImagePlus, color: '#7357de', image: '/showcase/modelo-03.webp' },
-  { title: 'Motion Control', body: 'Transfira movimentos virais para o seu avatar.', to: '/avatars?panel=motion', tag: 'MOVIMENTO', icon: Wand2, color: '#d532b5', image: '/showcase/modelo-04.webp' },
   { title: 'Explorar modelos', body: 'Comece com rostos e referências já prontos.', to: '/avatars?tab=explore', tag: 'REFERÊNCIAS', icon: Compass, color: '#ae4fe0', image: '/showcase/modelo-02.webp' },
   { title: 'Projetos', body: 'Acompanhe status, cenas, downloads e tentativas.', to: '/projects', tag: 'PRODUÇÃO', icon: Layers3, color: '#678ffe', image: '/showcase/modelo-05.webp' },
   { title: 'Biblioteca VIRAL', body: 'Pastas, perfis minerados e tendências por nicho.', to: '/viral', tag: 'VIRAL', icon: Flame, color: '#ef8354', image: '/showcase/modelo-06.webp' },
   { title: 'Remake Viral', body: 'Compare o original com a nova versão da sua marca.', to: '/ai-ugc/remake', tag: 'AI UGC', icon: Clapperboard, color: '#7c5cff', image: '/showcase/modelo-07.webp' },
   { title: 'Image Ads', body: 'Criativos de oferta em 1:1, 4:3 ou 9:16.', to: '/image-ads', tag: 'CRIATIVOS', icon: ImagePlus, color: '#16b9c7', image: '/showcase/modelo-08.webp' },
   { title: 'Brandbook IA', body: 'Paleta, voz, pilares e ganchos para sua marca.', to: '/studio/marca', tag: 'STUDIO', icon: Sparkles, color: '#845cff', image: '/showcase/modelo-09.webp' },
-  { title: 'Produção em massa', body: 'Creator Viral, POV, Monetiza View e Motion.', to: '/studio/criar', tag: 'STUDIO', icon: Workflow, color: '#f59e0b', image: '/showcase/hero-ugc.webp' },
+  { title: 'Produção em massa', body: 'Creator Viral, POV e campanhas em lote.', to: '/studio/criar', tag: 'STUDIO', icon: Workflow, color: '#f59e0b', image: '/showcase/hero-ugc.webp' },
   { title: 'Montagem final', body: '12 estilos de legenda e revisão antes de publicar.', to: '/studio/montagem', tag: 'STUDIO', icon: Film, color: '#ef5ab5', image: '/showcase/modelo-01.webp' },
   { title: 'Contas e agenda', body: 'Aquecimento, rotinas e publicação organizada.', to: '/studio/contas', tag: 'PUBLICAÇÃO', icon: Layers3, color: '#22c7b8', image: '/showcase/modelo-04.webp' },
 ];
