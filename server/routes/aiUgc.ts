@@ -139,7 +139,7 @@ function buildScenePrompt(req: CreateUgcVideoRequest, scene: { text: string; act
     .join('\n');
 }
 
-async function processVideoProject(projectId: string, userId: string, generationId: string, req: CreateUgcVideoRequest, totalCost: number) {
+async function processVideoProject(projectId: string, userId: string, generationId: string, req: CreateUgcVideoRequest, totalCost: number, settleRefund: (amount: number) => Promise<boolean>) {
   const admin = getAdmin();
   const unlimited = (await isUnlimitedUser(userId)) && req.engine !== 'omni-flash';
   const avatarCanvasLowerPriority = req.origin === 'avatar' && (req.mode === 'motion' || req.mode === 'avatar-video') && req.engine === 'veo-3.1-fast';
@@ -245,13 +245,8 @@ async function processVideoProject(projectId: string, userId: string, generation
     if (!thumbnailUpload.error) thumbnailUrl = await signedMediaUrl(thumbnailPath);
   }
 
-  const refunded = failedCount * costPerScene;
-  if (refunded > 0) await refundUserCredits({
-    userId,
-    amount: refunded,
-    refId: generationId,
-    chargeUnlimited: req.engine === 'omni-flash',
-  });
+  const refundAmount = failedCount * costPerScene;
+  const refunded = refundAmount > 0 && await settleRefund(refundAmount) ? refundAmount : 0;
 
   const status = readyBuffers.length === req.scenes.length ? 'done' : 'failed';
   const now = new Date().toISOString();
@@ -772,7 +767,20 @@ aiUgcRoutes.post('/create', async (c) => {
   // O callback assíncrono começa no próximo ciclo do event loop; assim o POST
   // devolve o projeto imediatamente, sem ficar aguardando o Veo/Rust.
   setImmediate(() => {
-    void processVideoProject(projectId, userId, generationId, req, billedCost).catch(async (err) => {
+    let refundAttempted = false;
+    const settleRefund = async (amount: number) => {
+      if (refundAttempted || amount <= 0) return false;
+      refundAttempted = true;
+      const balance = await refundUserCredits({ userId, amount, refId: generationId, chargeUnlimited: req.engine === 'omni-flash' });
+      if (balance === null) console.error('[video] Estorno não confirmado', { projectId, generationId, amount });
+      return balance !== null;
+    };
+    void processVideoProject(projectId, userId, generationId, req, billedCost, settleRefund).catch(async (err) => {
+      const refunded = await settleRefund(billedCost).catch((refundError) => {
+        console.error('[video] Falha ao estornar', { projectId, generationId, refundError });
+        return false;
+      });
+      if (refunded) await admin.from('video_projects').update({ refunded: billedCost }).eq('id', projectId);
       const message = err instanceof Error ? err.message : String(err);
       await admin.from('video_projects').update({ status: 'failed', error: message, completed_at: new Date().toISOString() }).eq('id', projectId);
       await admin.from('generations').update({ status: 'failed', error: message, completed_at: new Date().toISOString() }).eq('id', generationId);

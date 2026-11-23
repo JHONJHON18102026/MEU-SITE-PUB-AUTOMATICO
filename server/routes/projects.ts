@@ -48,9 +48,9 @@ projectRoutes.get('/', async (c) => {
   const projects = await Promise.all(
     rows.slice(0, limit).map(async (project) => {
       // Projetos pendentes/falhos não têm arquivos de saída assináveis; não consulte Storage.
-      if (project.status === 'processing' || project.status === 'failed') return project;
+      if (project.status === 'processing') return project;
       try {
-        const hydrated = await hydrateProjectMedia(project);
+        const hydrated = project.status === 'failed' ? project : await hydrateProjectMedia(project);
         return await hydrateProjectReferences(hydrated);
       } catch (err) {
         console.error('[api] não foi possível preparar a mídia do projeto:', project.id, err);
