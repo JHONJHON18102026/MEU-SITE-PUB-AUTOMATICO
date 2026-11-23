@@ -178,7 +178,15 @@ export function AgentDirectorPage() {
         return { name: `${role} · ${image.name}`.slice(0, 120), dataUrl: `data:${image.mimeType};base64,${image.data}` };
       }));
       const result = await api.createDirectorPlan({ presetId, briefing, objective, aspectRatio: format, durationSeconds: duration, references });
-      setPlan({ ...result.plan, referenceMode });
+      const audioDirection = 'Áudio obrigatório: todo diálogo, fala e narração devem ser exclusivamente em português do Brasil (pt-BR), com pronúncia brasileira. Se o roteiro trouxer falas em outro idioma, traduza-as para pt-BR antes de falá-las.';
+      const flowVideoPrompt = result.plan.flowVideoPrompt?.trim();
+      setPlan({
+        ...result.plan,
+        referenceMode,
+        ...(flowVideoPrompt ? {
+          flowVideoPrompt: audioDirection + '\n\n' + flowVideoPrompt.slice(0, 2000 - audioDirection.length - 2),
+        } : {}),
+      });
       toast.success('Plano de produção criado. Revise antes de aprovar.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível criar o plano.');
