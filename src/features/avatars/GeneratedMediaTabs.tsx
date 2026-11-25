@@ -211,7 +211,7 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject }: { pro
   }
 
   return (
-    <article className="group relative overflow-hidden rounded-xl border border-border bg-surface">
+    <article data-testid={`generated-video-card-${project.id}`} className="group relative overflow-hidden rounded-xl border border-border bg-surface">
       {project.status === 'done' && project.video_url ? (
         <div className="relative">
           <video
@@ -254,9 +254,9 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject }: { pro
         disabled={deleting}
         title="Excluir vídeo"
         aria-label={'Excluir vídeo ' + project.title}
-        className="absolute right-2 top-2 grid size-8 place-items-center rounded-lg border border-white/20 bg-black/70 text-white opacity-0 shadow-md transition hover:bg-red-600 group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+        className="absolute right-2 top-2 z-30 grid size-8 place-items-center rounded-lg border border-white/20 bg-black/80 text-white opacity-0 shadow-md transition hover:bg-red-600 group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <Trash2 className="size-3.5" />
+        {deleting ? <LoaderCircle className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
       </button>
       <div className="flex h-7 items-center px-2">
         <p className="truncate text-[11px] font-semibold" title={project.title}>{project.title}</p>
@@ -269,19 +269,77 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject }: { pro
       )}
       {project.video_url && (
         <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title={project.title} size="xl">
-          <div className="-mx-5 -my-4 grid max-h-[calc(90vh-4.5rem)] place-items-center bg-black">
-            <video
-              src={project.video_url}
-              poster={project.thumbnail_url}
-              controls
-              autoPlay
-              playsInline
-              className="max-h-[calc(90vh-4.5rem)] max-w-full object-contain"
-              aria-label={project.title}
-            />
+          <div className="grid max-h-[calc(90vh-5rem)] gap-4 overflow-y-auto md:grid-cols-[minmax(0,1fr)_minmax(240px,300px)]">
+            <div className="-mx-5 -mt-4 grid min-h-64 place-items-center bg-black md:mx-0 md:mt-0 md:rounded-xl">
+              <video
+                src={project.video_url}
+                poster={project.thumbnail_url}
+                controls
+                autoPlay
+                playsInline
+                className="max-h-[calc(90vh-8rem)] max-w-full object-contain"
+                aria-label={project.title}
+              />
+            </div>
+            <VideoGenerationDetails project={project} actualDuration={actualDuration} />
           </div>
         </Modal>
       )}
     </article>
   );
+}
+
+function VideoGenerationDetails({ project, actualDuration }: { project: VideoProjectDTO; actualDuration: number | null }) {
+  const params = project.params ?? {};
+  const assets = Array.isArray(params.reference_assets)
+    ? params.reference_assets.filter((asset): asset is Record<string, unknown> => Boolean(asset && typeof asset === 'object'))
+    : [];
+  const model = String(params.actual_engine ?? params.model_override ?? project.engine);
+  const prompt = project.scenes
+    .slice()
+    .sort((a, b) => a.index - b.index)
+    .map((scene) => [scene.text, scene.action].filter(Boolean).join('\n'))
+    .filter(Boolean)
+    .join('\n\n');
+
+  return (
+    <section className="space-y-3 pr-1 text-xs" aria-label="Detalhes da geração do vídeo" data-testid="video-generation-details">
+      <h4 className="font-bold text-fg">Detalhes da geração</h4>
+      <dl className="space-y-1.5 rounded-xl border border-border bg-surface-2 p-3">
+        <DetailValue label="Modelo" value={model} />
+        <DetailValue label="Custo" value={params.billing_mode === 'unlimited' || params.model_override === 'lowerpriority' ? `${project.cost} créditos · ilimitado` : `${project.cost} créditos`} />
+        {project.refunded > 0 && <DetailValue label="Estornado" value={`${project.refunded} créditos`} />}
+        <DetailValue label="Duração" value={`${actualDuration ?? project.duration_seconds} s`} />
+        <DetailValue label="Formato" value={project.aspect_ratio} />
+        <DetailValue label="Criado em" value={new Date(project.created_at).toLocaleString('pt-BR')} />
+        <DetailValue label="Modo de referência" value={params.reference_mode ?? undefined} />
+        <DetailValue label="Voz" value={params.voiceType ?? undefined} />
+        <DetailValue label="Legendas" value={params.captions === true ? 'Ativadas' : params.captions === false ? 'Desativadas' : undefined} />
+      </dl>
+      {prompt && (
+        <details open className="rounded-xl border border-border p-3 text-fg-muted">
+          <summary className="cursor-pointer font-semibold text-fg">Prompt e instruções</summary>
+          <p className="mt-2 whitespace-pre-wrap break-words">{prompt}</p>
+        </details>
+      )}
+      <div className="rounded-xl border border-border p-3">
+        <h5 className="font-semibold text-fg">Referências usadas ({assets.length})</h5>
+        {assets.length ? (
+          <ul className="mt-2 space-y-2">
+            {assets.map((asset, index) => (
+              <li key={`${String(asset.name ?? 'ref')}-${index}`} className="flex items-center gap-2">
+                {typeof asset.url === 'string' && <img src={asset.url} alt="" className="size-10 rounded-md border border-border object-cover" loading="lazy" />}
+                <span className="min-w-0 break-words text-fg-muted">{[asset.name, asset.kind].filter(Boolean).map(String).join(' · ') || `Referência ${index + 1}`}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="mt-1 text-fg-muted">Nenhuma referência salva nesta geração.</p>}
+      </div>
+    </section>
+  );
+}
+
+function DetailValue({ label, value }: { label: string; value: unknown }) {
+  if (value === undefined || value === null || value === '') return null;
+  return <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2"><dt className="text-fg-muted">{label}</dt><dd className="min-w-0 break-words font-medium text-fg">{String(value)}</dd></div>;
 }

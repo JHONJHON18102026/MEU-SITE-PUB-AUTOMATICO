@@ -148,6 +148,7 @@ async function processVideoProject(projectId: string, userId: string, generation
   const useLowerPriorityQueue = unlimited || avatarCanvasLowerPriority;
   const aspectForVeo: '9:16' | '16:9' = req.aspectRatio === '16:9' || req.aspectRatio === '4:3' ? '16:9' : '9:16';
   const legacyImage = toImageInput(req.avatarImageData) ?? toImageInput(req.productImageData);
+  const productImage = toImageInput(req.productImageData);
   // Canvas videos sent as Element references still need an opening image:
   // Flow's lowerpriority queue is reliable as image-to-video, not text-to-video.
   const avatarCanvasVideo = req.origin === 'avatar' && (req.mode === 'motion' || req.mode === 'avatar-video') && !req.motionVideoData;
@@ -201,7 +202,11 @@ async function processVideoProject(projectId: string, userId: string, generation
         endImageMimeType: endFrame?.mimeType,
         // In video editing the target avatar is an identity reference,
         // never a literal first frame replacing the source video's opening.
-        referenceImages: req.mode === 'motion' && legacyImage ? [legacyImage, ...elementImages] : elementImages,
+        referenceImages: req.mode === 'motion' && legacyImage
+          ? [legacyImage, ...elementImages]
+          : req.mode === 'avatar-video' && productImage
+            ? [...elementImages, productImage]
+            : elementImages,
         sourceVideoBytesBase64: motionVideo,
         sourceVideoMediaId: req.motionVideoMediaId,
         sourceVideoAccountId: req.motionVideoAccountId,
@@ -678,20 +683,25 @@ aiUgcRoutes.post('/create', async (c) => {
       if (url) motionVideoAsset = { name: req.motionVideoName || 'Vídeo de movimento', path, url };
     }
   }
-  const referenceInputs = req.referenceMode === 'frames'
+  const referenceInputs: Array<{ raw: string | undefined; kind: string; name?: string }> = req.referenceMode === 'frames'
     ? [
         { raw: req.startFrameImageData, kind: 'frame-inicial' },
         { raw: req.endFrameImageData, kind: 'frame-final' },
       ]
     : [
-        ...(req.origin === 'avatar' && req.avatarImageData ? [{ raw: req.avatarImageData, kind: 'avatar' }] : []),
-        ...(req.referenceImages ?? []).map((raw) => ({ raw, kind: 'elemento' })),
+        ...(req.origin === 'avatar' && req.avatarImageData ? [{ raw: req.avatarImageData, kind: 'avatar', name: 'Influencer' }] : []),
+        ...(req.origin === 'avatar' && req.productImageData ? [{ raw: req.productImageData, kind: 'product', name: 'Produto' }] : []),
+        ...(req.referenceImages ?? []).map((raw, index) => ({ raw, kind: 'elemento', name: req.referenceImageNames?.[index] })),
       ];
+  const storedReferenceBytes = new Set<string>();
   for (const [index, ref] of referenceInputs.entries()) {
+    const rawBytes = ref.raw?.replace(/^data:[^,]*,/, '');
+    if (!rawBytes || storedReferenceBytes.has(rawBytes)) continue;
+    storedReferenceBytes.add(rawBytes);
     const image = toImageInput(ref.raw);
     if (!image) continue;
     const ext = image.mimeType === 'image/png' ? 'png' : image.mimeType === 'image/webp' ? 'webp' : 'jpg';
-    const suppliedName = req.referenceImageNames?.[index]?.trim();
+    const suppliedName = ref.name?.trim();
     const safeName = (suppliedName || `${ref.kind}-${index + 1}`).replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80);
     const path = `${userId}/${projectId}/references/${index + 1}-${safeName}.${ext}`;
     const upload = await admin.storage.from(VIDEO_BUCKET).upload(path, Buffer.from(image.data, 'base64'), { contentType: image.mimeType, upsert: true });

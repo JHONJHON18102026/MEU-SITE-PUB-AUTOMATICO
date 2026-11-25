@@ -248,7 +248,15 @@ async function installMocks(page) {
       cost,
       refunded: 0,
       thumbnail_url: body.avatarUrl || '/showcase/modelo-01.webp',
-      video_url: null,
+      video_url: '/showcase/demo-video.mp4',
+      params: {
+        voiceType: body.voiceType,
+        captions: body.captions,
+        reference_mode: body.referenceMode,
+        actual_engine: body.engine === 'omni-flash' ? 'omni-flash-1.2' : body.engine,
+        billing_mode: body.engine === 'veo-3.1-lowerpriority' ? 'unlimited' : 'credits',
+        reference_assets: (body.referenceImageNames || []).map((name, index) => ({ kind: 'elemento', name, url: '/showcase/modelo-01.webp', path: `fixture/${index}.jpg` })),
+      },
       scenes: (body.scenes || []).map((s, idx) => ({
         index: idx,
         text: s.text,
@@ -862,6 +870,26 @@ async function run() {
         !state.projects.filter((project) => (project.origin || 'projects') === 'projects').some((project) => project.mode === 'avatar-video'),
       'Vídeos com templates ficam em Avatares e não são duplicados em Projetos',
     );
+
+    const generatedVideo = state.projects.find((project) => project.origin === 'avatar' && project.video_url);
+    const projectCardToDelete = page.getByTestId(`generated-video-card-${generatedVideo.id}`);
+    const openGeneratedVideo = projectCardToDelete.getByRole('button', { name: `Abrir vídeo ${generatedVideo.title} em tela cheia` });
+    await openGeneratedVideo.click();
+    const generationDetails = page.getByTestId('video-generation-details');
+    await generationDetails.waitFor();
+    const shownVideoDetails = await generationDetails.innerText();
+    check(
+      shownVideoDetails.includes('Prompt e instruções') &&
+        shownVideoDetails.includes(generatedVideo.scenes[0]?.text || '') && Boolean(generatedVideo.scenes[0]?.text) &&
+        shownVideoDetails.includes(`${generatedVideo.cost} créditos`) &&
+        shownVideoDetails.includes('Referências usadas'),
+      'Abrir vídeo mostra prompt, custo e referências usados na geração',
+    );
+    await page.getByRole('button', { name: 'Fechar' }).click();
+    page.once('dialog', (dialog) => dialog.accept());
+    await projectCardToDelete.getByRole('button', { name: `Excluir vídeo ${generatedVideo.title}` }).click();
+    await projectCardToDelete.waitFor({ state: 'detached' });
+    check(!state.projects.some((project) => project.id === generatedVideo.id), 'Lixeira do vídeo chama DELETE e remove o card após confirmação (mock isolado)');
 
     state.balance = 10;
     await page.goto(`${BASE}/image-ads`);
