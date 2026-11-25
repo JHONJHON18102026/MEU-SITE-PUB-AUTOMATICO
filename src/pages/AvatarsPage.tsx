@@ -139,7 +139,7 @@ export function AvatarsPage() {
                 </div>
               )}
 
-              <div className="mt-6 w-full max-w-[1024px]">
+              <div className="mt-6 w-full max-w-[1600px] 2xl:max-w-[1880px]">
                 <PromptComposer onGenerate={() => void generate('prompt')} onVideo={() => setStudio({ panelTab: 'templates', composerMode: 'video' })} pendingImageRequests={pendingImageRequests} pendingVideoRequests={pendingVideoRequests} highlightProduct={wantsProduct} />
                 <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-fg-subtle">
                   <Lock className="size-3" />

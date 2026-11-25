@@ -55,7 +55,7 @@ export function GeneratedMediaTabs({ projects, projectsLoading = false, projects
 
   return (
     <>
-    <section className="mt-4 w-full max-w-[1024px] text-left" aria-label="Resultados gerados">
+    <section className="mt-4 w-full max-w-[1600px] 2xl:max-w-[1880px] text-left" aria-label="Resultados gerados">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-fg">Seus resultados</h3>
         <div className="flex flex-wrap gap-1 rounded-xl bg-surface-2/80 p-1" role="tablist" aria-label="Tipo de resultado gerado">
@@ -81,7 +81,7 @@ export function GeneratedMediaTabs({ projects, projectsLoading = false, projects
         avatars.loading ? (
           <div className="skeleton h-28 rounded-2xl" />
         ) : avatars.data.length ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
             {avatars.data.map((avatar) => (
               <GeneratedImageCard key={avatar.id} avatar={avatar} onOpen={() => setSelectedAvatar(avatar)} />
             ))}
@@ -162,7 +162,7 @@ function ProjectMedia({ projects, loadingMore, hasMore, onLoadMore, onDeleteProj
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
       {projects.map((project) => (
         <ProjectMediaCard key={project.id} project={project} onDeleteProject={onDeleteProject} onRecreateProject={onRecreateProject} />
       ))}
