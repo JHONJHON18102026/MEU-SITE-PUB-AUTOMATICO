@@ -16,6 +16,7 @@ import { getAdmin } from '../supabaseAdmin';
 import { applyVideoWatermark, applyWatermark, isOwnerUser } from '../watermark';
 import { signedMediaUrl, VIDEO_BUCKET } from '../storage';
 import { toImageInput } from '../imageInput';
+import { buildAvatarReferenceGuidance, explainVideoGenerationFailure } from '../videoGenerationDiagnostics';
 import {
   extractProductFromUrl,
   generateHooksWithGemini,
@@ -91,11 +92,12 @@ function buildScenePrompt(req: CreateUgcVideoRequest, scene: { text: string; act
   }
 
   if (req.mode === 'avatar-video') {
+    const hasPersonReference = Boolean(req.avatarImageData || req.avatarUrl);
     return [
       `Natural ${ratio} creator video scene ${idx + 1}.`,
       req.avatarPrompt || scene.action || scene.text,
-      req.productName ? `Present the product faithfully: ${req.productName}.` : '',
-      'Preserve the selected influencer identity and the key details in the attached references.',
+      req.productImageData || req.productName ? `Present the product faithfully${req.productName ? `: ${req.productName}` : ''}. Preserve its visible design and do not invent product claims.` : '',
+      hasPersonReference ? 'Preserve the person identity only from the INFLUENCIADOR reference.' : '',
       'Use believable human movement, coherent camera motion, natural lighting, and no generated captions, logos, or watermarks.',
     ]
       .filter(Boolean)
@@ -175,7 +177,14 @@ async function processVideoProject(projectId: string, userId: string, generation
         prompt: [
           buildScenePrompt(req, s, i),
           motionVideo ? 'Use the uploaded motion reference video as the exact source for body movement, timing, gestures and camera rhythm. Transfer that motion to the selected avatar while preserving the avatar identity and wardrobe.' : '',
-          req.referenceMode === 'elements'
+          req.mode === 'avatar-video'
+            ? buildAvatarReferenceGuidance({
+              hasAvatarReference: Boolean(req.avatarImageData || req.avatarUrl),
+              hasProductReference: Boolean(req.productImageData),
+              hasExplicitStartFrame: Boolean(req.startFrameImageData),
+              elementNames: req.referenceImageNames,
+            })
+            : req.referenceMode === 'elements'
             ? [
               'Use the uploaded Element references as identity and appearance constraints. Render one coherent cinematic scene, never a collage, contact sheet, split screen, or visible reference board. Preserve the same face, hair, clothing, colors, product design, and distinctive details throughout the shot.',
               startFrame ? 'Use the selected opening image as a visual identity and appearance reference; preserve its person, clothing and product while creating a coherent moving scene.' : '',
@@ -224,7 +233,9 @@ async function processVideoProject(projectId: string, userId: string, generation
       readyBuffers.push(buf);
     } catch (err) {
       failedCount++;
-      lastError = err instanceof Error ? err.message : String(err);
+      const rawError = err instanceof Error ? err.message : String(err);
+      lastError = explainVideoGenerationFailure(rawError, req.engine ?? 'veo-3.1-fast');
+      console.error('[video] Falha no motor de vídeo', { projectId, generationId, engine: req.engine ?? 'veo-3.1-fast', code: lastError.match(/\(([^)]+)\)/)?.[1] ?? null });
       sceneOutputs[i] = { ...sceneOutputs[i]!, status: 'failed', error: lastError };
     }
     await admin.from('video_projects').update({ scenes: sceneOutputs }).eq('id', projectId);
