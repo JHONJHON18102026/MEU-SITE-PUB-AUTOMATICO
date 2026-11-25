@@ -20,6 +20,8 @@ function useQuery<T>(fetcher: () => Promise<T[]>, deps: unknown[], refreshEveryM
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const lastFetchedAt = useRef(0);
+  const hasLoadedRef = useRef(false);
+  const previousRunRef = useRef<(() => Promise<T[]>) | null>(null);
   const version = useGalleryVersion((s) => s.version);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -27,9 +29,17 @@ function useQuery<T>(fetcher: () => Promise<T[]>, deps: unknown[], refreshEveryM
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    // A versão muda também enquanto uma geração está em andamento. Não troque
+    // a galeria pronta por um skeleton nesse refetch: mantenha os cards visíveis.
+    if (previousRunRef.current !== run) {
+      previousRunRef.current = run;
+      hasLoadedRef.current = false;
+      setData([]);
+      setError(null);
+    }
+    if (!hasLoadedRef.current) setLoading(true);
     run()
-      .then((rows) => alive && (lastFetchedAt.current = Date.now(), setData(rows), setError(null)))
+      .then((rows) => alive && (lastFetchedAt.current = Date.now(), hasLoadedRef.current = true, setData(rows), setError(null)))
       .catch((err: unknown) => alive && setError(err instanceof Error ? err.message : String(err)))
       .finally(() => alive && setLoading(false));
     return () => {
@@ -43,7 +53,7 @@ function useQuery<T>(fetcher: () => Promise<T[]>, deps: unknown[], refreshEveryM
     const refreshIfStaleAndVisible = () => {
       if (document.visibilityState !== 'visible' || Date.now() - lastFetchedAt.current < refreshEveryMs) return;
       run()
-        .then((rows) => alive && (lastFetchedAt.current = Date.now(), setData(rows), setError(null)))
+        .then((rows) => alive && (lastFetchedAt.current = Date.now(), hasLoadedRef.current = true, setData(rows), setError(null)))
         .catch((err: unknown) => alive && setError(err instanceof Error ? err.message : String(err)));
     };
     const timer = window.setInterval(refreshIfStaleAndVisible, Math.min(refreshEveryMs, 60_000));
@@ -60,6 +70,18 @@ function useQuery<T>(fetcher: () => Promise<T[]>, deps: unknown[], refreshEveryM
 
 export function useMyAvatars() {
   const userId = useSession((s) => s.session?.user.id);
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !userId) return;
+    const channel = client
+      .channel(`my-avatars:${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'avatars', filter: `user_id=eq.${userId}` }, () => {
+        useGalleryVersion.getState().bump();
+      })
+      .subscribe();
+    return () => { void client.removeChannel(channel); };
+  }, [userId]);
+
   return useQuery<AvatarDTO>(async () => {
     if (!supabase || !userId) return [];
     const { avatars } = await api.listAvatars('mine');

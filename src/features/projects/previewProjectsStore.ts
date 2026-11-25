@@ -4,7 +4,7 @@
  *  - Sem chaves (Modo Prévia Visual): armazena demonstrações locais marcadas explicitamente com "Prévia local (sem IA)"
  *    para que o usuário possa clicar em tudo sem tela travada e sem enganação.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
@@ -151,6 +151,7 @@ export function useProjectsData(origin: 'projects' | 'avatar' = 'projects') {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async (nextPage = 1, silent = false) => {
     if (!isSupabaseConfigured) {
@@ -181,7 +182,11 @@ export function useProjectsData(origin: 'projects' | 'avatar' = 'projects') {
   }, [deletePreviewProject]);
 
   useEffect(() => {
-    void load();
+    // Revalida em background quando um projeto muda, mantendo os resultados
+    // atuais no lugar enquanto o servidor confirma o novo estado.
+    const silent = hasLoadedRef.current;
+    hasLoadedRef.current = true;
+    void load(1, silent);
   }, [load, preview.version]);
 
   useEffect(() => {

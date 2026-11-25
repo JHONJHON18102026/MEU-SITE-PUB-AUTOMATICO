@@ -141,6 +141,20 @@ function EmptyMedia({ text }: { text: string }) {
   return <div className="rounded-2xl border border-dashed border-border px-4 py-7 text-center text-xs text-fg-muted">{text}</div>;
 }
 
+function videoFailureHint(error: string | null) {
+  if (!error) return 'O vídeo não foi concluído. Abra Projetos > Histórico para ver o registro completo.';
+  if (/failed to decrypt token|sem bearer_token|conta_1.*token/i.test(error)) {
+    return 'A sessão da conta 1 no Google Flow precisa ser autenticada novamente.';
+  }
+  if (/timeout|timed out|limite total.*atingido/i.test(error)) {
+    return 'O motor Hust/Flow excedeu o tempo limite. Tente novamente quando a conta estiver disponível.';
+  }
+  if (/ffprobe|ffmpeg/i.test(error)) {
+    return 'O Flow gerou a mídia, mas o processamento final do vídeo falhou.';
+  }
+  return error.split('\n')[0]!.slice(0, 180);
+}
+
 function ProjectMedia({ projects, loadingMore, hasMore, onLoadMore, onDeleteProject, onRecreateProject }: { projects: VideoProjectDTO[]; loadingMore: boolean; hasMore: boolean; onLoadMore?: () => void; onDeleteProject: (project: VideoProjectDTO) => Promise<void>; onRecreateProject: (project: VideoProjectDTO) => void }) {
   if (!projects.length) {
     return <EmptyMedia text='Os vídeos gerados aparecerão aqui.' />;
@@ -247,6 +261,11 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject }: { pro
         <p className="truncate text-[11px] font-semibold" title={project.title}>{project.title}</p>
         {project.status === 'done' && actualDuration !== null && <span className="sr-only">{actualDuration} segundos</span>}
       </div>
+      {project.status === 'failed' && (
+        <p className="line-clamp-2 px-2 pb-2 text-[10px] leading-relaxed text-danger" title={project.error ?? undefined}>
+          {videoFailureHint(project.error)}
+        </p>
+      )}
       {project.video_url && (
         <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title={project.title} size="xl">
           <div className="-mx-5 -my-4 grid max-h-[calc(90vh-4.5rem)] place-items-center bg-black">
