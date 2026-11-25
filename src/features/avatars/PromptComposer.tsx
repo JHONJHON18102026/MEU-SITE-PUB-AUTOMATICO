@@ -70,7 +70,7 @@ function Slot({
   );
 }
 
-export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, pendingVideoRequests = 0, highlightProduct }: { onGenerate: () => void; onVideo: () => void; pendingImageRequests?: number; pendingVideoRequests?: number; highlightProduct?: boolean }) {
+export function PromptComposer({ onGenerate, pendingImageRequests = 0, pendingVideoRequests = 0, highlightProduct }: { onGenerate: () => void; pendingImageRequests?: number; pendingVideoRequests?: number; highlightProduct?: boolean }) {
   const st = useAvatarStudio();
   const media = st.composerMode;
   const [enhancing, setEnhancing] = useState(false);
@@ -95,11 +95,6 @@ export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [promptExpanded]);
-
-  function openVideoTemplates() {
-    st.set({ composerMode: 'video', panelTab: 'templates' });
-    onVideo();
-  }
 
   async function enhance() {
     if (!isSupabaseConfigured) {
@@ -277,7 +272,7 @@ export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, 
         </div>
       </div>
 
-      {/* Slots INFLUENCER, PRODUTO, VÍDEO e CTA GERAR. */}
+      {/* Slots INFLUENCER, PRODUTO e CTA GERAR. */}
       <div className="flex w-full shrink-0 items-stretch gap-2 sm:w-auto sm:justify-end">
         <Slot
           label="INFLUENCER"
@@ -311,18 +306,6 @@ export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, 
               <Plus className="size-3.5" />
             </span>
           </ImagePicker>
-        </Slot>
-        <Slot label="VÍDEO" preview={null} onClear={() => undefined}>
-          <button
-            type="button"
-            onClick={openVideoTemplates}
-            className="absolute inset-0 transition hover:bg-surface-3/60"
-            aria-label="Abrir templates de vídeo"
-          >
-            <span className="pointer-events-none absolute left-2 top-2 flex size-6 items-center justify-center rounded-full border border-fg/25 text-fg-muted">
-              <Plus className="size-3.5" />
-            </span>
-          </button>
         </Slot>
         <button
           onClick={activeMedia === 'video' ? () => void st.videoSubmit?.() : onGenerate}

@@ -346,3 +346,9 @@ Este resumo é o estado mais recente para retomada; os registros anteriores acim
 - A aba Avatar busca projetos em páginas de 24 registros brutos, mas parte deles pode ser motion ou ter sido substituída; por isso a primeira página mostrava só 10 vídeos atuais mesmo havendo mais histórico.
 - A galeria agora pagina automaticamente até reunir 16 vídeos atuais (ou esgotar os registros disponíveis), exibe 16 por lote e mantém `Carregar mais vídeos` para avançar. O total exibido continua baseado em vídeos reais salvos, sem criar cartões artificiais.
 - A correção foi publicada no commit `bbe56ce`. O bundle público do domínio oficial contém a lógica de lote 16 e autopaginação. Build local aprovado; nenhum job de geração de mídia foi iniciado nesta mudança.
+
+### 2026-11-25 — Remoção do slot VÍDEO no canvas Avatar
+
+- Solicitação: retirar o terceiro slot `VÍDEO`, que não será usado. A remoção afeta apenas a área de anexos do canvas.
+- `INFLUENCER`, `PRODUTO`, alternância Imagem/Vídeo, seleção do modelo e botão GERAR continuam disponíveis. O slot não acionava geração de vídeo; apenas abria a aba de templates.
+- Build local aprovado antes da publicação. A mudança será espelhada pela Vercel após o push ao branch `main`; nenhuma configuração da VPS ou geração de mídia é necessária.
