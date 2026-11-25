@@ -28,11 +28,12 @@ export function GeneratedMediaTabs({ projects, projectsLoading = false, projects
   const videos = useMemo(() => {
     const allVideos = projects.filter((project) => project.mediaType !== 'motion');
     const explicitlyReplaced = new Set(allVideos
+      .filter((project) => project.status !== 'failed')
       .map((project) => project.params?.replaces_project_id)
       .filter((id): id is string => typeof id === 'string'));
     const implicitlyReplaced = new Set(allVideos
       .filter((project) => project.status === 'failed')
-      .filter((failed) => allVideos.some((candidate) => candidate.id !== failed.id
+      .filter((failed) => allVideos.some((candidate) => candidate.id !== failed.id && candidate.status !== 'failed'
         && candidate.title === failed.title
         && Date.parse(candidate.created_at) > Date.parse(failed.created_at)))
       .map((project) => project.id));

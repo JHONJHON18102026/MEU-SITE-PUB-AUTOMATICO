@@ -531,9 +531,11 @@ aiUgcRoutes.post('/create', async (c) => {
   const req = parsed.data;
   if (req.replacesProjectId) {
     if (req.origin !== 'avatar') throw new ApiError('INVALID_INPUT', 'Só é possível substituir uma geração da aba Avatar.');
-    const previous = await getAdmin().from('video_projects').select('id,status,origin').eq('id', req.replacesProjectId).eq('user_id', userId).maybeSingle();
-    if (previous.error || !previous.data || previous.data.origin !== 'avatar' || previous.data.status !== 'failed') {
-      throw new ApiError('INVALID_INPUT', 'A geração falhada que seria substituída não está mais disponível.');
+    const previous = await getAdmin().from('video_projects').select('id,status,origin,video_url').eq('id', req.replacesProjectId).eq('user_id', userId).maybeSingle();
+    const isReplaceable = previous.data?.status === 'failed'
+      || (previous.data?.status === 'done' && Boolean(previous.data.video_url));
+    if (previous.error || !previous.data || previous.data.origin !== 'avatar' || !isReplaceable) {
+      throw new ApiError('INVALID_INPUT', 'O vídeo original não está mais disponível para substituição.');
     }
   }
   // No Avatar, o Omni fica limitado a 10 s para que duração, crédito e vídeo final coincidam.
