@@ -241,7 +241,7 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject }: { pro
         </div>
       )}
       {project.status === 'failed' || (project.status === 'done' && Boolean(project.video_url)) ? (
-        <button type="button" onClick={() => void handleRecreate()} disabled={recreating} title="Criar outra versão deste vídeo" aria-label={"Recriar vídeo " + project.title} className="absolute left-2 top-2 z-20 inline-flex items-center gap-1.5 rounded-md border border-accent/50 bg-surface/95 px-2 py-1 text-[10px] font-bold text-fg shadow-md transition hover:bg-accent hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <button type="button" onClick={() => void handleRecreate()} disabled={recreating} title="Criar outra versão deste vídeo" aria-label={"Recriar vídeo " + project.title} className="absolute left-2 top-2 z-20 inline-flex items-center gap-1.5 rounded-md border border-accent/50 bg-surface/95 px-2 py-1 text-[10px] font-bold text-fg opacity-0 shadow-md transition hover:bg-accent hover:text-white group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
           <RefreshCcw className={recreating ? "size-3 animate-spin" : "size-3"} /> {recreating ? "Enviando…" : "Recriar"}
         </button>
       ) : project.status === 'processing' ? (
