@@ -318,13 +318,31 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject, onOpenP
 }
 
 function VideoPreviewModal({ project, projects, onNavigate, onClose }: { project: VideoProjectDTO | null; projects: VideoProjectDTO[]; onNavigate: (project: VideoProjectDTO) => void; onClose: () => void }) {
-  if (!project) return null;
-  const currentIndex = projects.findIndex((item) => item.id === project.id);
+  const currentIndex = project ? projects.findIndex((item) => item.id === project.id) : -1;
   const canNavigate = currentIndex >= 0 && projects.length > 1;
+
+  useEffect(() => {
+    if (!project || !canNavigate) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+      if (event.key === 'ArrowLeft' && currentIndex > 0) {
+        event.preventDefault();
+        onNavigate(projects[currentIndex - 1]!);
+      } else if (event.key === 'ArrowRight' && currentIndex < projects.length - 1) {
+        event.preventDefault();
+        onNavigate(projects[currentIndex + 1]!);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [project, canNavigate, currentIndex, projects, onNavigate]);
+
+  if (!project) return null;
   return (
     <Modal open={Boolean(project)} onClose={onClose} title={project.title} size="xl">
-      <div className="grid max-h-[calc(90vh-5rem)] gap-4 overflow-y-auto md:grid-cols-[minmax(0,1fr)_minmax(240px,300px)]">
-        <div className="relative -mx-5 -mt-4 grid min-h-64 place-items-center bg-black md:mx-0 md:mt-0 md:rounded-xl">
+      <div className="grid gap-4 md:h-[70vh] md:min-h-[240px] md:max-h-[680px] md:grid-cols-[minmax(0,1fr)_minmax(240px,300px)]">
+        <div className="relative -mx-5 -mt-4 flex h-[55vh] min-h-[240px] max-h-[680px] items-center justify-center bg-black md:mx-0 md:mt-0 md:h-full md:min-h-0 md:rounded-xl">
           <video
             key={project.id}
             src={project.video_url ?? undefined}
@@ -332,7 +350,7 @@ function VideoPreviewModal({ project, projects, onNavigate, onClose }: { project
             controls
             autoPlay
             playsInline
-            className="max-h-[calc(90vh-8rem)] max-w-full object-contain"
+            className="h-full w-full object-contain"
             aria-label={project.title}
           />
           {canNavigate && <>
@@ -345,7 +363,9 @@ function VideoPreviewModal({ project, projects, onNavigate, onClose }: { project
             <span className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white">{currentIndex + 1} / {projects.length}</span>
           </>}
         </div>
-        <VideoGenerationDetails project={project} actualDuration={null} />
+        <div className="pr-1 md:min-h-0 md:overflow-y-auto md:thin-scroll">
+          <VideoGenerationDetails project={project} actualDuration={null} />
+        </div>
       </div>
     </Modal>
   );

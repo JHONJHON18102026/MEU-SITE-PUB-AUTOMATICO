@@ -18,6 +18,9 @@ export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: {
   const studio = useAvatarStudio();
   const [working, setWorking] = useState<string | null>(null);
   const [generationParams, setGenerationParams] = useState<Record<string, unknown> | null>(null);
+  const currentIndex = avatar ? items.findIndex((item) => item.id === avatar.id) : -1;
+  const canNavigate = currentIndex >= 0 && items.length > 1 && Boolean(onNavigate);
+
   useEffect(() => {
     let current = true;
     setGenerationParams(null);
@@ -32,9 +35,25 @@ export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: {
       });
     return () => { current = false; };
   }, [avatar?.generation_id]);
+
+  useEffect(() => {
+    if (!avatar || !canNavigate || !onNavigate) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+      if (event.key === 'ArrowLeft' && currentIndex > 0) {
+        event.preventDefault();
+        onNavigate(items[currentIndex - 1]!);
+      } else if (event.key === 'ArrowRight' && currentIndex < items.length - 1) {
+        event.preventDefault();
+        onNavigate(items[currentIndex + 1]!);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [avatar, canNavigate, currentIndex, items, onNavigate]);
+
   if (!avatar) return null;
-  const currentIndex = items.findIndex((item) => item.id === avatar.id);
-  const canNavigate = currentIndex >= 0 && items.length > 1 && Boolean(onNavigate);
   const mine = avatar.user_id === userId;
   const isShowcase = avatar.user_id === 'showcase';
 
@@ -106,9 +125,9 @@ export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: {
 
   return (
     <Modal open={Boolean(avatar)} onClose={onClose} title={avatar.name} size="xl">
-      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="relative overflow-hidden rounded-2xl bg-surface-2">
-          <img src={avatar.image_url} alt={avatar.name} className="mx-auto max-h-[70vh] w-auto object-contain" />
+      <div className="grid gap-6 md:h-[70vh] md:min-h-[240px] md:max-h-[680px] md:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="relative flex h-[55vh] min-h-[240px] max-h-[680px] items-center justify-center overflow-hidden rounded-2xl bg-surface-2 md:h-full md:min-h-0">
+          <img src={avatar.image_url} alt={avatar.name} className="h-full w-full object-contain" />
           {canNavigate && <>
             <button type="button" onClick={() => onNavigate?.(items[currentIndex - 1]!)} disabled={currentIndex === 0} aria-label="Imagem anterior" title="Imagem anterior" className="absolute left-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg backdrop-blur transition hover:bg-black/85 disabled:pointer-events-none disabled:opacity-35">
               <ArrowLeft className="size-5" />
@@ -119,7 +138,7 @@ export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: {
             <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white">{currentIndex + 1} / {items.length}</span>
           </>}
         </div>
-        <div className="space-y-4">
+        <div className="space-y-4 pr-1 md:min-h-0 md:overflow-y-auto md:thin-scroll">
           <div className="text-xs text-fg-subtle">
             {isShowcase
               ? `Modelo de referência · ${avatar.aspect_ratio}`
