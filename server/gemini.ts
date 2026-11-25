@@ -17,6 +17,8 @@ import { ApiError } from './errors';
 import type { AspectRatio, EngineId, ImageInput } from '../shared/contracts';
 import { directorPlanSchema, type DirectorPlan, type DirectorPlanRequest, type DirectorPresetId } from '../shared/directorContracts';
 import { calculateUgcCost } from '../shared/ugcContracts';
+import { DIRECTOR_SPEECH_RESERVE_SECONDS, directorDialogueWordLimit, fitDirectorDialogue } from '../src/lib/directorSpeech';
+export { directorDialogueWordLimit, fitDirectorDialogue } from '../src/lib/directorSpeech';
 
 let client: GoogleGenAI | null = null;
 export function getClient(): GoogleGenAI {
@@ -262,31 +264,6 @@ function prependMandatoryPromptRule(prompt: string | undefined, rule: string, li
   const creative = (prompt ?? '').trim();
   const available = Math.max(0, limit - prefix.length - 2);
   return prefix + (creative ? '\n\n' + creative.slice(0, available) : '');
-}
-
-const DIRECTOR_SPEECH_RESERVE_SECONDS = 1.5;
-const DIRECTOR_SPEECH_WORDS_PER_SECOND = 1.8;
-
-export function directorDialogueWordLimit(durationSeconds: number): number {
-  const speechSeconds = Math.max(0, durationSeconds - DIRECTOR_SPEECH_RESERVE_SECONDS);
-  return Math.max(1, Math.floor(speechSeconds * DIRECTOR_SPEECH_WORDS_PER_SECOND));
-}
-
-export function fitDirectorDialogue(text: string, maxWords: number): string {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  const words = normalized.match(/\S+/g) ?? [];
-  if (words.length <= maxWords) return normalized;
-
-  const sentences = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
-  const kept: string[] = [];
-  for (const sentence of sentences) {
-    const candidate = [...kept, sentence.trim()].filter(Boolean).join(' ');
-    if ((candidate.match(/\S+/g) ?? []).length > maxWords) break;
-    kept.push(sentence.trim());
-  }
-  if (kept.length) return kept.join(' ');
-
-  return words.slice(0, maxWords).join(' ').replace(/[,:;–-]+$/, '') + '.';
 }
 
 const DIRECTOR_VIDEO_CONTINUITY_LOCK = 'CONTINUIDADE VISUAL OBRIGATÓRIA: anatomia humana correta e estável quadro a quadro. Nunca gerar terceira mão, mãos/dedos/membros extras, duplicados ou deformados, mãos desconectadas, objetos que surgem/desaparecem, flicker, morphing involuntário ou outros artefatos. Quando mãos forem necessárias, mostrar no máximo duas, com cinco dedos cada, ligadas corretamente aos braços. Usar gestos simples, lentos e contínuos, uma ação por vez; preservar identidade, roupa e produto sem duplicar ou deformar.';

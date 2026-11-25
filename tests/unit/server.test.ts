@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { applyWatermark } from '../../server/watermark';
-import { directorDialogueWordLimit, fitDirectorDialogue, pickModel } from '../../server/gemini';
+import { pickModel } from '../../server/gemini';
+import { countDirectorDialogueWords, directorDialogueWordLimit, fitDirectorDialogue } from '../../src/lib/directorSpeech';
 
 describe("marca d'água FUTURO DIGITAL", () => {
   it('mantém o tamanho da imagem e altera o canto superior esquerdo (onde fica a logo)', async () => {
@@ -58,6 +59,11 @@ describe('duração segura da fala do Agente Diretor', () => {
     expect(directorDialogueWordLimit(10)).toBe(15);
     expect(directorDialogueWordLimit(15)).toBe(24);
   });
+
+    it('conta palavras para proteger falas editadas antes do canvas', () => {
+      expect(countDirectorDialogueWords('  Olá,   veja este produto.  ')).toBe(4);
+      expect(countDirectorDialogueWords('')).toBe(0);
+    });
 
   it('preserva frases completas quando o roteiro passa do limite', () => {
     expect(fitDirectorDialogue('Gancho curto. Apresentação do produto. Clique no carrinho e garanta o seu!', 7))
