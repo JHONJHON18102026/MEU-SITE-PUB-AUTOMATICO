@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { Film, Image as ImageIcon, LoaderCircle, RefreshCcw, Trash2 } from 'lucide-react';
@@ -11,6 +11,7 @@ import { useGalleryVersion, useMyAvatars } from './useAvatarData';
 import { api } from '@/lib/api';
 
 type MediaTab = 'images' | 'videos';
+const VIDEO_BATCH_SIZE = 16;
 
 const MEDIA_TABS: { id: MediaTab; label: string; icon: typeof ImageIcon }[] = [
   { id: 'images', label: 'Imagens geradas', icon: ImageIcon },
@@ -24,6 +25,8 @@ export function GeneratedMediaTabs({ projects, projectsLoading = false, projects
   const [active, setActive] = useState<MediaTab>(() => resolveMedia(requestedMedia));
   useEffect(() => setActive(resolveMedia(requestedMedia)), [requestedMedia]);
   const [selectedAvatar, setSelectedAvatar] = useState<AvatarDTO | null>(null);
+  const [visibleVideoCount, setVisibleVideoCount] = useState(VIDEO_BATCH_SIZE);
+  const autoPageRequestedForSize = useRef<number | null>(null);
   const avatars = useMyAvatars();
   const videos = useMemo(() => {
     const allVideos = projects.filter((project) => project.mediaType !== 'motion');
@@ -45,8 +48,27 @@ export function GeneratedMediaTabs({ projects, projectsLoading = false, projects
     videos: videos.length,
   };
 
+  useEffect(() => {
+    if (active !== 'videos') {
+      autoPageRequestedForSize.current = null;
+      return;
+    }
+    if (projectsLoading) return;
+    if (videos.length >= VIDEO_BATCH_SIZE || !projectsHasMore || !onLoadMoreProjects) {
+      autoPageRequestedForSize.current = null;
+      return;
+    }
+
+    // A API pagina projetos brutos; alguns não são vídeos visíveis (motion/substituídos).
+    // Complete automaticamente o primeiro lote até haver 16 vídeos atuais ou acabar o histórico.
+    if (autoPageRequestedForSize.current === projects.length) return;
+    autoPageRequestedForSize.current = projects.length;
+    onLoadMoreProjects();
+  }, [active, onLoadMoreProjects, projects.length, projectsHasMore, projectsLoading, videos.length]);
+
   function selectTab(id: MediaTab) {
     setActive(id);
+    if (id === 'videos') setVisibleVideoCount(VIDEO_BATCH_SIZE);
     const next = new URLSearchParams(params);
     next.set('media', id);
     next.delete('panel');
@@ -92,10 +114,13 @@ export function GeneratedMediaTabs({ projects, projectsLoading = false, projects
       ) : (
         projectsLoading && !videos.length ? <div className="skeleton h-28 rounded-2xl" /> : (
           <ProjectMedia
-            projects={videos}
+            projects={videos.slice(0, visibleVideoCount)}
             loadingMore={projectsLoading}
-            hasMore={projectsHasMore}
-            onLoadMore={onLoadMoreProjects}
+            hasMore={videos.length > visibleVideoCount || projectsHasMore}
+            onLoadMore={() => {
+              setVisibleVideoCount((current) => current + VIDEO_BATCH_SIZE);
+              if (videos.length <= visibleVideoCount && projectsHasMore) onLoadMoreProjects?.();
+            }}
             onDeleteProject={onDeleteProject}
             onRecreateProject={onRecreateProject}
           />
