@@ -12,6 +12,7 @@ type ReferenceMode = 'frames' | 'elements';
 
 const DIRECTOR_DRAFT_KEY = 'fd-agent-director-draft-v1';
 const DIRECTOR_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const VIDEO_CONTINUITY_DIRECTION = 'CONTINUIDADE VISUAL OBRIGATÓRIA: anatomia correta e estável em todos os quadros. Não gerar terceira mão, mãos, dedos ou membros extras, duplicados ou deformados, mãos desconectadas, flicker, morphing involuntário nem artefatos. Quando mãos forem necessárias, mostrar no máximo duas, com cinco dedos cada e ligadas aos braços. Usar gestos simples e contínuos, uma ação por vez; preservar identidade, roupa e produto sem duplicá-los ou deformá-los.';
 type DirectorDraft = {
   savedAt: number;
   briefing: string; presetId: DirectorPresetId; objective: string; format: (typeof FORMATS)[number];
@@ -258,7 +259,12 @@ export function AgentDirectorPage() {
       const references = sourceReferences.map(({ image, role }) => ({ name: `${role} · ${image.name}`.slice(0, 120), dataUrl: `data:${image.mimeType};base64,${image.data}` }));
       const result = await api.createDirectorPlan({ presetId, briefing, objective, aspectRatio: format, durationSeconds: duration, references });
       const audioDirection = 'Áudio obrigatório: todo diálogo, fala e narração devem ser exclusivamente em português do Brasil (pt-BR), com pronúncia brasileira. Se o roteiro trouxer falas em outro idioma, traduza-as para pt-BR antes de falá-las.';
-      const flowVideoPrompt = result.plan.flowVideoPrompt?.trim();
+      const rawVideoPrompt = result.plan.flowVideoPrompt?.trim();
+      const flowVideoPrompt = rawVideoPrompt
+        ? rawVideoPrompt.includes('CONTINUIDADE VISUAL OBRIGATÓRIA')
+          ? rawVideoPrompt
+          : `${VIDEO_CONTINUITY_DIRECTION}\n\n${rawVideoPrompt}`
+        : undefined;
       setPlan({
         ...result.plan,
         referenceMode,
