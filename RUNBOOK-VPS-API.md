@@ -370,4 +370,7 @@ Este resumo é o estado mais recente para retomada; os registros anteriores acim
 ### 2026-11-25 — navegação entre mídias geradas do Avatar
 
 - O visualizador de imagens e o de vídeos gerados recebeu setas anterior/próxima, com posição atual/total e limites desativados nas extremidades. A navegação usa os itens carregados na galeria; vídeos são filtrados para resultados concluídos com arquivo disponível.
-- Alteração feita no código local. Publicação e verificação visual no site oficial ainda pendentes.
+- Publicação oficial confirmada pela Vercel: deployment de produção `Ready`, commit `8d0b7eb` (`add previous and next controls to avatar media viewer`), domínio `www.futurodigitalai.com.br`.
+- Verificação real no Chrome do site oficial, sessão DONO: visualizador de vídeo exibiu as setas e mudou de `9/16` para `10/16` ao clicar em “Próximo vídeo”; visualizador de imagem mudou de `1/19` para `2/19` ao clicar em “Próxima imagem”. Nenhuma geração ou crédito foi consumido nessa validação.
+- Nova tentativa de consulta SSH à VPS para aplicar o ajuste de marca-d’água retornou `Permission denied (publickey,password,keyboard-interactive)`. Nenhuma alteração foi feita na VPS. A correção do frontend está publicada; a causa da marca-d’água já está localizada no desencontro entre a versão atual do repositório e a API antiga ativa, mas o deploy da API e a geração de conferência continuam pendentes até recuperar acesso administrativo autorizado. Não pedir nem registrar chave privada no chat.
+- O código está publicado e a navegação foi verificada ao vivo no domínio oficial; resta apenas observar o comportamento com mais itens carregados além da lista atual.
