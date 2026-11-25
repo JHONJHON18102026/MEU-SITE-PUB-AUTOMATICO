@@ -18,7 +18,7 @@ const MEDIA_TABS: { id: MediaTab; label: string; icon: typeof ImageIcon }[] = [
   { id: 'videos', label: 'Vídeos gerados', icon: Film },
 ];
 
-export function GeneratedMediaTabs({ projects, projectsLoading = false, projectsHasMore = false, onLoadMoreProjects, onDeleteProject, onRecreateProject }: { projects: VideoProjectDTO[]; projectsLoading?: boolean; projectsHasMore?: boolean; onLoadMoreProjects?: () => void; onDeleteProject: (project: VideoProjectDTO) => Promise<void>; onRecreateProject: (project: VideoProjectDTO) => Promise<void> }) {
+export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLoading = false, projectsHasMore = false, onLoadMoreProjects, onDeleteProject, onRecreateProject }: { projects: VideoProjectDTO[]; pendingImageCount?: number; projectsLoading?: boolean; projectsHasMore?: boolean; onLoadMoreProjects?: () => void; onDeleteProject: (project: VideoProjectDTO) => Promise<void>; onRecreateProject: (project: VideoProjectDTO) => Promise<void> }) {
   const [params, setParams] = useSearchParams();
   const requestedMedia = params.get('media');
   const resolveMedia = (value: string | null): MediaTab => value === 'videos' ? 'videos' : 'images';
@@ -100,10 +100,13 @@ export function GeneratedMediaTabs({ projects, projectsLoading = false, projects
       </div>
 
       {active === 'images' ? (
-        avatars.loading ? (
+        avatars.loading && !pendingImageCount ? (
           <div className="skeleton h-28 rounded-2xl" />
-        ) : avatars.data.length ? (
+        ) : avatars.data.length || pendingImageCount ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
+            {Array.from({ length: Math.max(0, pendingImageCount) }, (_, index) => (
+              <PendingImageCard key={`pending-image-${index}`} index={index + 1} />
+            ))}
             {avatars.data.map((avatar) => (
               <GeneratedImageCard key={avatar.id} avatar={avatar} onOpen={() => setSelectedAvatar(avatar)} />
             ))}
@@ -129,6 +132,21 @@ export function GeneratedMediaTabs({ projects, projectsLoading = false, projects
     </section>
     <AvatarDetailModal avatar={selectedAvatar} onClose={() => setSelectedAvatar(null)} />
     </>
+  );
+}
+
+function PendingImageCard({ index }: { index: number }) {
+  return (
+    <article className="overflow-hidden rounded-xl border border-accent/50 bg-surface" aria-label={`Imagem ${index} em geração`}>
+      <div className="relative grid aspect-[3/4] place-items-center overflow-hidden bg-surface-2">
+        <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-accent/10 via-surface-2 to-accent/15" />
+        <div className="relative flex flex-col items-center gap-2 text-center text-xs font-semibold text-fg-muted" role="status">
+          <LoaderCircle className="size-5 animate-spin text-accent" />
+          <span>Gerando imagem…</span>
+        </div>
+      </div>
+      <p className="truncate px-2 py-1.5 text-[11px] font-semibold text-fg-muted">Imagem em processamento</p>
+    </article>
   );
 }
 

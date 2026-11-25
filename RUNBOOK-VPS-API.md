@@ -352,3 +352,10 @@ Este resumo é o estado mais recente para retomada; os registros anteriores acim
 - Solicitação: retirar o terceiro slot `VÍDEO`, que não será usado. A remoção afeta apenas a área de anexos do canvas.
 - `INFLUENCER`, `PRODUTO`, alternância Imagem/Vídeo, seleção do modelo e botão GERAR continuam disponíveis. O slot não acionava geração de vídeo; apenas abria a aba de templates.
 - Build local aprovado antes da publicação. A mudança será espelhada pela Vercel após o push ao branch `main`; nenhuma configuração da VPS ou geração de mídia é necessária.
+
+### 2026-11-25 — placeholders imediatos para imagens em geração no Avatar
+
+- Sintoma: ao pedir duas imagens, os novos cartões só apareciam quando a API terminava. O botão atualizava o contador, mas a galeria renderizava apenas avatares salvos.
+- Causa: o estado local `pendingImageRequests` não era passado para a galeria. Além disso, o endpoint de imagem responde só depois que todas as saídas terminam, então a lista de avatares não recebia registros temporários.
+- Correção: `AvatarsPage` repassa o total pendente para `GeneratedMediaTabs`, que renderiza um placeholder `Gerando imagem…` para cada saída solicitada antes das imagens concluídas. Assim, um pedido de 2 imagens mostra 2 cartões de processamento na hora; imagens já salvas continuam visíveis. O placeholder também aparece durante o carregamento inicial quando há pedido pendente recuperável no histórico.
+- Build local aprovado (`npm run build`). Nenhuma geração foi iniciada para testar esta mudança; a confirmação de produção será feita pelo bundle após publicação.

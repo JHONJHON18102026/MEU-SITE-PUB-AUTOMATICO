@@ -150,6 +150,7 @@ export function AvatarsPage() {
               <div className="mt-3">
                 <GeneratedMediaTabs
                   projects={projects}
+                  pendingImageCount={pendingImageRequests}
                   projectsLoading={projectsLoading}
                   projectsHasMore={projectsHasMore}
                   onLoadMoreProjects={() => void loadMoreProjects()}
