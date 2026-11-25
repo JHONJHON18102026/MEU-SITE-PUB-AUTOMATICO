@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Download, Globe2, Lock, RefreshCcw, ScanFace, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Download, Globe2, Lock, RefreshCcw, ScanFace, Trash2 } from 'lucide-react';
 import type { AvatarDTO } from '@shared/contracts';
 import { ATTRIBUTE_GROUPS, findOption, type AttributeGroupId, type AttributeSelection } from '@shared/attributes';
 import { Modal } from '@/components/ui/Modal';
@@ -12,7 +12,7 @@ import { useSession } from '@/store/session';
 import { useAvatarStudio } from './avatarStore';
 import { useGalleryVersion } from './useAvatarData';
 
-export function AvatarDetailModal({ avatar, onClose }: { avatar: AvatarDTO | null; onClose: () => void }) {
+export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: { avatar: AvatarDTO | null; onClose: () => void; items?: AvatarDTO[]; onNavigate?: (avatar: AvatarDTO) => void }) {
   const userId = useSession((s) => s.session?.user.id);
   const bump = useGalleryVersion((s) => s.bump);
   const studio = useAvatarStudio();
@@ -33,6 +33,8 @@ export function AvatarDetailModal({ avatar, onClose }: { avatar: AvatarDTO | nul
     return () => { current = false; };
   }, [avatar?.generation_id]);
   if (!avatar) return null;
+  const currentIndex = items.findIndex((item) => item.id === avatar.id);
+  const canNavigate = currentIndex >= 0 && items.length > 1 && Boolean(onNavigate);
   const mine = avatar.user_id === userId;
   const isShowcase = avatar.user_id === 'showcase';
 
@@ -105,8 +107,17 @@ export function AvatarDetailModal({ avatar, onClose }: { avatar: AvatarDTO | nul
   return (
     <Modal open={Boolean(avatar)} onClose={onClose} title={avatar.name} size="xl">
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="overflow-hidden rounded-2xl bg-surface-2">
+        <div className="relative overflow-hidden rounded-2xl bg-surface-2">
           <img src={avatar.image_url} alt={avatar.name} className="mx-auto max-h-[70vh] w-auto object-contain" />
+          {canNavigate && <>
+            <button type="button" onClick={() => onNavigate?.(items[currentIndex - 1]!)} disabled={currentIndex === 0} aria-label="Imagem anterior" title="Imagem anterior" className="absolute left-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg backdrop-blur transition hover:bg-black/85 disabled:pointer-events-none disabled:opacity-35">
+              <ArrowLeft className="size-5" />
+            </button>
+            <button type="button" onClick={() => onNavigate?.(items[currentIndex + 1]!)} disabled={currentIndex === items.length - 1} aria-label="Próxima imagem" title="Próxima imagem" className="absolute right-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg backdrop-blur transition hover:bg-black/85 disabled:pointer-events-none disabled:opacity-35">
+              <ArrowRight className="size-5" />
+            </button>
+            <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white">{currentIndex + 1} / {items.length}</span>
+          </>}
         </div>
         <div className="space-y-4">
           <div className="text-xs text-fg-subtle">

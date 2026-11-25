@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Film, Image as ImageIcon, LoaderCircle, RefreshCcw, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Film, Image as ImageIcon, LoaderCircle, RefreshCcw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AvatarDTO } from '@shared/contracts';
 import type { VideoProjectDTO } from '@shared/ugcContracts';
@@ -25,6 +25,7 @@ export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLo
   const [active, setActive] = useState<MediaTab>(() => resolveMedia(requestedMedia));
   useEffect(() => setActive(resolveMedia(requestedMedia)), [requestedMedia]);
   const [selectedAvatar, setSelectedAvatar] = useState<AvatarDTO | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<VideoProjectDTO | null>(null);
   const [visibleVideoCount, setVisibleVideoCount] = useState(VIDEO_BATCH_SIZE);
   const autoPageRequestedForSize = useRef<number | null>(null);
   const avatars = useMyAvatars();
@@ -47,6 +48,7 @@ export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLo
     images: avatars.data.length,
     videos: videos.length,
   };
+  const visibleVideos = videos.filter((project) => project.status === 'done' && Boolean(project.video_url)).slice(0, visibleVideoCount);
 
   useEffect(() => {
     if (active !== 'videos') {
@@ -126,11 +128,13 @@ export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLo
             }}
             onDeleteProject={onDeleteProject}
             onRecreateProject={onRecreateProject}
+            onOpenProject={setSelectedVideo}
           />
         )
       )}
     </section>
-    <AvatarDetailModal avatar={selectedAvatar} onClose={() => setSelectedAvatar(null)} />
+    <AvatarDetailModal avatar={selectedAvatar} items={avatars.data} onNavigate={setSelectedAvatar} onClose={() => setSelectedAvatar(null)} />
+    <VideoPreviewModal project={selectedVideo} projects={visibleVideos} onNavigate={setSelectedVideo} onClose={() => setSelectedVideo(null)} />
     </>
   );
 }
@@ -199,7 +203,7 @@ function videoFailureHint(error: string | null) {
   return error.split('\n')[0]!.slice(0, 180);
 }
 
-function ProjectMedia({ projects, loadingMore, hasMore, onLoadMore, onDeleteProject, onRecreateProject }: { projects: VideoProjectDTO[]; loadingMore: boolean; hasMore: boolean; onLoadMore?: () => void; onDeleteProject: (project: VideoProjectDTO) => Promise<void>; onRecreateProject: (project: VideoProjectDTO) => void }) {
+function ProjectMedia({ projects, loadingMore, hasMore, onLoadMore, onDeleteProject, onRecreateProject, onOpenProject }: { projects: VideoProjectDTO[]; loadingMore: boolean; hasMore: boolean; onLoadMore?: () => void; onDeleteProject: (project: VideoProjectDTO) => Promise<void>; onRecreateProject: (project: VideoProjectDTO) => void; onOpenProject: (project: VideoProjectDTO) => void }) {
   if (!projects.length) {
     return <EmptyMedia text='Os vídeos gerados aparecerão aqui.' />;
   }
@@ -207,7 +211,7 @@ function ProjectMedia({ projects, loadingMore, hasMore, onLoadMore, onDeleteProj
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
       {projects.map((project) => (
-        <ProjectMediaCard key={project.id} project={project} onDeleteProject={onDeleteProject} onRecreateProject={onRecreateProject} />
+        <ProjectMediaCard key={project.id} project={project} onDeleteProject={onDeleteProject} onRecreateProject={onRecreateProject} onOpenProject={onOpenProject} />
       ))}
       {hasMore && onLoadMore && (
         <button
@@ -224,11 +228,10 @@ function ProjectMedia({ projects, loadingMore, hasMore, onLoadMore, onDeleteProj
   );
 }
 
-function ProjectMediaCard({ project, onDeleteProject, onRecreateProject }: { project: VideoProjectDTO; onDeleteProject: (project: VideoProjectDTO) => Promise<void>; onRecreateProject: (project: VideoProjectDTO) => void }) {
+function ProjectMediaCard({ project, onDeleteProject, onRecreateProject, onOpenProject }: { project: VideoProjectDTO; onDeleteProject: (project: VideoProjectDTO) => Promise<void>; onRecreateProject: (project: VideoProjectDTO) => void; onOpenProject: (project: VideoProjectDTO) => void }) {
   const [actualDuration, setActualDuration] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [recreating, setRecreating] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
 
   async function handleRecreate() {
     if (recreating) return;
@@ -258,7 +261,7 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject }: { pro
       {project.status === 'done' && project.video_url ? (
         <div className="relative">
           <video
-            src={project.video_url}
+            src={project.video_url ?? undefined}
             poster={project.thumbnail_url}
             controls
             playsInline
@@ -272,7 +275,7 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject }: { pro
           />
           <button
             type="button"
-            onClick={() => setPreviewOpen(true)}
+            onClick={() => onOpenProject(project)}
             aria-label={`Abrir vídeo ${project.title} em tela cheia`}
             title="Abrir vídeo"
             className="absolute inset-x-0 top-0 bottom-16 z-10 cursor-default rounded-t-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
@@ -310,25 +313,41 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject }: { pro
           {videoFailureHint(project.error)}
         </p>
       )}
-      {project.video_url && (
-        <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title={project.title} size="xl">
-          <div className="grid max-h-[calc(90vh-5rem)] gap-4 overflow-y-auto md:grid-cols-[minmax(0,1fr)_minmax(240px,300px)]">
-            <div className="-mx-5 -mt-4 grid min-h-64 place-items-center bg-black md:mx-0 md:mt-0 md:rounded-xl">
-              <video
-                src={project.video_url}
-                poster={project.thumbnail_url}
-                controls
-                autoPlay
-                playsInline
-                className="max-h-[calc(90vh-8rem)] max-w-full object-contain"
-                aria-label={project.title}
-              />
-            </div>
-            <VideoGenerationDetails project={project} actualDuration={actualDuration} />
-          </div>
-        </Modal>
-      )}
     </article>
+  );
+}
+
+function VideoPreviewModal({ project, projects, onNavigate, onClose }: { project: VideoProjectDTO | null; projects: VideoProjectDTO[]; onNavigate: (project: VideoProjectDTO) => void; onClose: () => void }) {
+  if (!project) return null;
+  const currentIndex = projects.findIndex((item) => item.id === project.id);
+  const canNavigate = currentIndex >= 0 && projects.length > 1;
+  return (
+    <Modal open={Boolean(project)} onClose={onClose} title={project.title} size="xl">
+      <div className="grid max-h-[calc(90vh-5rem)] gap-4 overflow-y-auto md:grid-cols-[minmax(0,1fr)_minmax(240px,300px)]">
+        <div className="relative -mx-5 -mt-4 grid min-h-64 place-items-center bg-black md:mx-0 md:mt-0 md:rounded-xl">
+          <video
+            key={project.id}
+            src={project.video_url ?? undefined}
+            poster={project.thumbnail_url}
+            controls
+            autoPlay
+            playsInline
+            className="max-h-[calc(90vh-8rem)] max-w-full object-contain"
+            aria-label={project.title}
+          />
+          {canNavigate && <>
+            <button type="button" onClick={() => onNavigate(projects[currentIndex - 1]!)} disabled={currentIndex === 0} aria-label="Vídeo anterior" title="Vídeo anterior" className="absolute left-3 top-1/2 z-10 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg backdrop-blur transition hover:bg-black/85 disabled:pointer-events-none disabled:opacity-35">
+              <ArrowLeft className="size-5" />
+            </button>
+            <button type="button" onClick={() => onNavigate(projects[currentIndex + 1]!)} disabled={currentIndex === projects.length - 1} aria-label="Próximo vídeo" title="Próximo vídeo" className="absolute right-3 top-1/2 z-10 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg backdrop-blur transition hover:bg-black/85 disabled:pointer-events-none disabled:opacity-35">
+              <ArrowRight className="size-5" />
+            </button>
+            <span className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white">{currentIndex + 1} / {projects.length}</span>
+          </>}
+        </div>
+        <VideoGenerationDetails project={project} actualDuration={null} />
+      </div>
+    </Modal>
   );
 }
 

@@ -558,7 +558,12 @@ export function Gallery({ hideTabs, hideExploreSwitch, communityOnly = false }: 
         )}
       </div>
 
-      <AvatarDetailModal avatar={open} onClose={() => setOpen(null)} />
+      <AvatarDetailModal
+        avatar={open}
+        items={tab === 'mine' ? mine.data : communityOnly || exploreSub === 'comunidade' ? community.data : presets}
+        onNavigate={setOpen}
+        onClose={() => setOpen(null)}
+      />
     </section>
   );
 }

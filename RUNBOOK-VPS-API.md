@@ -359,3 +359,15 @@ Este resumo é o estado mais recente para retomada; os registros anteriores acim
 - Causa: o estado local `pendingImageRequests` não era passado para a galeria. Além disso, o endpoint de imagem responde só depois que todas as saídas terminam, então a lista de avatares não recebia registros temporários.
 - Correção: `AvatarsPage` repassa o total pendente para `GeneratedMediaTabs`, que renderiza um placeholder `Gerando imagem…` para cada saída solicitada antes das imagens concluídas. Assim, um pedido de 2 imagens mostra 2 cartões de processamento na hora; imagens já salvas continuam visíveis. O placeholder também aparece durante o carregamento inicial quando há pedido pendente recuperável no histórico.
 - Build local aprovado (`npm run build`). Nenhuma geração foi iniciada para testar esta mudança; a confirmação de produção será feita pelo bundle após publicação.
+
+### 2026-11-25 — diagnóstico da marca d’água da conta DONO
+
+- Causa do desencontro entre código e API: o snapshot da API VPS documentado em `81bf83c` identifica o proprietário comparando `userId` com `process.env.OWNER_USER_ID`. Já o código atual do repositório, a partir do commit `991ab2e`, consulta `profiles.plan` e considera DONO quando o plano é `unlimited` (mesmo campo usado pelo débito de créditos). O commit `991ab2e` não está contido no snapshot `81bf83c`.
+- Isso explica por que a API antiga pode salvar imagens do DONO sem marca: se `OWNER_USER_ID` estiver vazio ou não corresponder ao ID autenticado, `isOwnerUser` retorna `false` e o overlay é ignorado. A presença/valor dessa variável no processo ativo não foi consultada, portanto essa condição específica continua como hipótese; não registrar nem expor seu valor.
+- No código atual, `/api/avatars/generate` aplica `applyWatermark` antes do upload ao Storage. A marca é adicionada no backend após a geração, não pelo prompt da imagem.
+- **Pendente de operação:** implantar com segurança na API ativa `server/watermark.ts` e `server/routes/avatars.ts` do commit `991ab2e` (ou equivalente), preservando as divergências e arquivos locais em `C:\site`. Ainda não foi feita alteração nem reinicialização na VPS, nem geração de verificação. Depois da implantação, confirmar o plano DONO pelo próprio caminho da aplicação e fazer uma imagem autorizada no site oficial para verificar visualmente a marca.
+
+### 2026-11-25 — navegação entre mídias geradas do Avatar
+
+- O visualizador de imagens e o de vídeos gerados recebeu setas anterior/próxima, com posição atual/total e limites desativados nas extremidades. A navegação usa os itens carregados na galeria; vídeos são filtrados para resultados concluídos com arquivo disponível.
+- Alteração feita no código local. Publicação e verificação visual no site oficial ainda pendentes.
