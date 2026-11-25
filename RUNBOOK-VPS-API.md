@@ -367,6 +367,14 @@ Este resumo é o estado mais recente para retomada; os registros anteriores acim
 - No código atual, `/api/avatars/generate` aplica `applyWatermark` antes do upload ao Storage. A marca é adicionada no backend após a geração, não pelo prompt da imagem.
 - **Pendente de operação:** implantar com segurança na API ativa `server/watermark.ts` e `server/routes/avatars.ts` do commit `991ab2e` (ou equivalente), preservando as divergências e arquivos locais em `C:\site`. Ainda não foi feita alteração nem reinicialização na VPS, nem geração de verificação. Depois da implantação, confirmar o plano DONO pelo próprio caminho da aplicação e fazer uma imagem autorizada no site oficial para verificar visualmente a marca.
 
+### 2026-11-25 — causa da marca d’água confirmada na VPS
+
+- A inspeção por RDP confirmou que o checkout ativo `C:\site` está no commit `81bf83c`. A função `isOwnerUser` lê `process.env.OWNER_USER_ID` de forma síncrona, e as rotas também a chamam de forma síncrona. O site identifica a conta DONO pelo plano `unlimited`; essa divergência explica por que as criações dessa conta podem não receber a marca.
+- A logo `C:\site\server\assets\marca-dagua.png` existe. O código local atual já corrige o critério para consultar `profiles.plan === 'unlimited'` e aguardar essa consulta nas rotas de Avatar, UGC e recriação de vídeo.
+- A conta API apresentou dois processos Node (`6820` e `6508`) com PowerShell pai; o teste de busca por uma tarefa chamada exatamente `Futuro Digital - API Node` não encontrou tarefa. A instância de API em console e o motor Rust não foram interrompidos.
+- Tentativa de escrita pela janela PowerShell sem elevação foi negada. Foi criado somente o backup `C:\site\server\watermark.ts.pre-watermark-20261125-232212`; nenhum arquivo ativo foi alterado. A tentativa de abrir novo PowerShell administrativo foi cancelada no UAC, portanto a correção ainda não está aplicada nem testada na VPS.
+- Próximo passo seguro: com a autorização de elevação confirmada no UAC, aplicar somente os ajustes de detecção do plano em `server/watermark.ts` e nos pontos correspondentes de `server/routes/avatars.ts`, `server/routes/aiUgc.ts` e `server/routes/projects.ts`, salvando backup de cada arquivo. Fazer typecheck, reiniciar apenas a API, confirmar `/api/health` e verificar uma imagem DONO no site oficial. Não reiniciar nem alterar o motor Rust.
+
 ### 2026-11-25 — navegação entre mídias geradas do Avatar
 
 - O visualizador de imagens e o de vídeos gerados recebeu setas anterior/próxima, com posição atual/total e limites desativados nas extremidades. A navegação usa os itens carregados na galeria; vídeos são filtrados para resultados concluídos com arquivo disponível.
