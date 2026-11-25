@@ -7,6 +7,7 @@ import type { AvatarDTO } from '@shared/contracts';
 import type { VideoProjectDTO } from '@shared/ugcContracts';
 import { Modal } from '@/components/ui/Modal';
 import { AvatarDetailModal } from './AvatarDetailModal';
+import { useAvatarStudio } from './avatarStore';
 import { useGalleryVersion, useMyAvatars } from './useAvatarData';
 import { api } from '@/lib/api';
 
@@ -29,6 +30,7 @@ export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLo
   const [visibleVideoCount, setVisibleVideoCount] = useState(VIDEO_BATCH_SIZE);
   const autoPageRequestedForSize = useRef<number | null>(null);
   const avatars = useMyAvatars();
+  const avatarStudio = useAvatarStudio();
   const videos = useMemo(() => {
     const allVideos = projects.filter((project) => project.mediaType !== 'motion');
     const explicitlyReplaced = new Set(allVideos
@@ -110,7 +112,19 @@ export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLo
               <PendingImageCard key={`pending-image-${index}`} index={index + 1} />
             ))}
             {avatars.data.map((avatar) => (
-              <GeneratedImageCard key={avatar.id} avatar={avatar} onOpen={() => setSelectedAvatar(avatar)} />
+              <GeneratedImageCard
+                key={avatar.id}
+                avatar={avatar}
+                onOpen={() => setSelectedAvatar(avatar)}
+                onRecreate={() => {
+                  avatarStudio.set({
+                    selection: (avatar.attributes ?? {}) as typeof avatarStudio.selection,
+                    aspectRatio: (avatar.aspect_ratio as typeof avatarStudio.aspectRatio) ?? '9:16',
+                    framing: (avatar.framing as typeof avatarStudio.framing) || 'meio-corpo',
+                  });
+                  toast.success('Características carregadas no painel. Ajuste o que quiser e gere de novo.');
+                }}
+              />
             ))}
           </div>
         ) : (
@@ -154,7 +168,7 @@ function PendingImageCard({ index }: { index: number }) {
   );
 }
 
-function GeneratedImageCard({ avatar, onOpen }: { avatar: AvatarDTO; onOpen: () => void }) {
+function GeneratedImageCard({ avatar, onOpen, onRecreate }: { avatar: AvatarDTO; onOpen: () => void; onRecreate: () => void }) {
   const bump = useGalleryVersion((state) => state.bump);
   const [deleting, setDeleting] = useState(false);
 
@@ -177,6 +191,15 @@ function GeneratedImageCard({ avatar, onOpen }: { avatar: AvatarDTO; onOpen: () 
       <button type="button" onClick={onOpen} aria-label={`Abrir imagem ${avatar.name}`} className="block w-full text-left transition hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         <img src={avatar.image_url} alt={avatar.name} loading="lazy" className="aspect-[3/4] w-full object-cover object-top transition group-hover:scale-[1.02]" />
         <p className="truncate px-2 py-1.5 text-[11px] font-semibold">{avatar.name}</p>
+      </button>
+      <button
+        type="button"
+        onClick={(event) => { event.stopPropagation(); onRecreate(); }}
+        title="Recriar imagem com estas características"
+        aria-label={`Recriar imagem ${avatar.name}`}
+        className="absolute left-2 top-2 z-10 inline-flex items-center gap-1.5 rounded-md border border-accent/50 bg-surface/95 px-2 py-1 text-[10px] font-bold text-fg opacity-0 shadow-md transition hover:bg-accent hover:text-white group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <RefreshCcw className="size-3" /> Recriar
       </button>
       <button type="button" onClick={() => void removeImage()} disabled={deleting} title="Excluir imagem" aria-label={`Excluir imagem ${avatar.name}`} className="absolute right-2 top-2 grid size-8 place-items-center rounded-lg border border-white/20 bg-black/75 text-white opacity-0 shadow-md transition hover:bg-red-600 group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-50">
         {deleting ? <LoaderCircle className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}

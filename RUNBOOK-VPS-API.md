@@ -377,3 +377,10 @@ Este resumo é o estado mais recente para retomada; os registros anteriores acim
 - Ajuste visual/teclado (2026-11-25): padronizado o palco de imagem e vídeo em altura responsiva fixa, com `object-contain`, setas ancoradas ao centro do palco e coluna de detalhes rolável independente. `ArrowLeft`/`ArrowRight` navegam no modal, exceto quando o foco está em campo editável. Build local (`tsc --noEmit` + Vite) aprovado. Produção confirmada na Vercel como `Ready`, deployment `8jGWxvGKhBjQsrpo5CJhvX2DeRKh`, commit `5f07ccb`.
 - Teste real em `https://www.futurodigitalai.com.br/avatars?media=images`, sessão DONO: botão “Próxima imagem” avançou de `1/19` para `2/19`; tecla `ArrowRight` avançou para `3/19` e `ArrowLeft` voltou para `2/19`. Nenhuma geração/crédito foi consumido.
 - Teste real da navegação de vídeo: abriu um modal com `1/16`; botão “Próximo vídeo” avançou para `2/16`, `ArrowRight` para `3/16` e `ArrowLeft` retornou. O item testado mostrou “Não foi possível abrir a mídia” no player; a navegação e contagem responderam, mas este arquivo de vídeo não serviu para validar reprodução.
+
+### 2026-11-25 — ação Recriar nas imagens geradas do Avatar
+
+- Sintoma: a ação “Recriar” estava disponível no detalhe da imagem, mas não aparecia no cartão da galeria como já aparece nos cartões de vídeo.
+- Correção: cada imagem gerada agora mostra “Recriar” no canto superior esquerdo ao passar o mouse (e ao focar por teclado). Ao clicar, restaura no painel as características, a proporção e o enquadramento usados naquela imagem e informa que a pessoa pode ajustar e gerar novamente.
+- A ação não chama a API de geração nem debita créditos; a nova geração só começa quando a pessoa usa o botão GERAR do canvas. A lixeira continua no canto superior direito.
+- Build local (`npm run build`) aprovado. O Vite avisou que Node 22.11 está abaixo do mínimo recomendado `22.12+`, mas o build terminou com sucesso. A publicação e a conferência visual no site oficial ainda precisam ser confirmadas.
