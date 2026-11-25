@@ -259,7 +259,8 @@ export function AgentDirectorPage() {
       const references = sourceReferences.map(({ image, role }) => ({ name: `${role} · ${image.name}`.slice(0, 120), dataUrl: `data:${image.mimeType};base64,${image.data}` }));
       const result = await api.createDirectorPlan({ presetId, briefing, objective, aspectRatio: format, durationSeconds: duration, references });
       const audioDirection = 'Áudio obrigatório: todo diálogo, fala e narração devem ser exclusivamente em português do Brasil (pt-BR), com pronúncia brasileira. Se o roteiro trouxer falas em outro idioma, traduza-as para pt-BR antes de falá-las.';
-      const rawVideoPrompt = result.plan.flowVideoPrompt?.trim();
+      const rawVideoPrompt = result.plan.flowVideoPrompt?.trim()
+        || result.plan.scenes.map((scene) => `Ação: ${scene.action}\nFala: ${scene.text}`).join('\n\n').trim();
       const flowVideoPrompt = rawVideoPrompt
         ? rawVideoPrompt.includes('CONTINUIDADE VISUAL OBRIGATÓRIA')
           ? rawVideoPrompt
