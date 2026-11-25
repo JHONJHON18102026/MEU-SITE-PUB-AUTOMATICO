@@ -340,3 +340,9 @@ Este resumo é o estado mais recente para retomada; os registros anteriores acim
 - Correção de backend: `server/gemini.ts` acrescenta o limite no pedido ao modelo e ajusta a fala retornada. Na VPS `C:\site\server\gemini.ts`, a alteração foi aplicada preservando backup `server\gemini.ts.pre-director-speech-20261125`; o health local e público permaneceu saudável. O teste do plano de 23 palavras ocorreu antes de a publicação Vercel ficar `Ready`; não afirmar que uma nova chamada de plano, já com o backend ativo atualizado, foi confirmada neste ciclo.
 - Testes locais após a correção de frontend: `npm test -- --run` (46 aprovados) e `npm run build` passaram. Vite ainda avisa que o Node local 22.11.0 é menor que o recomendado 22.12+, sem impedir a compilação.
 - Não foi enviado vídeo nem houve consumo de créditos nesta correção. O teste acústico de uma nova geração permanece pendente; ao validar, usar um plano novo e conferir no vídeo que a última palavra termina antes do fim. Planos salvos antigos não são reescritos sozinhos: recrie o plano para receber a fala corrigida.
+
+### 2026-11-25 — Avatar carrega 16 vídeos válidos por lote
+
+- A aba Avatar busca projetos em páginas de 24 registros brutos, mas parte deles pode ser motion ou ter sido substituída; por isso a primeira página mostrava só 10 vídeos atuais mesmo havendo mais histórico.
+- A galeria agora pagina automaticamente até reunir 16 vídeos atuais (ou esgotar os registros disponíveis), exibe 16 por lote e mantém `Carregar mais vídeos` para avançar. O total exibido continua baseado em vídeos reais salvos, sem criar cartões artificiais.
+- A correção foi publicada no commit `bbe56ce`. O bundle público do domínio oficial contém a lógica de lote 16 e autopaginação. Build local aprovado; nenhum job de geração de mídia foi iniciado nesta mudança.
