@@ -264,8 +264,32 @@ function prependMandatoryPromptRule(prompt: string | undefined, rule: string, li
   return prefix + (creative ? '\n\n' + creative.slice(0, available) : '');
 }
 
+const DIRECTOR_SPEECH_RESERVE_SECONDS = 1.5;
+const DIRECTOR_SPEECH_WORDS_PER_SECOND = 1.8;
+
+export function directorDialogueWordLimit(durationSeconds: number): number {
+  const speechSeconds = Math.max(0, durationSeconds - DIRECTOR_SPEECH_RESERVE_SECONDS);
+  return Math.max(1, Math.floor(speechSeconds * DIRECTOR_SPEECH_WORDS_PER_SECOND));
+}
+
+export function fitDirectorDialogue(text: string, maxWords: number): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  const words = normalized.match(/\S+/g) ?? [];
+  if (words.length <= maxWords) return normalized;
+
+  const sentences = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+  const kept: string[] = [];
+  for (const sentence of sentences) {
+    const candidate = [...kept, sentence.trim()].filter(Boolean).join(' ');
+    if ((candidate.match(/\S+/g) ?? []).length > maxWords) break;
+    kept.push(sentence.trim());
+  }
+  if (kept.length) return kept.join(' ');
+
+  return words.slice(0, maxWords).join(' ').replace(/[,:;–-]+$/, '') + '.';
+}
+
 const DIRECTOR_VIDEO_CONTINUITY_LOCK = 'CONTINUIDADE VISUAL OBRIGATÓRIA: anatomia humana correta e estável quadro a quadro. Nunca gerar terceira mão, mãos/dedos/membros extras, duplicados ou deformados, mãos desconectadas, objetos que surgem/desaparecem, flicker, morphing involuntário ou outros artefatos. Quando mãos forem necessárias, mostrar no máximo duas, com cinco dedos cada, ligadas corretamente aos braços. Usar gestos simples, lentos e contínuos, uma ação por vez; preservar identidade, roupa e produto sem duplicar ou deformar.';
-const DIRECTOR_ACTION_CONTINUITY_LOCK = 'Sem mãos, dedos ou membros extras/duplicados/deformados nem artefatos; no máximo duas mãos visíveis, cinco dedos cada e ligadas aos braços. Um gesto simples e contínuo; anatomia estável.';
 
 const DIRECTOR_INSTRUCTIONS = `Você é o Agente Diretor do FUTURO DIGITAL, especializado em anúncios UGC e vídeos de produto.
 Crie um plano executável, realista e conciso em português do Brasil. Responda SOMENTE JSON válido, sem markdown.
@@ -279,9 +303,9 @@ Quando presetId for um modo TikTok Shop, inclua também productAnalysis, coverIm
 productAnalysis deve citar somente características visíveis e não afirmar benefícios sem suporte nas referências ou no briefing.
 Antes de finalizar, confira cada afirmação sobre o produto contra a foto e o briefing. Se nenhum benefício estiver explicitamente comprovado, não invente benefícios nem sensações de uso (por exemplo, textura leve, aplicação prática, hidratação ou resultado na pele); descreva uma característica visível ou o texto legível no rótulo. A fala da cena, a capa e o prompt do vídeo seguem a mesma regra.
 coverImagePrompt e cleanImagePrompt devem ser prompts independentes: a capa pode ter uma chamada comercial curta e CTA adequada; a imagem limpa não pode conter texto, preço, logo promocional, grafismo ou moldura. Nunca misture as duas.
-flowVideoPrompt descreve direção criativa, ações, câmera, luz e fala/narração. Formato e duração são definidos nos controles da tela: não repita proporção ou segundos dentro do prompt.
+flowVideoPrompt descreve somente direção visual, câmera, iluminação e continuidade. Formato e duração são definidos nos controles da tela: não repita proporção ou segundos dentro do prompt. A ação visual fica em scenes[0].action e a fala final fica somente em scenes[0].text; não copie a fala para flowVideoPrompt.
 Todo vídeo deve receber instrução explícita de continuidade visual: anatomia correta em todos os quadros, sem terceira mão, mãos/dedos/membros extras, duplicados ou deformados, sem membros desconectados, flicker, morphing involuntário ou artefatos. Quando mãos forem necessárias, no máximo duas, com cinco dedos cada e ligadas aos braços. Prefira gestos simples e contínuos, uma ação por vez, preserve identidade, roupa e produto. Essa regra é obrigatória em qualquer preset e deve aparecer no começo do flowVideoPrompt final, não apenas como orientação implícita.
-Em scenes[0].text escreva um roteiro curto que caiba em 10 segundos e siga: gancho inicial, apresentação do produto, um benefício comprovável e chamada para ação. Prefira “Clique no carrinho e garanta o seu!” quando fizer sentido. Em scenes[0].action descreva a demonstração visual e a câmera.
+Em scenes[0].text escreva uma fala curta que termine antes do vídeo acabar: reserve os últimos 1,5 segundos sem fala para evitar cortes. Use o limite máximo informado no pedido, calculado a 1,8 palavras por segundo apenas durante o tempo útil. Prefira uma frase curta e natural; estruture em gancho e apresentação, inclua benefício somente se comprovado e use CTA apenas se couber sem acelerar ou cortar a fala. Em scenes[0].action descreva uma única demonstração visual simples e a câmera. Não prometa que o vídeo falará mais texto do que cabe na duração.
 Modo 1: a influenciadora adulta morena fala para a câmera; se uma pessoa for anexada, preserve aquela identidade em vez de substituí-la.
 Modo 2: mostre somente mãos e produto, sem rosto; a fala é narração feminina brasileira.
 Modo 3: use POV sem rostos ou personagens; narração feminina em primeira pessoa.
@@ -305,7 +329,6 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
   const presetRules = DIRECTOR_PRESET_RULES[presetId];
   const mandatoryModeLock = TIKTOK_VIDEO_LOCKS[presetId];
   const mandatoryVideoLock = [DIRECTOR_VIDEO_CONTINUITY_LOCK, mandatoryModeLock].filter(Boolean).join('\n');
-  const mandatoryActionLock = [DIRECTOR_ACTION_CONTINUITY_LOCK, mandatoryModeLock].filter(Boolean).join(' ');
   const directorSystemInstruction = [
     DIRECTOR_INSTRUCTIONS,
     'PRESET OBRIGATÓRIO (' + presetId + '):',
@@ -330,6 +353,9 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
     aspectRatio: input.aspectRatio,
     durationSeconds: input.durationSeconds,
     referenceNames,
+    maximumDialogueWords: directorDialogueWordLimit(input.durationSeconds),
+    speechEndReserveSeconds: DIRECTOR_SPEECH_RESERVE_SECONDS,
+    dialogueRequirements: `A fala em scenes[0].text deve ter no máximo ${directorDialogueWordLimit(input.durationSeconds)} palavras. Conclua a última palavra até ${Math.max(0, input.durationSeconds - DIRECTOR_SPEECH_RESERVE_SECONDS)} segundos; deixe os últimos ${DIRECTOR_SPEECH_RESERVE_SECONDS} segundos sem fala. Use pt-BR natural, sem acelerar. Omita a CTA se ela não couber. Não repita a fala em flowVideoPrompt.`,
     requiredEngineId: selectedEngine,
     requiredEngineLabel: selectedEngine === 'omni-flash' ? 'Omni Flash 1.2' : (context.unlimited ? 'Veo 3.1 lowerpriority' : 'Veo 3.1 Fast'),
     requiredEstimatedCost: baseCost,
@@ -388,12 +414,16 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
         ? {
             scenes: modelPlan.scenes.slice(0, 8).map((scene, index) => {
               const item = scene && typeof scene === 'object' ? scene as Record<string, unknown> : {};
-              const actionLimit = Math.max(0, 400 - mandatoryActionLock.length - 1);
+              const actionLimit = 400;
+              const generatedAction = typeof item.action === 'string' ? item.action.trim() : '';
+              const cleanAction = mandatoryModeLock && generatedAction.includes(mandatoryModeLock)
+                ? generatedAction.replace(mandatoryModeLock, '').trim()
+                : generatedAction;
               return {
                 ...item,
                 index,
                 ...(typeof item.text === 'string' ? { text: item.text.slice(0, 600) } : {}),
-                ...(typeof item.action === 'string' ? { action: item.action.slice(0, actionLimit) } : {}),
+                ...(typeof item.action === 'string' ? { action: cleanAction.slice(0, actionLimit) } : {}),
                 durationSeconds: input.durationSeconds,
               };
             }),
@@ -419,17 +449,8 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
       const sceneFallback = scenes.map((scene) => `Ação: ${scene.action}\nFala: ${scene.text}`).join('\n\n');
       const creativePrompt = (flowVideoPrompt ?? sceneFallback).trim().slice(0, availablePromptLength);
       flowVideoPrompt = prependMandatoryPromptRule(creativePrompt, mandatoryVideoLock, 2000);
-      if (scenes.length) {
-        const existingAction = scenes[0]!.action.trim();
-        const maxCreativeLength = Math.max(0, 400 - mandatoryActionLock.length - 1);
-        scenes[0] = {
-          ...scenes[0]!,
-          action: existingAction.slice(0, maxCreativeLength) + '\n' + mandatoryActionLock,
-        };
-      }
     }
     const productAnalysis = parsed.data.productAnalysis ?? '';
-    const benefitNotVerified = /não comprova|não há comprovação|sem comprovação|não (?:é possível confirmar|foi possível confirmar).{0,160}(?:benef[ií]cio|eficácia|resultado|propriedade)|(?:benef[ií]cio|eficácia).{0,80}não (?:comprovado|confirmado)/i.test(productAnalysis);
     let safeHook = parsed.data.hook;
     let safeCallToAction = parsed.data.callToAction;
     const unsupportedUseAllowed = /\b(?:aplique|aplicar|aplica|massageie|massagear|massageia|espalhe|espalhar|espalha|passe|passar|usa|usar)\b/i.test(input.briefing + ' ' + productAnalysis);
@@ -440,30 +461,29 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
     const unverifiedMarketingClaims = isTikTokShopWorkflow &&
       /\b(?:cansad[oa] de testar|não sofra|não sofra mais|ingredientes incríveis|resultado garantido|milagroso|perfeito para|sérum perfeito|cura|curar|elimina|eliminar|acaba com|acabar com|hidratação profunda|textura leve|pele mais hidratada)\b/i.test(`${parsed.data.hook} ${parsed.data.callToAction} ${draftContent}`);
     const needsConservativeRewrite = isTikTokShopWorkflow && scenes.length &&
-      (benefitNotVerified || hasUnverifiedApplication || unverifiedMarketingClaims);
+      (hasUnverifiedApplication || unverifiedMarketingClaims);
     let safeSpeech = '';
     if (needsConservativeRewrite) {
       const labelParts = [...productAnalysis.matchAll(/[“'\"]([^“'\"]{2,80})[”'\"]/g)]
         .map((match) => match[1]!.trim())
         .slice(0, 2);
-      const itemName = labelParts[0] ?? 'produto da foto';
+      const itemName = labelParts[0];
       const brand = labelParts[1] ? `, da ${labelParts[1]}` : '';
-      safeHook = `Olha esse produto: ${itemName}${brand}.`;
+      safeHook = itemName ? `Olha este produto: ${itemName}${brand}.` : 'Olha este produto de perto.';
       safeCallToAction = 'Clique no carrinho e garanta o seu!';
-      safeSpeech = `${safeHook} Confira os detalhes visíveis no rótulo. ${safeCallToAction}`;
+      safeSpeech = fitDirectorDialogue(`${safeHook} Repare nos detalhes visíveis na imagem. ${safeCallToAction}`, directorDialogueWordLimit(input.durationSeconds));
       scenes[0] = { ...scenes[0]!, text: safeSpeech };
       const safeAction = presetId === 'tiktok-shop-hands'
-        ? 'Somente mãos humanas seguram o produto fechado e viram o rótulo para a câmera. Plano fechado, luz suave e movimento natural, sem uso do produto.'
+        ? 'Somente mãos humanas demonstram o produto exatamente no estado e na configuração mostrados pela referência. Um giro lento e contínuo revela os detalhes visíveis; câmera próxima faz uma aproximação suave. Não abrir, aplicar, derramar, alterar nem acrescentar partes ao produto.'
         : presetId === 'tiktok-shop-pov'
-          ? 'Enquadramento POV das mãos segurando o produto fechado e mostrando o rótulo. Luz suave e movimento natural de câmera, sem uso do produto.'
-          : 'A mesma pessoa da imagem de referência segura o produto fechado e mostra o rótulo para a câmera. Plano médio, luz suave e movimento natural, sem uso do produto.';
+          ? 'Perspectiva POV: somente mãos demonstram o produto exatamente no estado e na configuração mostrados pela referência. Um giro lento e contínuo revela os detalhes visíveis; câmera próxima faz uma aproximação suave. Não abrir, aplicar, derramar, alterar nem acrescentar partes ao produto.'
+          : 'A mesma pessoa da referência demonstra o produto exatamente no estado e na configuração mostrados pela imagem. Um giro lento e contínuo revela os detalhes visíveis; câmera próxima faz uma aproximação suave. Não alterar nem acrescentar partes ao produto.';
       if (mandatoryVideoLock) {
-        const maxCreativeLength = Math.max(0, 400 - mandatoryActionLock.length - 1);
-        scenes[0] = { ...scenes[0]!, action: safeAction.slice(0, maxCreativeLength) + '\n' + mandatoryActionLock };
-        flowVideoPrompt = prependMandatoryPromptRule(`${safeAction}\nFala exatamente: ${safeSpeech}`, mandatoryVideoLock, 2000);
+        scenes[0] = { ...scenes[0]!, action: safeAction.slice(0, 400) };
+        flowVideoPrompt = prependMandatoryPromptRule(safeAction, mandatoryVideoLock, 2000);
       } else {
         scenes[0] = { ...scenes[0]!, action: safeAction.slice(0, 400) };
-        flowVideoPrompt = `${safeAction}\nFala exatamente: ${safeSpeech}`.slice(0, 2000);
+        flowVideoPrompt = safeAction.slice(0, 2000);
       }
       const assetSubject = presetId === 'tiktok-shop-hands'
         ? 'Somente mãos humanas e o produto aparecem; nenhum rosto ou apresentadora.'
@@ -482,6 +502,12 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
           1600,
         );
       }
+    }
+    if (scenes[0]) {
+      scenes[0] = {
+        ...scenes[0],
+        text: fitDirectorDialogue(scenes[0].text, directorDialogueWordLimit(input.durationSeconds)),
+      };
     }
     const planText = [
       scenes.map((scene) => scene.action + ' ' + scene.text).join(' '),

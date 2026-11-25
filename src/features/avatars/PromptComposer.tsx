@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { Cpu, Film, Image as ImageIcon, LoaderCircle, Minus, Plus, RectangleVertical, ScanFace, Sparkles, Wand2, X } from 'lucide-react';
+import { Check, Cpu, Expand, Film, Image as ImageIcon, LoaderCircle, Minus, Plus, RectangleVertical, ScanFace, Sparkles, Wand2, X } from 'lucide-react';
 import {
   ASPECT_RATIOS,
   ENGINES,
@@ -74,6 +75,8 @@ export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, 
   const media = st.composerMode;
   const [enhancing, setEnhancing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const expandedPromptRef = useRef<HTMLTextAreaElement>(null);
   const cost = avatarCost(st.count);
   const videoBusy = st.videoBusy;
   // Foto enviada é só referência de criação; o slot INFLUENCER recebe a imagem
@@ -82,6 +85,16 @@ export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, 
   const activeMedia = media;
   const generationCount = activeMedia === 'image' ? st.count : st.videoCount;
   const countLabel = activeMedia === 'image' ? 'imagens' : 'vídeos';
+
+  useEffect(() => {
+    if (!promptExpanded) return;
+    expandedPromptRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPromptExpanded(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [promptExpanded]);
 
   function openVideoTemplates() {
     st.set({ composerMode: 'video', panelTab: 'templates' });
@@ -106,6 +119,7 @@ export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, 
   }
 
   return (
+    <>
     <div
       className="flex flex-col gap-2 rounded-2xl border border-border/80 bg-surface/95 p-2 text-left shadow-xl shadow-black/25 backdrop-blur sm:flex-row"
       data-testid="prompt-composer"
@@ -137,15 +151,27 @@ export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, 
       </div>
 
       {/* Caixa central: Prompt + Barra de controles em uma única faixa limpa */}
-      <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 rounded-xl bg-surface-2/80 p-2.5">
+      <div className={clsx('relative flex min-w-0 flex-1 flex-col justify-between gap-2 rounded-xl bg-surface-2/80 p-2.5', activeMedia === 'video' && 'sm:min-h-40')}>
+        <button
+          type="button"
+          onClick={() => setPromptExpanded(true)}
+          aria-label="Expandir editor do prompt"
+          title="Abrir editor amplo do prompt"
+          className="absolute right-2 top-2 z-10 grid size-7 place-items-center rounded-lg text-fg-muted transition hover:bg-surface-3 hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          <Expand className="size-3.5" />
+        </button>
         <textarea
           value={st.prompt}
           onChange={(e) => st.set({ prompt: e.target.value })}
           maxLength={2000}
-          rows={2}
+          rows={activeMedia === 'video' ? 5 : 3}
           aria-label="Descreva o que você quer criar"
           placeholder="Descreva o que você quer criar… ex.: tomando o suplemento na cozinha, luz da manhã"
-          className="composer-prompt min-h-[44px] w-full resize-none bg-transparent text-sm outline-none placeholder:text-fg-subtle focus:border-transparent focus:outline-none focus:ring-0"
+          className={clsx(
+            'composer-prompt max-h-64 w-full resize-y overflow-y-auto bg-transparent pr-9 text-sm outline-none placeholder:text-fg-subtle focus:border-transparent focus:outline-none focus:ring-0',
+            activeMedia === 'video' ? 'min-h-36' : 'min-h-20',
+          )}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               if (activeMedia === 'video') void st.videoSubmit?.();
@@ -332,5 +358,43 @@ export function PromptComposer({ onGenerate, onVideo, pendingImageRequests = 0, 
         }}
       />
     </div>
+    {promptExpanded && createPortal(
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6"
+        onMouseDown={(event) => { if (event.target === event.currentTarget) setPromptExpanded(false); }}
+      >
+        <section role="dialog" aria-modal="true" aria-labelledby="expanded-prompt-title" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-accent/40 bg-surface shadow-2xl shadow-black/60">
+          <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6">
+            <div>
+              <h2 id="expanded-prompt-title" className="text-sm font-bold text-fg">Editar prompt de {activeMedia === 'video' ? 'vídeo' : 'imagem'}</h2>
+              <p className="mt-0.5 text-[11px] text-fg-muted">{st.prompt.length}/2000 caracteres · Ctrl+Enter para gerar</p>
+            </div>
+            <button type="button" onClick={() => setPromptExpanded(false)} aria-label="Fechar editor amplo" className="grid size-9 shrink-0 place-items-center rounded-lg text-fg-muted hover:bg-surface-2 hover:text-fg"><X className="size-4" /></button>
+          </header>
+          <textarea
+            ref={expandedPromptRef}
+            value={st.prompt}
+            onChange={(event) => st.set({ prompt: event.target.value })}
+            maxLength={2000}
+            aria-label="Prompt completo"
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                setPromptExpanded(false);
+                if (activeMedia === 'video') void st.videoSubmit?.();
+                else onGenerate();
+              }
+            }}
+            className="min-h-[48vh] w-full resize-y bg-transparent px-4 py-4 text-sm leading-6 text-fg outline-none placeholder:text-fg-subtle focus:ring-0 sm:px-6"
+            placeholder="Descreva o que você quer criar…"
+          />
+          <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 sm:px-6">
+            <span className="text-[11px] text-fg-muted">As alterações são salvas no canvas automaticamente.</span>
+            <button type="button" onClick={() => setPromptExpanded(false)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-xs font-bold text-white hover:brightness-110"><Check className="size-3.5" /> Concluir edição</button>
+          </footer>
+        </section>
+      </div>,
+      document.body,
+    )}
+    </>
   );
 }

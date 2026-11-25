@@ -79,7 +79,7 @@ const DIRECTOR_HANDOFF_TTL_MS = 30 * 60 * 1000;
 
 export type DirectorCanvasHandoff = Pick<AvatarStudioState,
   'tab' | 'panelTab' | 'composerMode' | 'useInfluencerPreset' | 'baseAvatar' | 'basePhoto' | 'productImage' | 'referenceImages' | 'prompt' | 'aspectRatio' | 'count' | 'videoCount' | 'videoEngine' | 'videoDurationSeconds'
->;
+> & { directorScene?: { action: string; text: string } };
 
 function compactHandoffImage(image: PreparedImage | null): Omit<PreparedImage, 'previewUrl'> | null {
   if (!image) return null;

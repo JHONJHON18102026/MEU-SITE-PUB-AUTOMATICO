@@ -5,7 +5,7 @@ import { Check, Film, Image as ImageIcon, Plus, Save, Sparkles, Trash2 } from 'l
 import { useCreateUgcProject } from '@/features/projects/previewProjectsStore';
 import { prepareImageFromUrl } from '@/lib/image';
 import { calculateUgcCost } from '@shared/ugcContracts';
-import { clearDirectorCanvasHandoff, MAX_PENDING_VIDEO_REQUESTS, useAvatarStudio, type AvatarTemplateMode, type CustomAvatarTemplate } from './avatarStore';
+import { clearDirectorCanvasHandoff, MAX_PENDING_VIDEO_REQUESTS, restoreDirectorCanvasHandoff, useAvatarStudio, type AvatarTemplateMode, type CustomAvatarTemplate } from './avatarStore';
 import { useSession } from '@/store/session';
 import { ApiClientError, api } from '@/lib/api';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -255,6 +255,7 @@ export function AvatarTemplatesPanel() {
         return;
       }
       const studio = useAvatarStudio.getState();
+      const directorScene = restoreDirectorCanvasHandoff()?.directorScene;
       const brief = studio.prompt.trim();
       if (!brief) {
         toast.error('Descreva a cena ou aplique um template antes de gerar.');
@@ -317,7 +318,11 @@ export function AvatarTemplatesPanel() {
           referenceImages: references.length ? references.map((image) => image.data) : undefined,
           referenceImageNames: references.length ? references.map((image) => image.name) : undefined,
           avatarPrompt: brief.slice(0, 2000),
-          scenes: [{ text: brief.slice(0, 600), action: brief.slice(0, 400), durationSeconds: studio.videoEngine === 'omni-flash' ? Math.min(10, studio.videoDurationSeconds || 10) : 8 }],
+          scenes: [{
+            text: directorScene?.text ?? brief.slice(0, 600),
+            action: directorScene?.action ?? brief.slice(0, 400),
+            durationSeconds: studio.videoEngine === 'omni-flash' ? Math.min(10, studio.videoDurationSeconds || 10) : 8,
+          }],
         });
         if (!result) break;
         createdCount += 1;

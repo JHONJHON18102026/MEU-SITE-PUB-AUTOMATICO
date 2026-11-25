@@ -93,9 +93,25 @@ function buildScenePrompt(req: CreateUgcVideoRequest, scene: { text: string; act
 
   if (req.mode === 'avatar-video') {
     const hasPersonReference = Boolean(req.avatarImageData || req.avatarUrl);
+    const direction = req.avatarPrompt?.trim() ?? '';
+    const action = scene.action?.trim() ?? '';
+    const dialogue = scene.text?.trim() ?? '';
+    const directionLower = direction.toLocaleLowerCase('pt-BR');
+    // Director handoff keeps direction, scene action and approved dialogue in
+    // separate fields. Regular canvas requests may repeat the same prompt in
+    // all three; only append distinct scene fields to avoid both data loss and
+    // prompt duplication.
+    const distinctAction = action && !directionLower.includes(action.toLocaleLowerCase('pt-BR'))
+      ? `Approved on-screen action: ${action}`
+      : '';
+    const distinctDialogue = dialogue && !directionLower.includes(dialogue.toLocaleLowerCase('pt-BR'))
+      ? `Exact spoken dialogue in Brazilian Portuguese (pt-BR): "${dialogue}"`
+      : '';
     return [
       `Natural ${ratio} creator video scene ${idx + 1}.`,
-      req.avatarPrompt || scene.action || scene.text,
+      direction || distinctAction || distinctDialogue,
+      distinctAction,
+      distinctDialogue,
       req.productImageData || req.productName ? `Present the product faithfully${req.productName ? `: ${req.productName}` : ''}. Preserve its visible design and do not invent product claims.` : '',
       hasPersonReference ? 'Preserve the person identity only from the INFLUENCIADOR reference.' : '',
       'Use believable human movement, coherent camera motion, natural lighting, and no generated captions, logos, or watermarks.',

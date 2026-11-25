@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { applyWatermark } from '../../server/watermark';
-import { pickModel } from '../../server/gemini';
+import { directorDialogueWordLimit, fitDirectorDialogue, pickModel } from '../../server/gemini';
 
 describe("marca d'água FUTURO DIGITAL", () => {
   it('mantém o tamanho da imagem e altera o canto superior esquerdo (onde fica a logo)', async () => {
@@ -49,5 +49,23 @@ describe('descoberta de modelos Gemini', () => {
 
   it('devolve undefined quando nada combina', () => {
     expect(pickModel(['text-embedding-004'], [/image/])).toBeUndefined();
+  });
+});
+
+describe('duração segura da fala do Agente Diretor', () => {
+  it('reserva 1,5 segundo sem fala no fim do vídeo', () => {
+    expect(directorDialogueWordLimit(8)).toBe(11);
+    expect(directorDialogueWordLimit(10)).toBe(15);
+    expect(directorDialogueWordLimit(15)).toBe(24);
+  });
+
+  it('preserva frases completas quando o roteiro passa do limite', () => {
+    expect(fitDirectorDialogue('Gancho curto. Apresentação do produto. Clique no carrinho e garanta o seu!', 7))
+      .toBe('Gancho curto. Apresentação do produto.');
+  });
+
+  it('nunca corta uma palavra ao aplicar o limite', () => {
+    expect(fitDirectorDialogue('Uma fala comprida que não cabe no vídeo', 5))
+      .toBe('Uma fala comprida que não.');
   });
 });

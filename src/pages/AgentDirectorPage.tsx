@@ -18,6 +18,7 @@ type DirectorDraft = {
   briefing: string; presetId: DirectorPresetId; objective: string; format: (typeof FORMATS)[number];
   duration: (typeof DURATIONS)[number]; referenceMode: ReferenceMode; refs: RefFile[];
   productRef: RefFile | null; presenterRef: RefFile | null; plan: DirectorPlan | null;
+  planSourceKey?: string;
 };
 
 function restorePreparedImage(value: unknown): PreparedImage | null {
@@ -52,6 +53,7 @@ function loadDirectorDraft(): Omit<DirectorDraft, 'savedAt'> | null {
       format, duration, referenceMode: stored.referenceMode === 'elements' ? 'elements' : 'frames', refs,
       productRef: restoreRef(stored.productRef), presenterRef: restoreRef(stored.presenterRef),
       plan: stored.plan && typeof stored.plan === 'object' ? stored.plan : null,
+      planSourceKey: typeof stored.planSourceKey === 'string' ? stored.planSourceKey : '',
     };
   } catch {
     window.sessionStorage.removeItem(DIRECTOR_DRAFT_KEY);
@@ -144,6 +146,7 @@ export function AgentDirectorPage() {
   const [productRef, setProductRef] = useState<RefFile | null>(initialDraft?.productRef ?? null);
   const [presenterRef, setPresenterRef] = useState<RefFile | null>(initialDraft?.presenterRef ?? null);
   const [plan, setPlan] = useState<DirectorPlan | null>(initialDraft?.plan ?? null);
+  const [planSourceKey, setPlanSourceKey] = useState(initialDraft?.planSourceKey ?? '');
   const [loading, setLoading] = useState(false);
   const [handingOff, setHandingOff] = useState(false);
   const [draftStorageError, setDraftStorageError] = useState(false);
@@ -155,21 +158,32 @@ export function AgentDirectorPage() {
     ? 'Anexe uma foto do produto para habilitar a criação do plano.'
     : 'Anexe o frame inicial obrigatório para habilitar a criação do plano.';
 
+  const referenceSignature = (ref: RefFile | null) => ref
+    ? `${ref.image.name}:${ref.image.data.length}:${ref.image.data.slice(0, 48)}:${ref.image.data.slice(-48)}`
+    : '';
+  const currentPlanSourceKey = JSON.stringify({
+    briefing, presetId, objective, format, duration, referenceMode,
+    refs: refs.map((ref) => referenceSignature(ref)),
+    product: referenceSignature(productRef), presenter: isTikTokInfluencerMode ? referenceSignature(presenterRef) : '',
+  });
+  const planIsStale = Boolean(plan && (!planSourceKey || planSourceKey !== currentPlanSourceKey));
+
   useEffect(() => {
     try {
       const compactRef = (ref: RefFile | null) => ref ? { image: { mimeType: ref.image.mimeType, data: ref.image.data, name: ref.image.name } } : null;
       window.sessionStorage.setItem(DIRECTOR_DRAFT_KEY, JSON.stringify({
         savedAt: Date.now(), briefing, presetId, objective, format, duration, referenceMode,
-        refs: refs.map((ref) => compactRef(ref)), productRef: compactRef(productRef), presenterRef: compactRef(presenterRef), plan,
+        refs: refs.map((ref) => compactRef(ref)), productRef: compactRef(productRef), presenterRef: compactRef(presenterRef), plan, planSourceKey,
       }));
       if (draftStorageError) setDraftStorageError(false);
     } catch {
       if (!draftStorageError) setDraftStorageError(true);
     }
-  }, [briefing, presetId, objective, format, duration, referenceMode, refs, productRef, presenterRef, plan, draftStorageError]);
+  }, [briefing, presetId, objective, format, duration, referenceMode, refs, productRef, presenterRef, plan, planSourceKey, draftStorageError]);
 
   function clearPlan() {
     setPlan(null);
+    setPlanSourceKey('');
     toast.success('Plano removido. Briefing e referências continuam salvos para criar outro.');
   }
 
@@ -246,6 +260,7 @@ export function AgentDirectorPage() {
       toast.error(isTikTokShop ? 'Anexe primeiro a foto do produto para o Diretor analisar.' : 'Anexe primeiro o frame inicial para o Diretor analisar.');
       return;
     }
+    const submittedSourceKey = currentPlanSourceKey;
     setLoading(true);
     try {
       const sourceReferences = isTikTokShop
@@ -273,6 +288,7 @@ export function AgentDirectorPage() {
           flowVideoPrompt: audioDirection + '\n\n' + flowVideoPrompt.slice(0, 2000 - audioDirection.length - 2),
         } : {}),
       });
+      setPlanSourceKey(submittedSourceKey);
       toast.success('Plano de produção criado. Revise antes de aprovar.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível criar o plano.');
@@ -282,8 +298,23 @@ export function AgentDirectorPage() {
   }
 
   async function openCanvas(target: 'cover' | 'clean' | 'video') {
-    if (!plan || handingOff) return;
-    const prompt = target === 'cover' ? plan.coverImagePrompt : target === 'clean' ? plan.cleanImagePrompt : plan.flowVideoPrompt;
+    if (!plan || planIsStale || handingOff) return;
+    const scene = plan.scenes[0];
+    const audioDirection = 'Áudio obrigatório: todo diálogo, fala e narração devem ser exclusivamente em português do Brasil (pt-BR), com pronúncia brasileira. Diga exatamente a fala aprovada abaixo, sem traduzir, resumir ou substituir. Termine a locução com folga antes do fim e preserve o trecho final sem fala para evitar cortes.';
+    const approvedScene = [
+      scene?.action.trim() ? `AÇÃO VISUAL APROVADA (prevalece sobre qualquer ação divergente acima): ${scene.action.trim()}` : '',
+      scene?.text.trim() ? `FALA EXATA EM PORTUGUÊS DO BRASIL (prevalece sobre qualquer fala divergente acima): "${scene.text.trim()}"` : '',
+    ].filter(Boolean).join('\n\n');
+    const videoDirection = target === 'video'
+      ? (() => {
+          const promptPrefix = `${audioDirection}\n\nDIREÇÃO VISUAL DO AGENTE DIRETOR:`;
+          const promptSuffix = `AÇÃO E FALA FINAIS APROVADAS NO PLANO:\n${approvedScene}`;
+          const directionBudget = Math.max(0, 2000 - promptPrefix.length - promptSuffix.length - 4);
+          const creativeDirection = plan.flowVideoPrompt?.trim().slice(0, directionBudget) ?? '';
+          return [promptPrefix, creativeDirection, promptSuffix].filter(Boolean).join('\n\n');
+        })()
+      : undefined;
+    const prompt = target === 'cover' ? plan.coverImagePrompt : target === 'clean' ? plan.cleanImagePrompt : videoDirection;
     if (!prompt) {
       toast.error('O plano não trouxe esse prompt. Gere o plano novamente antes de abrir o canvas.');
       return;
@@ -321,6 +352,7 @@ export function AgentDirectorPage() {
         videoCount: 1,
         videoEngine: plan.engineId,
         videoDurationSeconds: plan.engineId === 'omni-flash' ? Math.min(10, plan.totalDurationSeconds) : 8,
+              directorScene: target === 'video' && scene ? { action: scene.action, text: scene.text } : undefined,
       };
       saveDirectorCanvasHandoff(canvasHandoff);
       setAvatarStudio(canvasHandoff);
@@ -400,12 +432,13 @@ export function AgentDirectorPage() {
 
         <aside className="space-y-4">
           <section className="h-full rounded-[24px] border border-accent/20 bg-[linear-gradient(155deg,rgba(138,97,255,.12),rgba(18,18,29,.96)_42%)] p-5 shadow-[0_20px_55px_rgba(0,0,0,.18)]">
-            <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.16em] text-accent-light">Plano do Diretor</div>{plan && <h2 className="mt-1 text-base font-black">{plan.title}</h2>}</div>{plan && <div className="flex shrink-0 items-center gap-2"><span className="size-2.5 rounded-full bg-success shadow-[0_0_12px_rgba(39,201,143,.8)]" /><button type="button" onClick={clearPlan} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[9px] font-bold text-fg-muted hover:border-danger/60 hover:text-danger"><Trash2 className="size-3" /> Limpar plano</button></div>}</div>
+            <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.16em] text-accent-light">Plano do Diretor</div>{plan && <h2 className="mt-1 text-base font-black">{plan.title}</h2>}</div>{plan && <div className="flex shrink-0 items-center gap-2"><span className={`size-2.5 rounded-full ${planIsStale ? 'bg-amber-400' : 'bg-success shadow-[0_0_12px_rgba(39,201,143,.8)]'}`} /><button type="button" onClick={clearPlan} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[9px] font-bold text-fg-muted hover:border-danger/60 hover:text-danger"><Trash2 className="size-3" /> Limpar plano</button></div>}</div>
             {plan ? <div className="mt-5 space-y-3"><p className="text-[10px] leading-4 text-fg-subtle">Este plano permanece salvo ao navegar. Edite o briefing e escolha <strong>Recriar plano</strong> para atualizar; use <strong>Limpar plano</strong> para remover apenas o resultado.</p>
+              {planIsStale && <div role="alert" className="rounded-xl border border-amber-400/35 bg-amber-400/10 px-3 py-2.5 text-[10px] leading-4 text-amber-100">As referências ou instruções mudaram desde este plano. Recrie o plano para não enviar ao canvas um resultado ligado ao produto anterior.</div>}
               <div className="grid grid-cols-2 gap-2">{[[Target,'Objetivo',plan.objective],[Clock3,'Duração',`${plan.totalDurationSeconds}s`],[ImagePlus,'Referências',`${referenceCount} anexada(s)`],[Sparkles,'Motor',plan.engineLabel]].map(([Icon,label,value]) => { const I = Icon as typeof Target; return <div key={String(label)} className="rounded-xl border border-white/8 bg-white/[.025] p-3"><I className="size-3.5 text-accent" /><span className="mt-2 block text-[9px] uppercase text-fg-subtle">{String(label)}</span><span className="mt-0.5 block text-[10px] font-bold">{String(value)}</span></div>; })}</div>
               {plan.productAnalysis && <div className="rounded-xl border border-white/8 bg-white/[.025] p-3"><div className="text-[9px] font-bold uppercase tracking-[.12em] text-fg-subtle">Análise do produto</div><p className="mt-2 text-[10px] leading-4 text-fg-muted">{plan.productAnalysis}</p></div>}
               <div className="rounded-xl border border-accent/25 bg-accent/[.05] p-3"><div className="text-[10px] font-bold">Pronto para o canvas</div><p className="mt-1 text-[9px] leading-4 text-fg-muted">O Diretor só prepara o material. Escolha o que quer abrir; nada será gerado ou cobrado até você clicar em Gerar no canvas.</p>
-                <div className="mt-3 grid gap-2">{plan.coverImagePrompt && <button type="button" disabled={handingOff} onClick={() => void openCanvas('cover')} className="h-9 rounded-lg border border-border bg-surface-2 px-3 text-[10px] font-bold hover:border-accent disabled:opacity-50">{handingOff ? 'Preparando canvas…' : 'Abrir canvas · Capa promocional'}</button>}{plan.cleanImagePrompt && <button type="button" disabled={handingOff} onClick={() => void openCanvas('clean')} className="h-9 rounded-lg border border-border bg-surface-2 px-3 text-[10px] font-bold hover:border-accent disabled:opacity-50">{handingOff ? 'Preparando canvas…' : 'Abrir canvas · Imagem limpa'}</button>}<button type="button" disabled={handingOff || !plan.flowVideoPrompt} onClick={() => void openCanvas('video')} className="h-10 rounded-lg bg-accent px-3 text-[10px] font-black text-white hover:brightness-110 disabled:opacity-50">{handingOff ? 'Preparando canvas…' : 'Validar e abrir vídeo no canvas'}</button></div>
+                <div className="mt-3 grid gap-2">{plan.coverImagePrompt && <button type="button" disabled={handingOff || planIsStale} onClick={() => void openCanvas('cover')} className="h-9 rounded-lg border border-border bg-surface-2 px-3 text-[10px] font-bold hover:border-accent disabled:opacity-50">{handingOff ? 'Preparando canvas…' : 'Abrir canvas · Capa promocional'}</button>}{plan.cleanImagePrompt && <button type="button" disabled={handingOff || planIsStale} onClick={() => void openCanvas('clean')} className="h-9 rounded-lg border border-border bg-surface-2 px-3 text-[10px] font-bold hover:border-accent disabled:opacity-50">{handingOff ? 'Preparando canvas…' : 'Abrir canvas · Imagem limpa'}</button>}<button type="button" disabled={handingOff || planIsStale || !plan.flowVideoPrompt} onClick={() => void openCanvas('video')} className="h-10 rounded-lg bg-accent px-3 text-[10px] font-black text-white hover:brightness-110 disabled:opacity-50">{handingOff ? 'Preparando canvas…' : 'Validar e abrir vídeo no canvas'}</button></div>
               </div>
               <div className="rounded-xl border border-white/8 bg-white/[.025] p-3"><div className="text-[9px] font-bold uppercase tracking-[.12em] text-fg-subtle">Cenas planejadas · editáveis</div>{plan.scenes.map((scene, index) => <div key={scene.index} className="mt-3 border-l-2 border-accent/40 pl-3"><div className="text-[10px] font-bold">Cena {index + 1} · {scene.durationSeconds}s</div><textarea aria-label={`Ação da cena ${index + 1}`} value={scene.action} onChange={(e) => setPlan((current) => current ? { ...current, scenes: current.scenes.map((item, i) => i === index ? { ...item, action: e.target.value } : item) } : current)} className="mt-1 min-h-14 w-full resize-y rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-[9px] leading-4 text-fg-muted outline-none focus:border-accent" /><textarea aria-label={`Fala da cena ${index + 1}`} value={scene.text} onChange={(e) => setPlan((current) => current ? { ...current, scenes: current.scenes.map((item, i) => i === index ? { ...item, text: e.target.value } : item) } : current)} className="mt-1 min-h-12 w-full resize-y rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-[9px] leading-4 text-fg-muted outline-none focus:border-accent" /></div>)}</div>
               {plan.coverImagePrompt && <PlanTextOutput title="Prompt · Capa promocional" value={plan.coverImagePrompt} />}{plan.cleanImagePrompt && <PlanTextOutput title="Prompt · Imagem limpa" value={plan.cleanImagePrompt} />}{plan.flowVideoPrompt && <PlanTextOutput title="Prompt · Vídeo para o canvas" value={plan.flowVideoPrompt} />}
