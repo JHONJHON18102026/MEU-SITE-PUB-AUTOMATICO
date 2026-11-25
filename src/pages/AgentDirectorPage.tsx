@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, type DirectorPlan } from '@/lib/api';
 import type { DirectorPresetId } from '@shared/directorContracts';
 import { prepareImage, type PreparedImage } from '@/lib/image';
-import { countDirectorDialogueWords, directorDialogueWordLimit } from '@/lib/directorSpeech';
+import { countDirectorDialogueWords, directorDialogueWordLimit, fitDirectorDialogue } from '@/lib/directorSpeech';
 import { saveDirectorCanvasHandoff, useAvatarStudio } from '@/features/avatars/avatarStore';
 
 type RefFile = { image: PreparedImage; preview: string };
@@ -277,16 +277,23 @@ export function AgentDirectorPage() {
       // no rascunho para sobreviver à navegação entre o Diretor e o canvas.
       const references = sourceReferences.map(({ image, role }) => ({ name: `${role} · ${image.name}`.slice(0, 120), dataUrl: `data:${image.mimeType};base64,${image.data}` }));
       const result = await api.createDirectorPlan({ presetId, briefing, objective, aspectRatio: format, durationSeconds: duration, references });
+      const speechLimit = directorDialogueWordLimit(result.plan.totalDurationSeconds || duration);
+      const safePlan = {
+        ...result.plan,
+        scenes: result.plan.scenes.map((scene, index) => index === 0
+          ? { ...scene, text: fitDirectorDialogue(scene.text, speechLimit) }
+          : scene),
+      };
       const audioDirection = 'Áudio obrigatório: todo diálogo, fala e narração devem ser exclusivamente em português do Brasil (pt-BR), com pronúncia brasileira. Se o roteiro trouxer falas em outro idioma, traduza-as para pt-BR antes de falá-las.';
-      const rawVideoPrompt = result.plan.flowVideoPrompt?.trim()
-        || result.plan.scenes.map((scene) => `Ação: ${scene.action}\nFala: ${scene.text}`).join('\n\n').trim();
+      const rawVideoPrompt = safePlan.flowVideoPrompt?.trim()
+        || safePlan.scenes.map((scene) => `Ação: ${scene.action}\nFala: ${scene.text}`).join('\n\n').trim();
       const flowVideoPrompt = rawVideoPrompt
         ? rawVideoPrompt.includes('CONTINUIDADE VISUAL OBRIGATÓRIA')
           ? rawVideoPrompt
           : `${VIDEO_CONTINUITY_DIRECTION}\n\n${rawVideoPrompt}`
         : undefined;
       setPlan({
-        ...result.plan,
+        ...safePlan,
         referenceMode,
         ...(flowVideoPrompt ? {
           flowVideoPrompt: audioDirection + '\n\n' + flowVideoPrompt.slice(0, 2000 - audioDirection.length - 2),
