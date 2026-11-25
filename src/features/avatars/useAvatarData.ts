@@ -73,8 +73,10 @@ export function useMyAvatars() {
   useEffect(() => {
     const client = supabase;
     if (!client || !userId) return;
+    // Cada componente pode chamar useMyAvatars; nomes compartilhados fazem o
+    // Supabase reutilizar um canal já inscrito e rejeitar novos callbacks.
     const channel = client
-      .channel(`my-avatars:${userId}`)
+      .channel(`my-avatars:${userId}:${crypto.randomUUID()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'avatars', filter: `user_id=eq.${userId}` }, () => {
         useGalleryVersion.getState().bump();
       })
