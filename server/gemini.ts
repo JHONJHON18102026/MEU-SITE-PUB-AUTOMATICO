@@ -257,6 +257,16 @@ function appendMandatoryPromptRule(prompt: string | undefined, rule: string, lim
   return creative.slice(0, available) + (creative ? '\n\n' : '') + suffix;
 }
 
+function prependMandatoryPromptRule(prompt: string | undefined, rule: string, limit: number): string {
+  const prefix = rule.trim();
+  const creative = (prompt ?? '').trim();
+  const available = Math.max(0, limit - prefix.length - 2);
+  return prefix + (creative ? '\n\n' + creative.slice(0, available) : '');
+}
+
+const DIRECTOR_VIDEO_CONTINUITY_LOCK = 'CONTINUIDADE VISUAL OBRIGATÓRIA: anatomia humana correta e estável quadro a quadro. Nunca gerar terceira mão, mãos/dedos/membros extras, duplicados ou deformados, mãos desconectadas, objetos que surgem/desaparecem, flicker, morphing involuntário ou outros artefatos. Quando mãos forem necessárias, mostrar no máximo duas, com cinco dedos cada, ligadas corretamente aos braços. Usar gestos simples, lentos e contínuos, uma ação por vez; preservar identidade, roupa e produto sem duplicar ou deformar.';
+const DIRECTOR_ACTION_CONTINUITY_LOCK = 'Sem mãos, dedos ou membros extras/duplicados/deformados nem artefatos; no máximo duas mãos visíveis, cinco dedos cada e ligadas aos braços. Um gesto simples e contínuo; anatomia estável.';
+
 const DIRECTOR_INSTRUCTIONS = `Você é o Agente Diretor do FUTURO DIGITAL, especializado em anúncios UGC e vídeos de produto.
 Crie um plano executável, realista e conciso em português do Brasil. Responda SOMENTE JSON válido, sem markdown.
 O presetId é obrigatório e independente do texto editável: conduza a ideia do usuário da melhor forma dentro desse preset, sem substituir, enfraquecer ou contradizer suas regras. Obedeça à seção PRESET OBRIGATÓRIO enviada pelo sistema.
@@ -270,6 +280,7 @@ productAnalysis deve citar somente características visíveis e não afirmar ben
 Antes de finalizar, confira cada afirmação sobre o produto contra a foto e o briefing. Se nenhum benefício estiver explicitamente comprovado, não invente benefícios nem sensações de uso (por exemplo, textura leve, aplicação prática, hidratação ou resultado na pele); descreva uma característica visível ou o texto legível no rótulo. A fala da cena, a capa e o prompt do vídeo seguem a mesma regra.
 coverImagePrompt e cleanImagePrompt devem ser prompts independentes: a capa pode ter uma chamada comercial curta e CTA adequada; a imagem limpa não pode conter texto, preço, logo promocional, grafismo ou moldura. Nunca misture as duas.
 flowVideoPrompt descreve direção criativa, ações, câmera, luz e fala/narração. Formato e duração são definidos nos controles da tela: não repita proporção ou segundos dentro do prompt.
+Todo vídeo deve receber instrução explícita de continuidade visual: anatomia correta em todos os quadros, sem terceira mão, mãos/dedos/membros extras, duplicados ou deformados, sem membros desconectados, flicker, morphing involuntário ou artefatos. Quando mãos forem necessárias, no máximo duas, com cinco dedos cada e ligadas aos braços. Prefira gestos simples e contínuos, uma ação por vez, preserve identidade, roupa e produto. Essa regra é obrigatória em qualquer preset e deve aparecer no começo do flowVideoPrompt final, não apenas como orientação implícita.
 Em scenes[0].text escreva um roteiro curto que caiba em 10 segundos e siga: gancho inicial, apresentação do produto, um benefício comprovável e chamada para ação. Prefira “Clique no carrinho e garanta o seu!” quando fizer sentido. Em scenes[0].action descreva a demonstração visual e a câmera.
 Modo 1: a influenciadora adulta morena fala para a câmera; se uma pessoa for anexada, preserve aquela identidade em vez de substituí-la.
 Modo 2: mostre somente mãos e produto, sem rosto; a fala é narração feminina brasileira.
@@ -292,6 +303,9 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
   const presetId: DirectorPresetId = input.presetId ?? legacyPreset;
   const isTikTokShopWorkflow = presetId.startsWith('tiktok-shop-');
   const presetRules = DIRECTOR_PRESET_RULES[presetId];
+  const mandatoryModeLock = TIKTOK_VIDEO_LOCKS[presetId];
+  const mandatoryVideoLock = [DIRECTOR_VIDEO_CONTINUITY_LOCK, mandatoryModeLock].filter(Boolean).join('\n');
+  const mandatoryActionLock = [DIRECTOR_ACTION_CONTINUITY_LOCK, mandatoryModeLock].filter(Boolean).join(' ');
   const directorSystemInstruction = [
     DIRECTOR_INSTRUCTIONS,
     'PRESET OBRIGATÓRIO (' + presetId + '):',
@@ -342,7 +356,6 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
     // Engine, custo, duração e modo de referência são regras do produto, não decisões do modelo.
     // Normalizamos antes da validação para que valores como null/"none" não invalidem um plano útil.
     const assetLocks = TIKTOK_ASSET_LOCKS[presetId];
-    const mandatoryModeLock = TIKTOK_VIDEO_LOCKS[presetId];
     const normalizedPlan = {
       ...modelPlan,
       // Hust can return a useful warning longer than the UI contract allows.
@@ -369,13 +382,13 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
         ? { cleanImagePrompt: modelPlan.cleanImagePrompt.slice(0, Math.max(0, 1600 - (assetLocks?.clean.length ?? 0) - 2)) }
         : {}),
       ...(typeof modelPlan.flowVideoPrompt === 'string'
-        ? { flowVideoPrompt: modelPlan.flowVideoPrompt.slice(0, Math.max(0, 2000 - (mandatoryModeLock?.length ?? 0) - 2)) }
+        ? { flowVideoPrompt: modelPlan.flowVideoPrompt.slice(0, Math.max(0, 2000 - mandatoryVideoLock.length - 2)) }
         : {}),
       ...(Array.isArray(modelPlan.scenes)
         ? {
             scenes: modelPlan.scenes.slice(0, 8).map((scene, index) => {
               const item = scene && typeof scene === 'object' ? scene as Record<string, unknown> : {};
-              const actionLimit = Math.max(0, 400 - (mandatoryModeLock?.length ?? 0) - 1);
+              const actionLimit = Math.max(0, 400 - mandatoryActionLock.length - 1);
               return {
                 ...item,
                 index,
@@ -401,16 +414,17 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
       coverImagePrompt = appendMandatoryPromptRule(coverImagePrompt, assetLocks.cover, 1600);
       cleanImagePrompt = appendMandatoryPromptRule(cleanImagePrompt, assetLocks.clean, 1600);
     }
-    if (mandatoryModeLock) {
-      const availablePromptLength = Math.max(0, 2000 - mandatoryModeLock.length - 2);
-      const creativePrompt = (flowVideoPrompt ?? '').trim().slice(0, availablePromptLength);
-      flowVideoPrompt = creativePrompt ? creativePrompt + '\n\n' + mandatoryModeLock : mandatoryModeLock;
+    if (mandatoryVideoLock) {
+      const availablePromptLength = Math.max(0, 2000 - mandatoryVideoLock.length - 2);
+      const sceneFallback = scenes.map((scene) => `Ação: ${scene.action}\nFala: ${scene.text}`).join('\n\n');
+      const creativePrompt = (flowVideoPrompt ?? sceneFallback).trim().slice(0, availablePromptLength);
+      flowVideoPrompt = prependMandatoryPromptRule(creativePrompt, mandatoryVideoLock, 2000);
       if (scenes.length) {
         const existingAction = scenes[0]!.action.trim();
-        const maxCreativeLength = Math.max(0, 400 - mandatoryModeLock.length - 2);
+        const maxCreativeLength = Math.max(0, 400 - mandatoryActionLock.length - 1);
         scenes[0] = {
           ...scenes[0]!,
-          action: existingAction.slice(0, maxCreativeLength) + '\n' + mandatoryModeLock,
+          action: existingAction.slice(0, maxCreativeLength) + '\n' + mandatoryActionLock,
         };
       }
     }
@@ -443,10 +457,10 @@ export async function createDirectorPlan(input: DirectorPlanRequest, context: { 
         : presetId === 'tiktok-shop-pov'
           ? 'Enquadramento POV das mãos segurando o produto fechado e mostrando o rótulo. Luz suave e movimento natural de câmera, sem uso do produto.'
           : 'A mesma pessoa da imagem de referência segura o produto fechado e mostra o rótulo para a câmera. Plano médio, luz suave e movimento natural, sem uso do produto.';
-      if (mandatoryModeLock) {
-        const maxCreativeLength = Math.max(0, 400 - mandatoryModeLock.length - 1);
-        scenes[0] = { ...scenes[0]!, action: safeAction.slice(0, maxCreativeLength) + '\n' + mandatoryModeLock };
-        flowVideoPrompt = appendMandatoryPromptRule(`${safeAction}\nFala exatamente: ${safeSpeech}`, mandatoryModeLock, 2000);
+      if (mandatoryVideoLock) {
+        const maxCreativeLength = Math.max(0, 400 - mandatoryActionLock.length - 1);
+        scenes[0] = { ...scenes[0]!, action: safeAction.slice(0, maxCreativeLength) + '\n' + mandatoryActionLock };
+        flowVideoPrompt = prependMandatoryPromptRule(`${safeAction}\nFala exatamente: ${safeSpeech}`, mandatoryVideoLock, 2000);
       } else {
         scenes[0] = { ...scenes[0]!, action: safeAction.slice(0, 400) };
         flowVideoPrompt = `${safeAction}\nFala exatamente: ${safeSpeech}`.slice(0, 2000);
