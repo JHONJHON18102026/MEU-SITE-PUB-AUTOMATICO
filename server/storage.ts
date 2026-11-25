@@ -28,6 +28,15 @@ export async function hydrateProjectMedia(project: VideoProjectDTO): Promise<Vid
   const storedThumbnailPath = isImageBatch ? fallbackPath : `${userPrefix}/thumbnail.jpg`;
   const storedThumbnailUrl = await signedMediaUrl(storedThumbnailPath).catch(() => null);
   const referenceAssets = project.params && Array.isArray(project.params.reference_assets) ? project.params.reference_assets : [];
+  const refreshedReferenceAssets = await Promise.all(referenceAssets.map(async (asset) => {
+    if (!asset || typeof asset !== 'object') return asset;
+    const reference = asset as Record<string, unknown>;
+    if (typeof reference.path !== 'string') return reference;
+    const url = await signedMediaUrl(reference.path).catch(() => null);
+    if (url) return { ...reference, url };
+    const { url: _expiredUrl, ...withoutExpiredUrl } = reference;
+    return withoutExpiredUrl;
+  }));
   const firstReference = referenceAssets.find((asset) => asset && typeof asset === 'object' && typeof (asset as { path?: unknown }).path === 'string') as { path: string } | undefined;
   const referenceThumbnailUrl = !storedThumbnailUrl && firstReference
     ? await signedMediaUrl(firstReference.path).catch(() => null)
@@ -39,7 +48,13 @@ export async function hydrateProjectMedia(project: VideoProjectDTO): Promise<Vid
     const url = await signedMediaUrl(path).catch(() => null);
     return url ? { ...scene, video_url: url, image_url: isImageBatch ? url : scene.image_url } : scene;
   }));
-  return { ...project, thumbnail_url: thumbnailUrl, video_url: finalUrl, scenes };
+  return {
+    ...project,
+    thumbnail_url: thumbnailUrl,
+    video_url: finalUrl,
+    scenes,
+    ...(project.params ? { params: { ...project.params, reference_assets: refreshedReferenceAssets } } : {}),
+  };
 }
 
 export async function removeProjectMedia(project: Pick<VideoProjectDTO, 'user_id' | 'id' | 'storage_path' | 'mode' | 'scenes' | 'params'>) {
