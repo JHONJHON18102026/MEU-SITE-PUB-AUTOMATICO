@@ -82,6 +82,8 @@ export const api = {
     request<{ prompt: string }>('/prompt/enhance', { method: 'POST', body: JSON.stringify({ prompt }) }),
   enhanceCharacterPrompt: (payload: import('@shared/contracts').EnhanceCharacterPromptRequest) =>
     request<{ prompt: string }>('/prompt/enhance-character', { method: 'POST', body: JSON.stringify(payload) }),
+  enhanceCharacterWorld: (payload: import('@shared/contracts').EnhanceCharacterWorldRequest) =>
+    request<{ world: string }>('/prompt/enhance-character-world', { method: 'POST', body: JSON.stringify(payload) }),
   createDirectorPlan: (payload: DirectorPlanRequest) =>
     request<{ plan: DirectorPlan }>('/director/plan', { method: 'POST', body: JSON.stringify(payload) }),
   deleteAvatar: (id: string) => request<{ ok: true }>(`/avatars/${id}`, { method: 'DELETE' }),

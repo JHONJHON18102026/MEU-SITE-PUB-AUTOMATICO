@@ -7,7 +7,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { ApiError } from './errors';
 import { getUserIdFromToken } from './supabaseAdmin';
 import { missingKeys } from './env';
-import { enhanceCharacterPrompt, enhancePrompt, resolveModels } from './gemini';
+import { enhanceCharacterPrompt, enhanceCharacterWorld, enhancePrompt, resolveModels } from './gemini';
 import { rustEnabled } from './rustMotor';
 import { checkRustMotor } from './rustMotorSupervisor';
 import { avatarRoutes } from './routes/avatars';
@@ -16,7 +16,7 @@ import { projectRoutes } from './routes/projects';
 import { studioRoutes } from './routes/studio';
 import { viralRoutes } from './routes/viral';
 import { directorRoutes } from './routes/director';
-import { enhanceCharacterPromptSchema, enhancePromptSchema, type ApiErrorBody } from '../shared/contracts';
+import { enhanceCharacterPromptSchema, enhanceCharacterWorldSchema, enhancePromptSchema, type ApiErrorBody } from '../shared/contracts';
 import { describeAttributes } from '../shared/avatarPrompt';
 import type { AttributeSelection } from '../shared/attributes';
 
@@ -99,4 +99,16 @@ app.post('/prompt/enhance-character', async (c) => {
     hasBasePhoto: parsed.data.hasBasePhoto,
   });
   return c.json({ prompt });
+});
+
+app.post('/prompt/enhance-character-world', async (c) => {
+  const parsed = enhanceCharacterWorldSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw new ApiError('INVALID_INPUT', 'Descreva o personagem ou selecione características para montar o mundo.');
+  const world = await enhanceCharacterWorld({
+    description: parsed.data.description,
+    attributes: describeAttributes(parsed.data.attributes as AttributeSelection),
+    currentWorld: parsed.data.currentWorld,
+    hasBasePhoto: parsed.data.hasBasePhoto,
+  });
+  return c.json({ world });
 });

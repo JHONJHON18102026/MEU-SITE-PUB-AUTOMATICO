@@ -274,6 +274,57 @@ export async function enhanceCharacterPrompt(input: {
   }
 }
 
+const CHARACTER_WORLD_INSTRUCTIONS =
+  'You design a coherent everyday world for a custom character in FUTURO DIGITAL Studio. Write the result in natural Brazilian Portuguese, editable by a nontechnical user, as 3 to 5 concise sentences. Describe a fitting place and routine, a few grounded environmental details, professional/natural lighting, and an intentional palette of 3 to 5 named colors. Make the setting feel typical for the described character while allowing fantastical characters to have imaginative but coherent surroundings. Keep the character itself, its identity, body, species, age, gender, clothing and signature traits unchanged; this is context for the same character, never a second subject. Do not invent biography, powers, brands, claims, dialogue, or unrelated people. Use any existing world note as user preference to refine, not as a replacement for the character. Return only the world description, no title, labels, markdown, or explanation.';
+
+export async function enhanceCharacterWorld(input: {
+  description: string;
+  attributes: string[];
+  currentWorld: string;
+  hasBasePhoto: boolean;
+}): Promise<string> {
+  const context = [
+    input.description.trim() ? `PERSONAGEM (descrição principal): ${input.description.trim()}` : '',
+    input.attributes.length ? `CARACTERÍSTICAS SELECIONADAS: ${input.attributes.join('; ')}` : '',
+    input.currentWorld.trim() ? `PREFERÊNCIAS DE MUNDO JÁ ESCRITAS: ${input.currentWorld.trim()}` : '',
+    `FOTO BASE ENVIADA: ${input.hasBasePhoto ? 'sim; preservar a identidade sem descrever uma pessoa nova' : 'não'}`,
+  ].filter(Boolean).join('\n');
+
+  if (rustEnabled()) {
+    try {
+      const out = await rustChatCompletion({
+        prompt: context,
+        system: CHARACTER_WORLD_INSTRUCTIONS,
+        model: 'gemini-4-argon',
+        temperature: 0.25,
+        maxTokens: 220,
+      });
+      return requireEnhancedPrompt(out, 1200, 'A IA não devolveu um mundo de personagem válido. Tente novamente.');
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      if (/fetch failed|econnrefused|enotfound|aborted/i.test(message)) {
+        throw new ApiError('GENERATION_FAILED', 'O motor oficial não está acessível. Abra o serviço Hust/Motor e tente novamente.');
+      }
+      throw new ApiError('GENERATION_FAILED', `Não consegui montar o mundo do personagem: ${message.slice(0, 180)}`);
+    }
+  }
+
+  const ai = getClient();
+  const { text: model } = await resolveModels();
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: context }] }],
+      config: { systemInstruction: CHARACTER_WORLD_INSTRUCTIONS, temperature: 0.25, maxOutputTokens: 220 },
+    });
+    return requireEnhancedPrompt(response.text ?? '', 1200, 'A IA não devolveu um mundo de personagem válido. Tente novamente.');
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw mapGeminiError(err);
+  }
+}
+
 const DIRECTOR_PRESET_RULES: Record<DirectorPresetId, string> = {
   custom: 'Conduza a ideia do briefing com criatividade, sem ignorar referências, controles ou fatos não comprovados.',
   'ugc-product': 'UGC natural. Demonstre o produto com clareza, use fatos comprovados e finalize com CTA curta.',

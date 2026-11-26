@@ -79,6 +79,17 @@ export const enhanceCharacterPromptSchema = z.object({
 });
 export type EnhanceCharacterPromptRequest = z.input<typeof enhanceCharacterPromptSchema>;
 
+export const enhanceCharacterWorldSchema = z.object({
+  description: z.string().max(1800).default(''),
+  attributes: z.record(z.string(), z.array(z.string()).max(30)).default({}),
+  currentWorld: z.string().max(1200).default(''),
+  hasBasePhoto: z.boolean().default(false),
+}).refine(
+  (data) => data.description.trim().length >= 3 || Object.values(data.attributes).some((items) => items.length > 0),
+  'Descreva o personagem ou selecione características antes de montar o mundo.',
+);
+export type EnhanceCharacterWorldRequest = z.input<typeof enhanceCharacterWorldSchema>;
+
 export function avatarCost(count: number): number {
   return PRICING.avatarImage * Math.max(1, Math.min(MAX_IMAGES_PER_REQUEST, Math.floor(count)));
 }

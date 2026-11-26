@@ -105,6 +105,7 @@ function CharacterBuilderModal({
   const [characterDraft, setCharacterDraft] = useState(initialDetails);
   const [worldDraft, setWorldDraft] = useState(initialWorld);
   const [buildingCharacterPrompt, setBuildingCharacterPrompt] = useState(false);
+  const [buildingWorldPrompt, setBuildingWorldPrompt] = useState(false);
 
   async function buildCharacterPrompt() {
     if (characterDraft.trim().length < 3) {
@@ -125,6 +126,28 @@ function CharacterBuilderModal({
       toast.error(err instanceof ApiClientError ? err.message : 'Não consegui montar o prompt do personagem.');
     } finally {
       setBuildingCharacterPrompt(false);
+    }
+  }
+
+  async function buildCharacterWorld() {
+    if (characterDraft.trim().length < 3 && !Object.values(selection).some((items) => items.length > 0)) {
+      toast.info('Descreva o personagem ou escolha características na lateral para montar o mundo.');
+      return;
+    }
+    setBuildingWorldPrompt(true);
+    try {
+      const { world } = await api.enhanceCharacterWorld({
+        description: characterDraft.trim(),
+        attributes: selection as Record<string, string[]>,
+        currentWorld: worldDraft.trim(),
+        hasBasePhoto: Boolean(basePhoto || baseAvatar),
+      });
+      setWorldDraft(world);
+      toast.success('Mundo do personagem montado. Nenhum crédito foi consumido.');
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : 'Não consegui montar o mundo do personagem.');
+    } finally {
+      setBuildingWorldPrompt(false);
     }
   }
 
@@ -194,7 +217,20 @@ function CharacterBuilderModal({
           placeholder="Descreva o mundo e a rotina do personagem…"
           className="w-full resize-y rounded-xl border border-border bg-surface-2 p-3 text-sm outline-none focus:border-accent"
         />
-        <div className="mt-1 text-right text-xs text-fg-subtle">{worldDraft.length}/1200</div>
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <span className="text-xs text-fg-subtle">{worldDraft.length}/1200 · sem custo em créditos</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={buildingWorldPrompt}
+            disabled={characterDraft.trim().length < 3 && !Object.values(selection).some((items) => items.length > 0)}
+            onClick={() => void buildCharacterWorld()}
+            aria-label="Montar mundo do personagem com a skill"
+          >
+            {!buildingWorldPrompt && <Sparkles className="size-3.5" />}
+            {buildingWorldPrompt ? 'Montando…' : 'Montar mundo'}
+          </Button>
+        </div>
       </section>
     </Modal>
   );
