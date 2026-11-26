@@ -12,14 +12,14 @@ export function AdsCreator() {
   return (
     <div className="premium-workspace space-y-6 px-0">
       {guideOpen ? (
-        <section className="rounded-2xl border border-accent/25 bg-[linear-gradient(135deg,rgba(25,23,36,.98),rgba(16,15,24,.98))] p-5 shadow-[0_18px_50px_rgba(0,0,0,.2)]" aria-label="Como criar um vídeo no ADS">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <section className="rounded-2xl border border-accent/25 bg-[linear-gradient(135deg,rgba(25,23,36,.98),rgba(16,15,24,.98))] p-4 shadow-[0_18px_50px_rgba(0,0,0,.18)] sm:p-5" aria-label="Como criar um vídeo no ADS">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-base font-semibold"><Compass className="size-5 text-accent" />Como criar um vídeo no ADS</h2>
             <div className="flex items-center gap-6 text-xs">
               <button onClick={() => setGuideOpen(false)} className="inline-flex items-center gap-2 text-fg-muted"><X className="size-4" />Fechar guia</button>
             </div>
           </div>
-          <ol className="space-y-2">
+          <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {[
               ['Clique em “Novo Projeto”', 'Abre a criação do vídeo, etapa por etapa. Dá para voltar em qualquer etapa antes de gerar.'],
               ['Escolha um modelo (Template)', 'Escolha um dos vídeos-modelo e a proporção (9:16 ou 16:9). Prefere que a IA crie tudo a partir do seu produto? Clique no card roxo IA Criativa.'],
@@ -28,9 +28,9 @@ export function AdsCreator() {
               ['Defina o áudio', 'Escreva o que vai ser falado, escolha voz, emoção, idioma e sotaque, e se quer som de fundo.'],
               ['Confira o Resumo e clique em Gerar', 'O botão “Gerar Vídeo” mostra o custo total antes de confirmar. O vídeo fica pronto em alguns minutos e aparece em “Projetos” (menu lateral).'],
             ].map(([title, description], index) => (
-              <li key={title} className="flex min-h-[49px] gap-3 rounded-xl border border-white/5 bg-black/20 px-3 py-2 transition hover:border-accent/25 hover:bg-accent-soft/30">
-                <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-accent text-xs font-bold text-white">{index + 1}</span>
-                <div><h3 className="text-sm font-semibold">{title}</h3><p className="mt-0.5 text-xs text-fg-muted">{description}</p></div>
+              <li key={title} className="flex min-w-0 gap-2.5 rounded-xl border border-white/[0.07] bg-black/15 px-3 py-2.5 transition-colors hover:border-accent/25 hover:bg-accent-soft/20">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-accent/90 text-[10px] font-bold text-white">{index + 1}</span>
+                <div className="min-w-0"><h3 className="text-xs font-semibold leading-5">{title}</h3><p className="mt-0.5 text-[11px] leading-[1.45] text-fg-muted">{description}</p></div>
               </li>
             ))}
           </ol>

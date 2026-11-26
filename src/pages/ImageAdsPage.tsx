@@ -108,9 +108,9 @@ export function ImageAdsPage() {
   const showPreviewCard = previewReady || Boolean(productPhoto) || stylePrompt.trim().length > 0;
 
   return (
-    <div className="premium-workspace mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-[1480px] flex-col justify-between gap-4 px-6 pb-6 pt-4">
+    <div className="premium-workspace mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-[1480px] flex-col gap-6 px-6 pb-8 pt-6">
       {/* Palco central limpo até escolher modelo ou digitar. */}
-      <div className="flex flex-1 flex-col items-center justify-center py-6">
+      <div className="flex flex-col items-center py-2">
         {!showPreviewCard ? (
           <div className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-cyan-300/25 bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,.24),transparent_55%),linear-gradient(135deg,#111a2f,#131024)] px-8 py-12 text-left shadow-[0_24px_60px_rgba(13,89,120,.2)] md:px-12 md:py-14">
             <img src="/showcase/internal-ads-new.png" alt="" className="pointer-events-none absolute inset-y-0 right-0 h-full w-[52%] object-cover object-center opacity-70 mix-blend-screen" />

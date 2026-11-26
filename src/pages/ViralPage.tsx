@@ -378,10 +378,10 @@ export function ViralPage() {
 
   // TELA PRINCIPAL DA BIBLIOTECA VIRAL (/viral) — palco cheio + barra compacta.
   return (
-    <div className="premium-workspace mx-auto w-full max-w-[1460px] space-y-[26px] px-6 py-14">
+    <div className="premium-workspace mx-auto w-full max-w-[1460px] space-y-6 px-6 py-8">
       <div className="relative min-h-[230px] overflow-hidden rounded-3xl border border-cyan-300/25 bg-[radial-gradient(circle_at_88%_8%,rgba(56,189,248,.24),transparent_38%),linear-gradient(135deg,#111a2f,#131024)] p-7 shadow-[0_28px_80px_rgba(13,89,120,.22)] md:min-h-[290px] md:p-9">
-        <img src="/showcase/internal-viral-new.png" alt="" className="pointer-events-none absolute inset-y-0 right-0 h-full w-[56%] object-cover object-center opacity-34" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-transparent via-[#111a2f]/72 to-[#111a2f]" />
+        <img src="/showcase/internal-viral-new.png" alt="" className="pointer-events-none absolute inset-y-0 right-0 h-full w-[56%] object-cover object-center opacity-55" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-transparent via-[#111a2f]/54 to-[#111a2f]" />
         <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-cyan-300/10 blur-3xl" />
         <div className="relative flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">

@@ -170,22 +170,19 @@ button, a {
 .app-shell a:active { transform: translateY(1px) scale(.99); }
 .app-shell [role='tab']:not([aria-selected='true']):hover,
 .app-shell [role='tab']:not([aria-selected='true']):focus-visible { background-color: color-mix(in srgb, var(--accent) 10%, transparent); }
-.app-shell .group:hover img,
-.app-shell .group:hover video { filter: saturate(1.04) contrast(1.02); }
 .app-shell nav a svg,
 .app-shell nav button svg { transition: transform 180ms cubic-bezier(.2,.8,.2,1), filter 180ms ease; }
 .app-shell nav a:hover svg,
 .app-shell nav button:hover svg { transform: translateY(-1px) scale(1.08); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent-light) 55%, transparent)); }
-.app-shell .route-surface > .premium-workspace > * { animation: premiumRise 360ms cubic-bezier(.2,.8,.2,1) both; }
-.app-shell .route-surface > .premium-workspace > *:nth-child(2) { animation-delay: 35ms; }
-.app-shell .route-surface > .premium-workspace > *:nth-child(3) { animation-delay: 70ms; }
-.app-shell .route-surface > .premium-workspace > *:nth-child(4) { animation-delay: 105ms; }
-.app-shell .route-surface > .premium-workspace > *:nth-child(5) { animation-delay: 140ms; }
 .app-shell .premium-workspace [aria-busy='true'] { position: relative; overflow: hidden; }
 .app-shell .premium-workspace [aria-busy='true']::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.10) 50%, transparent 65%); transform: translateX(-100%); animation: loadingSweep 1.2s ease-in-out infinite; }
 
 .route-surface {
   animation: routeEnter 220ms ease-out both;
+}
+@media (hover: hover) and (pointer: fine) {
+  .app-shell .group:hover img,
+  .app-shell .group:hover video { filter: saturate(1.04) contrast(1.02); }
 }
 .workspace-ribbon {
   background: linear-gradient(90deg, rgba(138,97,255,.08), transparent 42%, rgba(56,189,248,.035));

@@ -55,10 +55,10 @@ export function AiUgcPage() {
   }
 
   return (
-    <div className="premium-workspace mx-auto w-full max-w-[1480px] space-y-8 px-4 py-6">
-      <div className="relative min-h-[230px] overflow-hidden rounded-3xl border border-cyan-300/25 bg-[radial-gradient(circle_at_88%_8%,rgba(56,189,248,.28),transparent_36%),linear-gradient(135deg,#19152b,#111019)] p-7 shadow-[0_28px_80px_rgba(13,89,120,.24)] md:min-h-[290px] md:p-9">
-        <img src="/showcase/internal-ugc-new.png" alt="" className="pointer-events-none absolute inset-y-0 right-0 h-full w-[56%] object-cover object-center opacity-55 mix-blend-screen" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-transparent via-[#19152b]/65 to-[#19152b]" />
+    <div className="premium-workspace mx-auto w-full max-w-[1480px] space-y-6 px-4 py-6">
+      <div className="relative min-h-[220px] overflow-hidden rounded-3xl border border-cyan-300/25 bg-[radial-gradient(circle_at_88%_8%,rgba(56,189,248,.28),transparent_36%),linear-gradient(135deg,#19152b,#111019)] p-7 shadow-[0_28px_80px_rgba(13,89,120,.24)] md:min-h-[260px] md:p-9">
+        <img src="/showcase/internal-ugc-new.png" alt="" className="pointer-events-none absolute inset-y-0 right-0 h-full w-[56%] object-cover object-center opacity-65 mix-blend-screen" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-transparent via-[#19152b]/50 to-[#19152b]" />
         <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-cyan-400/10 blur-3xl" />
         <div className="relative flex flex-wrap items-end justify-between gap-3">
         <div>

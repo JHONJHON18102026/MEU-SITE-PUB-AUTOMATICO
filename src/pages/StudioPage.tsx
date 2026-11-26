@@ -111,8 +111,8 @@ export function StudioPage() {
       {overview && <StudioOverview workspace={ws} projectsOnly={section === 'projetos'} onNewProject={() => setNewProjOpen(true)} />}
       {!overview && <>
       <div className="relative overflow-hidden rounded-3xl border border-cyan-300/25 bg-[radial-gradient(circle_at_88%_8%,rgba(56,189,248,.24),transparent_40%),linear-gradient(135deg,#111a2f,#131024)] p-6 shadow-[0_24px_60px_rgba(13,89,120,.2)]">
-      <img src="/showcase/internal-studio-new.png" alt="" className="pointer-events-none absolute inset-y-0 right-0 h-full w-[42%] object-cover object-center opacity-28 mix-blend-screen" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-transparent via-[#111a2f]/65 to-[#111a2f]" />
+      <img src="/showcase/internal-studio-new.png" alt="" className="pointer-events-none absolute inset-y-0 right-0 h-full w-[42%] object-cover object-center opacity-40 mix-blend-screen" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-transparent via-[#111a2f]/52 to-[#111a2f]" />
       <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-cyan-300/10 blur-3xl" />
       <div className="relative flex flex-wrap items-center justify-between gap-3">
         <div>

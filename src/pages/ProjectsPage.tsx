@@ -219,8 +219,8 @@ export function ProjectsPage() {
     <div className="premium-workspace mx-auto w-full max-w-[1280px] space-y-6 px-6 pb-8 pt-8">
       {/* Cabeçalho limpo da área de projetos. */}
       <div className="relative min-h-[220px] overflow-hidden rounded-3xl border border-cyan-300/25 bg-[radial-gradient(circle_at_90%_15%,rgba(56,189,248,.24),transparent_42%),linear-gradient(135deg,#111a2f,#131024)] p-7 shadow-[0_28px_80px_rgba(13,89,120,.22)] md:min-h-[270px] md:p-9">
-        <img src="/showcase/internal-studio-new.png" alt="" className="pointer-events-none absolute inset-y-0 right-0 h-full w-[54%] object-cover object-center opacity-48 mix-blend-screen" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-transparent via-[#111a2f]/65 to-[#111a2f]" />
+        <img src="/showcase/internal-studio-new.png" alt="" className="pointer-events-none absolute inset-y-0 right-0 h-full w-[54%] object-cover object-center opacity-60 mix-blend-screen" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-transparent via-[#111a2f]/52 to-[#111a2f]" />
         <div className="pointer-events-none absolute -right-16 -top-16 size-44 rounded-full bg-cyan-300/10 blur-3xl" />
         <div className="relative flex flex-wrap items-center justify-between gap-3">
         <div>
