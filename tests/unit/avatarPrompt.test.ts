@@ -106,6 +106,22 @@ describe('montagem do prompt', () => {
     expect(CHARACTER_TYPES_WITH_STYLE_REFERENCE.has('bebe-animado')).toBe(true);
   });
 
+  it('faz Bebê animado prevalecer sobre anatomia adulta salva no prompt personalizado', () => {
+    const p = buildAvatarPrompt({
+      ...base,
+      attributes: { characterType: ['bebe-animado'], gender: ['masculino'], age: ['jovem'] },
+      extraDetails: 'A charming male character designed in a stylized 3D animation aesthetic, lean, slightly lanky build—broad shoulders tapering to a narrow waist, wearing casual fitted clothing and jeans.',
+      hasCharacterStyleReference: true,
+    });
+
+    expect(p).toContain('RESTRIÇÃO DE TIPO — BEBÊ ANIMADO');
+    expect(p).toContain('um bebê/criança pequena');
+    expect(p).toContain('Gênero: Masculino');
+    expect(p).toContain('wearing casual fitted clothing and jeans');
+    expect(p).not.toMatch(/broad shoulders|narrow waist|lean, slightly lanky|male character/i);
+    expect(p).toContain('Referência visual de estilo: a miniatura da opção “Bebê animado”');
+  });
+
   it('não deixa os atributos padrão transformarem uma descrição fantástica em influencer genérico', () => {
     const p = buildAvatarPrompt({
       ...base,

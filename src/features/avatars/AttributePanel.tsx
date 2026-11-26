@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { ChevronDown, ChevronRight, Globe2, ImagePlus, LoaderCircle, Lock, Minus, Plus, Shuffle, Sparkles, X } from 'lucide-react';
-import { ATTRIBUTE_GROUPS, type AttributeGroup } from '@shared/attributes';
+import { ATTRIBUTE_GROUPS, CHARACTER_TYPES_WITH_STYLE_REFERENCE, findOption, type AttributeGroup } from '@shared/attributes';
 import { MAX_IMAGES_PER_REQUEST, avatarCost } from '@shared/contracts';
 import { Button } from '@/components/ui/Button';
 import { CoinIcon } from '@/components/ui/Brand';
@@ -241,6 +241,11 @@ export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; b
   const [characterModalOpen, setCharacterModalOpen] = useState(false);
   const activeFacePreview = st.basePhoto?.previewUrl ?? st.baseAvatar?.image_url ?? null;
   const activeFaceLabel = st.basePhoto ? 'Foto base enviada' : st.baseAvatar ? st.baseAvatar.name : null;
+  const selectedCharacterTypeId = st.selection.characterType?.[0];
+  const selectedCharacterType = selectedCharacterTypeId ? findOption('characterType', selectedCharacterTypeId) : null;
+  const styleReferenceActive = st.useInfluencerPreset && Boolean(
+    selectedCharacterTypeId && CHARACTER_TYPES_WITH_STYLE_REFERENCE.has(selectedCharacterTypeId) && selectedCharacterType?.image,
+  );
   const cost = avatarCost(st.attributeCount);
 
   return (
@@ -331,6 +336,24 @@ export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; b
                   Opcional
                 </span>
               </ImagePicker>
+            )}
+
+            {styleReferenceActive && selectedCharacterType?.image && (
+              <div
+                data-testid="selected-character-style-reference"
+                className="flex items-center gap-3 rounded-2xl border border-accent/50 bg-accent-soft/60 p-2"
+                aria-label={`Referência de estilo ativa: ${selectedCharacterType.label}`}
+              >
+                <img
+                  src={selectedCharacterType.image}
+                  alt={`Miniatura de referência: ${selectedCharacterType.label}`}
+                  className="size-12 rounded-xl object-cover object-top"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-semibold text-fg">Referência de estilo: {selectedCharacterType.label}</div>
+                  <div className="text-[10px] leading-relaxed text-fg-muted">Enviada automaticamente para orientar o mesmo personagem. Sua foto base continua separada.</div>
+                </div>
+              </div>
             )}
 
             {/* A skill de personalização fica no mesmo fluxo do campo de criação. */}

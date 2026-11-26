@@ -73,6 +73,25 @@ function withoutConflictingDefaultAttributes(selection: AttributeSelection, desc
   return result;
 }
 
+/**
+ * A seleção "Bebê animado" é uma restrição de tipo, não apenas uma referência.
+ * Remove cláusulas de anatomia/idade adulta de descrições salvas anteriormente,
+ * mantendo estilo, cores, roupa e outros detalhes que ainda servem ao bebê.
+ */
+function detailsForSelectedCharacterType(details: string, typeId?: string): string {
+  const text = details.trim();
+  if (typeId !== 'bebe-animado' || !text) return text;
+
+  const adultMorphology = /\b(?:adult(?:o|a|os|as)?|adult[- ]?sized|young man|young woman|man|woman|male|female|homem|mulher|masculin[oa]|feminin[oa]|lean(?:ly)?|lanky|broad[- ]shoulder(?:ed|s)?|narrow waist|waist|torso|muscular|athletic build|long legs|adult proportions|in (?:his|her) \d{2}s|\d{2}[- ]year[- ]old)\b|\bom b(?:em)?\b|\bmulher adulta\b/i;
+  const clauses = text
+    .replace(/\s+[—–-]\s+/g, ', ')
+    .split(/(?<=[.!?;])\s+|,\s*/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+  const compatible = clauses.filter((clause) => !adultMorphology.test(clause));
+  return compatible.join(', ').replace(/\s+/g, ' ').trim();
+}
+
 /** Converte a seleção de botões em frases descritivas, na ordem certa. */
 export function describeAttributes(selection: AttributeSelection): string[] {
   const parts: string[] = [];
@@ -121,22 +140,27 @@ export function buildAvatarPrompt(input: PromptInput): string {
     ? withoutConflictingDefaultAttributes(input.attributes, input.extraDetails)
     : input.attributes;
   const characterType = selectedAttributes.characterType?.[0];
-  const explicitStylizedDirection = /cartoon|desenh[oa]|anima(d[oa]|ção)|anime|ilustraç|caricatur|fant[aá]stic|alien|extraterrestr|exagerad|strange|weird|bizarre|grotesque|unusual|inusitad|esquisit|gigantic|gigante|reference sheet|folha de refer[eê]ncia|turnaround/i.test(input.extraDetails);
+  const characterDetails = detailsForSelectedCharacterType(input.extraDetails, characterType);
+  const explicitStylizedDirection = /cartoon|desenh[oa]|anima(d[oa]|ção)|anime|ilustraç|caricatur|fant[aá]stic|alien|extraterrestr|exagerad|strange|weird|bizarre|grotesque|unusual|inusitad|esquisit|gigantic|gigante|reference sheet|folha de refer[eê]ncia|turnaround/i.test(characterDetails);
   const isStylized = (characterType && STYLIZED_CHARACTER_TYPES.has(characterType)) || explicitStylizedDirection;
   const quality = isStylized
     ? 'Renderização detalhada de personagem com exagero de caricatura, traços marcantes e intencionais, texturas fotorrealistas e fidelidade ao design solicitado.'
-    : input.extraDetails.trim()
+    : characterDetails
       ? 'Renderização detalhada e fotorrealista, fiel à aparência descrita, com luz natural suave, foco nítido, materiais convincentes e textura de pele realista.'
       : REALISTIC_QUALITY;
 
-  if (input.extraDetails.trim()) {
+  if (characterDetails) {
     lines.push(
       'DIREÇÃO DE PERSONAGEM PERSONALIZADO: trate a descrição do usuário como um briefing visual e converta-a em um design coerente e específico. ' +
-        'Combine-a com as opções selecionadas na lateral, que são obrigatórias para o mesmo personagem, exceto quando o usuário as contradisser explicitamente na descrição. ' +
+        'Combine-a com as opções selecionadas na lateral, que são obrigatórias para o mesmo personagem. Quando uma opção selecionada definir um tipo incompatível com um detalhe do texto, o tipo selecionado prevalece e o detalhe incompatível deve ser ignorado. ' +
         'Em personagens estranhos, fantásticos, não humanos ou caricaturais, preserve o traço distintivo pedido como uma assinatura visual inconfundível, com proporções humanas fotorrealistas e características cartunescas exageradas, além de renderização realista detalhada com exagero de caricatura. Exagere esse traço quando solicitado, mas respeite palavras de escala como pequeno ou sutil. ' +
         'Nunca transforme uma ideia incomum em uma influenciadora jovem genérica. Preserve os outros detalhes sem acrescentar elementos sem relação com o pedido. ' +
         'Mantenha anatomia, rosto, cores, proporções, roupas e materiais coerentes. Não invente biografia, poderes nem características visuais que o usuário não pediu.',
     );
+  }
+
+  if (characterType === 'bebe-animado') {
+    lines.push('RESTRIÇÃO DE TIPO — BEBÊ ANIMADO: o único personagem principal deve ser claramente um bebê/criança pequena em estilo 3D animado, com cabeça proporcionalmente maior, rosto infantil, tronco curto e membros curtos. Nunca representar adulto, adolescente ou corpo adulto. Gênero, cores, roupa e acessórios selecionados são aplicados a esse mesmo bebê. A miniatura “Bebê animado” é referência visual obrigatória da categoria; não criar um bebê adicional nem um adulto junto.');
   }
 
   if (input.referenceCount > 0 || input.hasBasePhoto || input.hasProductImage) {
@@ -174,7 +198,7 @@ export function buildAvatarPrompt(input: PromptInput): string {
     if (profile) lines.push(`Perfil do personagem principal: ${profile}`);
   }
 
-  if (input.extraDetails.trim()) lines.push(`Design do mesmo personagem principal, sem criar outro sujeito: ${input.extraDetails.trim()}`);
+  if (characterDetails) lines.push(`Design compatível do mesmo personagem principal, sem criar outro sujeito: ${characterDetails}`);
   if (input.characterWorld.trim()) lines.push(`Mundo e contexto do personagem: ${input.characterWorld.trim()}`);
 
   if (input.hasProductImage) {
