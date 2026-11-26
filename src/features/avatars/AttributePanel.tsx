@@ -88,15 +88,23 @@ function GroupSection({ group }: { group: AttributeGroup }) {
   );
 }
 
-export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; busy: boolean }) {
-  const st = useAvatarStudio();
-  const [characterModalOpen, setCharacterModalOpen] = useState(false);
-  const [characterDraft, setCharacterDraft] = useState(st.extraDetails);
-  const [worldDraft, setWorldDraft] = useState(st.characterWorld);
+function CharacterBuilderModal({
+  initialDetails,
+  initialWorld,
+  onClose,
+  onSave,
+}: {
+  initialDetails: string;
+  initialWorld: string;
+  onClose: () => void;
+  onSave: (details: string, world: string) => void;
+}) {
+  const selection = useAvatarStudio((state) => state.selection);
+  const basePhoto = useAvatarStudio((state) => state.basePhoto);
+  const baseAvatar = useAvatarStudio((state) => state.baseAvatar);
+  const [characterDraft, setCharacterDraft] = useState(initialDetails);
+  const [worldDraft, setWorldDraft] = useState(initialWorld);
   const [buildingCharacterPrompt, setBuildingCharacterPrompt] = useState(false);
-  const activeFacePreview = st.basePhoto?.previewUrl ?? st.baseAvatar?.image_url ?? null;
-  const activeFaceLabel = st.basePhoto ? 'Foto base enviada' : st.baseAvatar ? st.baseAvatar.name : null;
-  const cost = avatarCost(st.attributeCount);
 
   async function buildCharacterPrompt() {
     if (characterDraft.trim().length < 3) {
@@ -107,9 +115,9 @@ export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; b
     try {
       const { prompt } = await api.enhanceCharacterPrompt({
         description: characterDraft.trim(),
-        attributes: st.selection as Record<string, string[]>,
+        attributes: selection as Record<string, string[]>,
         characterWorld: worldDraft.trim(),
-        hasBasePhoto: Boolean(st.basePhoto || st.baseAvatar),
+        hasBasePhoto: Boolean(basePhoto || baseAvatar),
       });
       setCharacterDraft(prompt);
       toast.success('Prompt do personagem montado. Nenhum crédito foi consumido.');
@@ -119,6 +127,85 @@ export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; b
       setBuildingCharacterPrompt(false);
     }
   }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Monte seu Personagem"
+      description="Descreva o personagem com liberdade. A skill organiza sua ideia e combina com a foto e as características selecionadas."
+      className="character-builder-modal"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" onClick={() => onSave(characterDraft.trim(), worldDraft.trim())}>
+            Salvar
+          </Button>
+        </>
+      }
+    >
+      <section>
+        <label htmlFor="avatar-character-prompt" className="mb-1.5 block text-sm font-semibold text-fg">
+          Monte seu Personagem
+        </label>
+        <p className="mb-2 text-xs leading-relaxed text-fg-muted">
+          Conte como ele deve ser: aparência, estilo, roupa e traços especiais. Você pode criar personagens realistas, fantásticos ou bem diferentes.
+        </p>
+        <textarea
+          id="avatar-character-prompt"
+          value={characterDraft}
+          onChange={(e) => setCharacterDraft(e.target.value)}
+          maxLength={1800}
+          rows={5}
+          aria-label="Descrição para montar seu personagem"
+          placeholder="Descreva a aparência e o estilo do personagem…"
+          className="w-full resize-y rounded-xl border border-border bg-surface-2 p-3 text-sm outline-none focus:border-accent"
+        />
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <span className="text-xs text-fg-subtle">{characterDraft.length}/1800 · sem custo em créditos</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={buildingCharacterPrompt}
+            disabled={characterDraft.trim().length < 3}
+            onClick={() => void buildCharacterPrompt()}
+            aria-label="Montar prompt do personagem com a skill"
+          >
+            {!buildingCharacterPrompt && <Sparkles className="size-3.5" />}
+            {buildingCharacterPrompt ? 'Montando…' : 'Montar prompt'}
+          </Button>
+        </div>
+      </section>
+
+      <section className="mt-5 border-t border-border pt-4">
+        <label htmlFor="avatar-character-world" className="mb-1.5 block text-sm font-semibold text-fg">
+          Mundo do personagem
+        </label>
+        <p className="mb-2 text-xs leading-relaxed text-fg-muted">
+          Defina onde vive, sua rotina e o contexto que ajuda a manter as próximas criações coerentes.
+        </p>
+        <textarea
+          id="avatar-character-world"
+          value={worldDraft}
+          onChange={(e) => setWorldDraft(e.target.value)}
+          maxLength={1200}
+          rows={4}
+          aria-label="Descrição do mundo do personagem"
+          placeholder="Descreva o mundo e a rotina do personagem…"
+          className="w-full resize-y rounded-xl border border-border bg-surface-2 p-3 text-sm outline-none focus:border-accent"
+        />
+        <div className="mt-1 text-right text-xs text-fg-subtle">{worldDraft.length}/1200</div>
+      </section>
+    </Modal>
+  );
+}
+
+export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; busy: boolean }) {
+  const st = useAvatarStudio();
+  const [characterModalOpen, setCharacterModalOpen] = useState(false);
+  const activeFacePreview = st.basePhoto?.previewUrl ?? st.baseAvatar?.image_url ?? null;
+  const activeFaceLabel = st.basePhoto ? 'Foto base enviada' : st.baseAvatar ? st.baseAvatar.name : null;
+  const cost = avatarCost(st.attributeCount);
 
   return (
     <aside
@@ -213,11 +300,7 @@ export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; b
             {/* A skill de personalização fica no mesmo fluxo do campo de criação. */}
             <button
               type="button"
-              onClick={() => {
-                setCharacterDraft(st.extraDetails);
-                setWorldDraft(st.characterWorld);
-                setCharacterModalOpen(true);
-              }}
+              onClick={() => setCharacterModalOpen(true)}
               className="mb-1 flex w-full items-center gap-2.5 rounded-2xl bg-surface-2/65 px-2.5 py-2.5 text-left ring-1 ring-inset ring-border transition hover:ring-accent/50"
             >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
@@ -325,80 +408,17 @@ export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; b
         </>
       )}
 
-      <Modal
-        open={characterModalOpen}
-        onClose={() => setCharacterModalOpen(false)}
-        title="Monte seu Personagem"
-        description="Descreva o personagem com liberdade. A skill organiza sua ideia e combina com a foto e as características selecionadas."
-        className="character-builder-modal"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setCharacterModalOpen(false)}>Cancelar</Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                st.set({ extraDetails: characterDraft.trim(), characterWorld: worldDraft.trim() });
-                setCharacterModalOpen(false);
-              }}
-            >
-              Salvar
-            </Button>
-          </>
-        }
-      >
-        <section>
-          <label htmlFor="avatar-character-prompt" className="mb-1.5 block text-sm font-semibold text-fg">
-            Monte seu Personagem
-          </label>
-          <p className="mb-2 text-xs leading-relaxed text-fg-muted">
-            Conte como ele deve ser: aparência, estilo, roupa e traços especiais. Você pode criar personagens realistas, fantásticos ou bem diferentes.
-          </p>
-          <textarea
-            id="avatar-character-prompt"
-            value={characterDraft}
-            onChange={(e) => setCharacterDraft(e.target.value)}
-            maxLength={1800}
-            rows={5}
-            aria-label="Descrição para montar seu personagem"
-            placeholder="Descreva a aparência e o estilo do personagem…"
-            className="w-full resize-y rounded-xl border border-border bg-surface-2 p-3 text-sm outline-none focus:border-accent"
-          />
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <span className="text-xs text-fg-subtle">{characterDraft.length}/1800 · sem custo em créditos</span>
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={buildingCharacterPrompt}
-              disabled={characterDraft.trim().length < 3}
-              onClick={() => void buildCharacterPrompt()}
-              aria-label="Montar prompt do personagem com a skill"
-            >
-              {!buildingCharacterPrompt && <Sparkles className="size-3.5" />}
-              {buildingCharacterPrompt ? 'Montando…' : 'Montar prompt'}
-            </Button>
-          </div>
-        </section>
-
-        <section className="mt-5 border-t border-border pt-4">
-          <label htmlFor="avatar-character-world" className="mb-1.5 block text-sm font-semibold text-fg">
-            Mundo do personagem
-          </label>
-          <p className="mb-2 text-xs leading-relaxed text-fg-muted">
-            Defina onde vive, sua rotina e o contexto que ajuda a manter as próximas criações coerentes.
-          </p>
-          <textarea
-            id="avatar-character-world"
-            value={worldDraft}
-            onChange={(e) => setWorldDraft(e.target.value)}
-            maxLength={1200}
-            rows={4}
-            aria-label="Descrição do mundo do personagem"
-            placeholder="Descreva o mundo e a rotina do personagem…"
-            className="w-full resize-y rounded-xl border border-border bg-surface-2 p-3 text-sm outline-none focus:border-accent"
-          />
-          <div className="mt-1 text-right text-xs text-fg-subtle">{worldDraft.length}/1200</div>
-        </section>
-      </Modal>
+      {characterModalOpen && (
+        <CharacterBuilderModal
+          initialDetails={st.extraDetails}
+          initialWorld={st.characterWorld}
+          onClose={() => setCharacterModalOpen(false)}
+          onSave={(details, world) => {
+            st.set({ extraDetails: details, characterWorld: world });
+            setCharacterModalOpen(false);
+          }}
+        />
+      )}
     </aside>
   );
 }

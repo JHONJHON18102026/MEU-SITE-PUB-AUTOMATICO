@@ -17,6 +17,8 @@ interface ModalProps {
 /** Janela modal acessível: fecha com Esc/clique fora e prende o foco dentro. */
 export function Modal({ open, onClose, title, description, children, footer, size = 'md', className }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -24,7 +26,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
     const previousOverflow = document.body.style.overflow;
     panelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
       if (e.key !== 'Tab' || !panelRef.current) return;
 
       const focusable = Array.from(
@@ -55,7 +57,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
       document.body.style.overflow = previousOverflow;
       previous?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

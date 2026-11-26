@@ -664,7 +664,14 @@ async function run() {
 
     await page.getByRole('button', { name: /Monte seu Personagem/ }).click();
     const characterDialog = page.getByRole('dialog', { name: 'Monte seu Personagem' });
-    await characterDialog.getByLabel('Descrição para montar seu personagem').fill('Uma personagem fantástica com cabelo azul volumoso e roupa dourada.');
+    const characterDescription = characterDialog.getByLabel('Descrição para montar seu personagem');
+    await characterDescription.click();
+    await characterDescription.pressSequentially('bz');
+    check(
+      (await characterDescription.inputValue()) === 'bz' && await characterDescription.evaluate((el) => document.activeElement === el),
+      'Campo Monte seu Personagem mantém o foco durante a digitação caractere por caractere',
+    );
+    await characterDescription.fill('Uma personagem fantástica com cabelo azul volumoso e roupa dourada.');
     await characterDialog.getByLabel('Descrição do mundo do personagem').fill('Vive em uma cidade futurista iluminada por letreiros.');
     await page.getByRole('button', { name: 'Salvar' }).click();
     check(await page.getByText(/Uma personagem fantástica/).first().isVisible(), 'Prompt personalizado salva e aparece no painel');
@@ -707,7 +714,7 @@ async function run() {
     check((await page.getByTestId('generate-from-prompt').textContent()).includes('4'), 'Botão GERAR mostra o custo certo (4 créditos)');
 
     await page.getByTestId('generate-from-prompt').click();
-    await page.getByText('GERANDO IMAGEM…').waitFor();
+    await page.getByTestId('generate-from-prompt').getByText('GERANDO IMAGEM…', { exact: false }).waitFor();
     check(true, 'O compositor informa quando a imagem está sendo gerada');
     await page.screenshot({ path: path.join(shotsDir, '05-gerando.png') });
     await page.getByText(/imagem\(ns\) pronta\(s\)/).first().waitFor({ timeout: 10000 });
