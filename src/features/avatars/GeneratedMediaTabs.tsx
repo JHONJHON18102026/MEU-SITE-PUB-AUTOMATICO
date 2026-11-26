@@ -7,6 +7,7 @@ import type { AvatarDTO } from '@shared/contracts';
 import type { VideoProjectDTO } from '@shared/ugcContracts';
 import { Modal } from '@/components/ui/Modal';
 import { AvatarDetailModal } from './AvatarDetailModal';
+import { setDraggedAvatar } from './imageDrag';
 import { useAvatarStudio } from './avatarStore';
 import { useGalleryVersion, useMyAvatars } from './useAvatarData';
 import { api } from '@/lib/api';
@@ -187,7 +188,7 @@ function GeneratedImageCard({ avatar, onOpen, onRecreate }: { avatar: AvatarDTO;
   }
 
   return (
-    <article className="group relative overflow-hidden rounded-xl border border-border bg-surface">
+    <article draggable onDragStart={(event) => setDraggedAvatar(event, avatar)} title="Arraste para o canvas para usar esta imagem" className="group relative cursor-grab overflow-hidden rounded-xl border border-border bg-surface active:cursor-grabbing">
       <button type="button" onClick={onOpen} aria-label={`Abrir imagem ${avatar.name}`} className="block w-full text-left transition hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         <img src={avatar.image_url} alt={avatar.name} loading="lazy" className="aspect-[3/4] w-full object-cover object-top transition group-hover:scale-[1.02]" />
         <p className="truncate px-2 py-1.5 text-[11px] font-semibold">{avatar.name}</p>

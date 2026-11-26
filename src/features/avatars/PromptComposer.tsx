@@ -22,27 +22,50 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { MAX_PENDING_IMAGE_REQUESTS, MAX_PENDING_VIDEO_REQUESTS, useAvatarStudio } from './avatarStore';
 import { ImagePicker } from './ImagePicker';
 import { AvatarPickerModal } from './AvatarPickerModal';
+import { getDraggedAvatar, hasSupportedImageDrop } from './imageDrag';
+import { prepareImage, prepareImageFromUrl, type PreparedImage } from '@/lib/image';
 
 function Slot({
   label,
   preview,
   highlight,
   onClear,
+  onImageDrop,
   children,
 }: {
   label: string;
   preview: string | null;
   highlight?: boolean;
   onClear: () => void;
+  onImageDrop: (event: React.DragEvent<HTMLDivElement>) => void;
   children: React.ReactNode;
 }) {
+  const [dragging, setDragging] = useState(false);
   return (
     <div
+      onDragEnter={(event) => {
+        if (hasSupportedImageDrop(event.dataTransfer)) { event.preventDefault(); setDragging(true); }
+      }}
+      onDragOver={(event) => {
+        if (hasSupportedImageDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(event) => {
+        if (!hasSupportedImageDrop(event.dataTransfer)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setDragging(false);
+        onImageDrop(event);
+      }}
       className={clsx(
         'relative min-h-[84px] w-[76px] shrink-0 self-stretch overflow-hidden rounded-xl bg-surface-2/85 ring-1 ring-inset transition',
-        highlight ? 'ring-accent ring-brand' : 'ring-border hover:ring-fg-subtle/50',
+        dragging ? 'ring-2 ring-accent bg-accent-soft/80' : highlight ? 'ring-accent ring-brand' : 'ring-border hover:ring-fg-subtle/50',
       )}
+      data-drop-target={dragging ? label.toLowerCase() : undefined}
     >
+      {dragging && <span className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-surface/80 text-center text-[10px] font-bold text-accent">Solte para usar<br />{label.toLowerCase()}</span>}
       {preview ? (
         <>
           <img src={preview} alt={label} className="h-full w-full object-cover object-top" />
@@ -85,6 +108,56 @@ export function PromptComposer({ onGenerate, pendingImageRequests = 0, pendingVi
   const activeMedia = media;
   const generationCount = activeMedia === 'image' ? st.count : st.videoCount;
   const countLabel = activeMedia === 'image' ? 'imagens' : 'vídeos';
+
+  async function prepareDrop(event: React.DragEvent<HTMLElement>): Promise<{ avatar?: import('@shared/contracts').AvatarDTO; image?: PreparedImage }> {
+    const avatar = getDraggedAvatar(event.dataTransfer);
+    if (avatar) return { avatar };
+    const file = Array.from(event.dataTransfer.files).find((item) => item.type.startsWith('image/'));
+    if (file) return { image: await prepareImage(file) };
+    const uri = event.dataTransfer.getData('text/uri-list').split('\n').find((line) => line && !line.startsWith('#'))?.trim();
+    if (uri && /^https?:/i.test(uri)) return { image: await prepareImageFromUrl(uri, 'imagem-arrastada.jpg') };
+    throw new Error('Solte um arquivo de imagem ou uma imagem gerada no site.');
+  }
+
+  async function dropToAvatar(event: React.DragEvent<HTMLDivElement>) {
+    try {
+      const dropped = await prepareDrop(event);
+      if (dropped.avatar) st.set({ baseAvatar: dropped.avatar, basePhoto: null });
+      else if (dropped.image) st.set({ basePhoto: dropped.image, baseAvatar: null });
+      toast.success('Imagem definida como influencer de referência.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não consegui usar essa imagem.');
+    }
+  }
+
+  async function dropToProduct(event: React.DragEvent<HTMLDivElement>) {
+    try {
+      const dropped = await prepareDrop(event);
+      const image = dropped.image ?? (dropped.avatar ? await prepareImageFromUrl(dropped.avatar.image_url, dropped.avatar.name) : null);
+      if (!image) throw new Error('Não consegui ler essa imagem.');
+      st.set({ productImage: image });
+      toast.success('Imagem adicionada ao slot Produto.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não consegui usar essa imagem.');
+    }
+  }
+
+  async function dropToReferences(event: React.DragEvent<HTMLElement>) {
+    try {
+      const files = Array.from(event.dataTransfer.files).filter((item) => item.type.startsWith('image/'));
+      const avatar = getDraggedAvatar(event.dataTransfer);
+      const remaining = Math.max(0, MAX_REFERENCE_IMAGES - st.referenceImages.length);
+      if (remaining === 0) { toast.info(`O canvas aceita até ${MAX_REFERENCE_IMAGES} referências.`); return; }
+      const images = await Promise.all(files.slice(0, remaining).map((file) => prepareImage(file)));
+      if (!images.length && avatar) images.push(await prepareImageFromUrl(avatar.image_url, avatar.name));
+      if (!images.length) throw new Error('Nenhuma imagem válida foi encontrada.');
+      images.forEach(st.addReference);
+      if (files.length > remaining) toast.info(`Adicionei ${remaining} imagens. O limite de referências é ${MAX_REFERENCE_IMAGES}.`);
+      else toast.success(images.length === 1 ? 'Imagem adicionada às referências.' : `${images.length} imagens adicionadas às referências.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não consegui adicionar essa referência.');
+    }
+  }
 
   useEffect(() => {
     if (!promptExpanded) return;
@@ -146,7 +219,16 @@ export function PromptComposer({ onGenerate, pendingImageRequests = 0, pendingVi
       </div>
 
       {/* Caixa central: Prompt + Barra de controles em uma única faixa limpa */}
-      <div className={clsx('relative flex min-w-0 flex-1 flex-col justify-between gap-2 rounded-xl bg-surface-2/80 p-2.5', activeMedia === 'video' && 'sm:min-h-40')}>
+      <div
+        onDragOver={(event) => { if (hasSupportedImageDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } }}
+        onDrop={(event) => {
+          if (!hasSupportedImageDrop(event.dataTransfer)) return;
+          event.preventDefault();
+          void dropToReferences(event);
+        }}
+        aria-label="Canvas de criação. Solte imagens aqui para adicionar referências."
+        className={clsx('relative flex min-w-0 flex-1 flex-col justify-between gap-2 rounded-xl bg-surface-2/80 p-2.5', activeMedia === 'video' && 'sm:min-h-40')}
+      >
         <button
           type="button"
           onClick={() => setPromptExpanded(true)}
@@ -278,6 +360,7 @@ export function PromptComposer({ onGenerate, pendingImageRequests = 0, pendingVi
           label="INFLUENCER"
           preview={avatarSlotPreview}
           onClear={() => st.set({ baseAvatar: null, basePhoto: null })}
+          onImageDrop={(event) => void dropToAvatar(event)}
         >
           <button
             type="button"
@@ -295,6 +378,7 @@ export function PromptComposer({ onGenerate, pendingImageRequests = 0, pendingVi
           highlight={highlightProduct}
           preview={st.productImage?.previewUrl ?? null}
           onClear={() => st.set({ productImage: null })}
+          onImageDrop={(event) => void dropToProduct(event)}
         >
           <ImagePicker
             label="Escolher produto"
