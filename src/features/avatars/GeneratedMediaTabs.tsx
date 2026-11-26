@@ -21,7 +21,7 @@ const MEDIA_TABS: { id: MediaTab; label: string; icon: typeof ImageIcon }[] = [
   { id: 'videos', label: 'Vídeos gerados', icon: Film },
 ];
 
-export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLoading = false, projectsHasMore = false, onLoadMoreProjects, onDeleteProject, onRecreateProject }: { projects: VideoProjectDTO[]; pendingImageCount?: number; projectsLoading?: boolean; projectsHasMore?: boolean; onLoadMoreProjects?: () => void; onDeleteProject: (project: VideoProjectDTO) => Promise<void>; onRecreateProject: (project: VideoProjectDTO) => Promise<void> }) {
+export function GeneratedMediaTabs({ projects, pendingImageCount = 0, optimisticAvatars = [], projectsLoading = false, projectsHasMore = false, onLoadMoreProjects, onDeleteProject, onRecreateProject }: { projects: VideoProjectDTO[]; pendingImageCount?: number; optimisticAvatars?: AvatarDTO[]; projectsLoading?: boolean; projectsHasMore?: boolean; onLoadMoreProjects?: () => void; onDeleteProject: (project: VideoProjectDTO) => Promise<void>; onRecreateProject: (project: VideoProjectDTO) => Promise<void> }) {
   const [params, setParams] = useSearchParams();
   const requestedMedia = params.get('media');
   const resolveMedia = (value: string | null): MediaTab => value === 'videos' ? 'videos' : 'images';
@@ -31,8 +31,22 @@ export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLo
   const [selectedVideo, setSelectedVideo] = useState<VideoProjectDTO | null>(null);
   const [visibleVideoCount, setVisibleVideoCount] = useState(VIDEO_BATCH_SIZE);
   const autoPageRequestedForSize = useRef<number | null>(null);
+  const acknowledgedAvatarIds = useRef(new Set<string>());
   const avatars = useMyAvatars();
   const avatarStudio = useAvatarStudio();
+  useEffect(() => {
+    const loadedIds = new Set(avatars.data.map((avatar) => avatar.id));
+    for (const avatar of optimisticAvatars) {
+      if (loadedIds.has(avatar.id)) acknowledgedAvatarIds.current.add(avatar.id);
+    }
+  }, [avatars.data, optimisticAvatars]);
+  const displayedAvatars = useMemo(() => {
+    const serverIds = new Set(avatars.data.map((avatar) => avatar.id));
+    const unacknowledged = optimisticAvatars.filter((avatar) =>
+      !serverIds.has(avatar.id) && !acknowledgedAvatarIds.current.has(avatar.id),
+    );
+    return [...unacknowledged, ...avatars.data];
+  }, [avatars.data, optimisticAvatars]);
   const videos = useMemo(() => {
     const allVideos = projects.filter((project) => project.mediaType !== 'motion');
     const explicitlyReplaced = new Set(allVideos
@@ -49,7 +63,7 @@ export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLo
     return allVideos.filter((project) => !replaced.has(project.id));
   }, [projects]);
   const counts: Record<MediaTab, number> = {
-    images: avatars.data.length,
+    images: displayedAvatars.length,
     videos: videos.length,
   };
   const visibleVideos = videos.filter((project) => project.status === 'done' && Boolean(project.video_url)).slice(0, visibleVideoCount);
@@ -106,14 +120,14 @@ export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLo
       </div>
 
       {active === 'images' ? (
-        avatars.loading && !pendingImageCount ? (
+        avatars.loading && !pendingImageCount && !displayedAvatars.length ? (
           <div className="skeleton h-28 rounded-2xl" />
-        ) : avatars.data.length || pendingImageCount ? (
+        ) : displayedAvatars.length || pendingImageCount ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
             {Array.from({ length: Math.max(0, pendingImageCount) }, (_, index) => (
               <PendingImageCard key={`pending-image-${index}`} index={index + 1} />
             ))}
-            {avatars.data.map((avatar) => (
+            {displayedAvatars.map((avatar) => (
               <GeneratedImageCard
                 key={avatar.id}
                 avatar={avatar}
@@ -149,7 +163,7 @@ export function GeneratedMediaTabs({ projects, pendingImageCount = 0, projectsLo
         )
       )}
     </section>
-    <AvatarDetailModal avatar={selectedAvatar} items={avatars.data} onNavigate={setSelectedAvatar} onClose={() => setSelectedAvatar(null)} />
+    <AvatarDetailModal avatar={selectedAvatar} items={displayedAvatars} onNavigate={setSelectedAvatar} onClose={() => setSelectedAvatar(null)} />
     <VideoPreviewModal project={selectedVideo} projects={visibleVideos} onNavigate={setSelectedVideo} onClose={() => setSelectedVideo(null)} />
     </>
   );

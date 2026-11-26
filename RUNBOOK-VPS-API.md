@@ -558,3 +558,10 @@ Este resumo é o estado mais recente para retomada; os registros anteriores acim
 - Build local tentado e bloqueado antes do TypeScript/Vite iniciar por `EPERM: operation not permitted, lstat C:\Users\Jonathan` no Node dentro do sandbox. A publicação pela Vercel deverá validar a compilação remota.
 - Escopo: frontend apenas. Nenhuma alteração na API VPS.
 - Observação de marca d’água: `server/assets/marca-dagua.png` tem transparência, e `server/watermark.ts` a sobrepõe sem placa opaca; partes da imagem gerada podem aparecer através das áreas transparentes, dando aparência de miniatura atrás da marca. Isso é transparência do overlay, não uma segunda aplicação do arquivo inteiro. Nenhuma alteração foi feita na marca nesta etapa.
+
+### 2026-11-26 — imagem não pode sumir entre processamento e galeria
+
+- Sintoma: o cartão provisório “Gerando imagem…” desaparecia por um intervalo e a imagem final só aparecia depois.
+- Causa: `generate()` recebia os avatares salvos, chamava `bump()` para atualizar a galeria e, no `finally`, removia os cartões pendentes. A atualização de `useMyAvatars()` é assíncrona; por alguns instantes nenhum dos dois estados era exibido. O endpoint salva o avatar antes de concluir o registro da geração, então esse intervalo era puramente de sincronização visual.
+- Correção local: `useGenerateAvatar` mantém os `AvatarDTO` recém-retornados como resultados otimistas. `GeneratedMediaTabs` os mescla à resposta do servidor, evita duplicar por ID e mantém o cartão final no lugar do placeholder até a busca da galeria confirmar o registro. Os resultados são exibidos imediatamente e o contador acompanha a lista mesclada.
+- Escopo: frontend, sem mudanças na API da VPS ou cobrança. Nenhuma nova geração foi iniciada para reproduzir o intervalo.

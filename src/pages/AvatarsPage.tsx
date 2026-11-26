@@ -14,7 +14,7 @@ import { SHOWCASE_AVATARS } from '@/features/avatars/showcaseExamples';
 import type { VideoProjectDTO } from '@shared/ugcContracts';
 
 export function AvatarsPage() {
-  const { generate, busy, pendingRequests: pendingImageRequests } = useGenerateAvatar();
+  const { generate, busy, pendingRequests: pendingImageRequests, lastResult: optimisticAvatars } = useGenerateAvatar();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { createProject } = useCreateUgcProject();
@@ -151,6 +151,7 @@ export function AvatarsPage() {
                 <GeneratedMediaTabs
                   projects={projects}
                   pendingImageCount={pendingImageRequests}
+                  optimisticAvatars={optimisticAvatars}
                   projectsLoading={projectsLoading}
                   projectsHasMore={projectsHasMore}
                   onLoadMoreProjects={() => void loadMoreProjects()}

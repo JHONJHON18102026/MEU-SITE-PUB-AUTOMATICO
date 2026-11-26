@@ -119,7 +119,10 @@ export function useGenerateAvatar() {
       const res = await api.generateAvatar(payload);
       clearDirectorCanvasHandoff();
       setBalance(res.balance);
-      setLastResult(res.avatars);
+      setLastResult((current) => {
+        const incomingIds = new Set(res.avatars.map((avatar) => avatar.id));
+        return [...res.avatars, ...current.filter((avatar) => !incomingIds.has(avatar.id))];
+      });
       // O resultado recém-criado vira imediatamente o personagem ativo para
       // que a próxima ação possa ser "Criar vídeo com este avatar" sem exigir
       // que o usuário volte à galeria e o selecione manualmente.
