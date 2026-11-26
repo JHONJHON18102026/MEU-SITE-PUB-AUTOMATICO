@@ -225,6 +225,12 @@ function describeCustomCharacter(details: string): string | undefined {
   )?.[1]?.trim();
   if (portraitSubject) description = portraitSubject.replace(/\b\d+-year-old\s+/i, '').trim();
 
+  const localizedSubject: Record<string, string> = {
+    'brazilian female violinist': 'Violinista brasileira',
+    'brazilian lighthouse keeper': 'Faroleiro brasileiro',
+  };
+  description = localizedSubject[description.toLocaleLowerCase('en-US')] ?? description;
+
   const maxLength = 38;
   if (description.length > maxLength) {
     const shortened = description.slice(0, maxLength);
