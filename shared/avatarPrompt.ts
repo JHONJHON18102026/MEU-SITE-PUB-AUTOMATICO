@@ -218,6 +218,13 @@ function describeCustomCharacter(details: string): string | undefined {
   description = description.split(/[.!?\n]/, 1)[0]?.trim() ?? '';
   if (!description) return undefined;
 
+  // Prompts técnicos em inglês costumam começar com estilo/renderização; o
+  // cartão deve destacar o personagem descrito, e não esse cabeçalho genérico.
+  const portraitSubject = description.match(
+    /\bportrait of (?:a|an|the) unique\s+(.+?)(?=\s+with\s+photorealistic|\s+with\s+exaggerated|\s+with\s+realistic|,\s*rendered|\s+captured|$)/i,
+  )?.[1]?.trim();
+  if (portraitSubject) description = portraitSubject.replace(/\b\d+-year-old\s+/i, '').trim();
+
   const maxLength = 38;
   if (description.length > maxLength) {
     const shortened = description.slice(0, maxLength);
