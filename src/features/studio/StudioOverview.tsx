@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Eye, EyeOff, FolderOpen, Plus, Rocket, UserRound, X } from 'lucide-react';
+import { ArrowRight, BookOpen, Eye, EyeOff, FolderOpen, Plus, Rocket, UserRound, X } from 'lucide-react';
 import type { useStudioWorkspace } from './studioStore';
 import { Button } from '@/components/ui/Button';
 
@@ -42,7 +42,7 @@ export function StudioOverview({ workspace: ws, projectsOnly, onNewProject }: { 
       { title: 'Criar do zero', desc: 'Ainda não tem avatar? Descreva o seu nicho: a IA monta o brandbook da marca e sugere os avatares. Você aprova os que gostar e cria os vídeos.', to: '/studio/marca', icon: BookOpen },
       { title: 'Usar um avatar que já tenho', desc: 'Já criou avatares? Crie o projeto, adicione o seu avatar e vá direto para os vídeos.', to: '/studio/marca', icon: UserRound },
       { title: 'Vídeos para monetizar (sem avatar)', desc: 'Crie vídeos feitos para ganhar visualizações no Monetiza View, sem precisar de avatar. Depois é só baixar e postar ou publicar pelas suas contas.', to: '/studio/criar/monetiza-view', icon: Rocket },
-      ].map(c => <Link to={c.to} key={c.title} className="group min-h-[202px] rounded-2xl border border-border bg-bg p-5 shadow-[0_12px_28px_rgba(0,0,0,.12)] transition duration-200 hover:-translate-y-1 hover:border-accent/60 hover:bg-accent-soft/10"><c.icon className="mb-5 size-7 text-accent transition group-hover:scale-110" /><h3 className="text-base font-semibold group-hover:text-accent">{c.title}</h3><p className="mt-2 text-sm leading-5 text-fg-muted">{c.desc}</p><span className="mt-5 inline-flex text-[11px] font-bold text-accent">Abrir caminho →</span></Link>)}</div>
+      ].map((c, index) => <Link to={c.to} key={c.title} className={`studio-choice-card studio-choice-card--tone-${index % 4} studio-choice-card--guide group`}><span className="studio-choice-card__top"><span className="studio-choice-card__icon"><c.icon className="size-5" /></span><span className="studio-choice-card__number">0{index + 1}</span></span><span className="studio-choice-card__title">{c.title}</span><span className="studio-choice-card__detail">{c.desc}</span><span className="studio-choice-card__footer"><span className="studio-choice-card__action">Abrir caminho</span><ArrowRight className="studio-choice-card__arrow size-4" /></span></Link>)}</div>
     </section>}
     <div className="flex items-center justify-between"><div><h1 className="text-2xl font-bold">FUTURO DIGITAL STUDIO</h1><p className="text-sm text-fg-muted">Crie vídeos com seus avatares e publique nas suas contas</p></div><button aria-label={privateMode ? 'Desativar modo sigilo' : 'Ativar modo sigilo'} onClick={() => setPrivateMode(v => !v)} className="p-3 text-fg-muted">{privateMode ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></div>
     <nav aria-label="Navegação do Studio" className="premium-tabbar flex w-fit rounded-xl p-1">{[{ title: 'Início', to: '/studio', active: !projectsOnly }, { title: 'Projetos', to: '/studio/projetos', active: projectsOnly }].map(t => <Link key={t.to} to={t.to} aria-current={t.active ? 'page' : undefined} className={`rounded-lg px-4 py-2 text-sm ${t.active ? 'bg-bg font-semibold' : 'text-fg-muted'}`}>{t.title}</Link>)}</nav>
