@@ -19,7 +19,7 @@ export function AdsCreator() {
               <button onClick={() => setGuideOpen(false)} className="inline-flex items-center gap-2 text-fg-muted"><X className="size-4" />Fechar guia</button>
             </div>
           </div>
-          <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <ol className="ugc-guide-grid grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {[
               ['Clique em “Novo Projeto”', 'Abre a criação do vídeo, etapa por etapa. Dá para voltar em qualquer etapa antes de gerar.'],
               ['Escolha um modelo (Template)', 'Escolha um dos vídeos-modelo e a proporção (9:16 ou 16:9). Prefere que a IA crie tudo a partir do seu produto? Clique no card roxo IA Criativa.'],
@@ -28,9 +28,9 @@ export function AdsCreator() {
               ['Defina o áudio', 'Escreva o que vai ser falado, escolha voz, emoção, idioma e sotaque, e se quer som de fundo.'],
               ['Confira o Resumo e clique em Gerar', 'O botão “Gerar Vídeo” mostra o custo total antes de confirmar. O vídeo fica pronto em alguns minutos e aparece em “Projetos” (menu lateral).'],
             ].map(([title, description], index) => (
-              <li key={title} className="flex min-w-0 gap-2.5 rounded-xl border border-white/[0.07] bg-black/15 px-3 py-2.5 transition-colors hover:border-accent/25 hover:bg-accent-soft/20">
-                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-accent/90 text-[10px] font-bold text-white">{index + 1}</span>
-                <div className="min-w-0"><h3 className="text-xs font-semibold leading-5">{title}</h3><p className="mt-0.5 text-[11px] leading-[1.45] text-fg-muted">{description}</p></div>
+              <li key={title} className="ugc-guide-step flex min-w-0 gap-3">
+                <span className="ugc-guide-step__number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                <div className="min-w-0"><h3 className="ugc-guide-step__title">{title}</h3><p className="ugc-guide-step__description">{description}</p></div>
               </li>
             ))}
           </ol>
