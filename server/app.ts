@@ -17,7 +17,7 @@ import { studioRoutes } from './routes/studio';
 import { viralRoutes } from './routes/viral';
 import { directorRoutes } from './routes/director';
 import { enhanceCharacterPromptSchema, enhanceCharacterWorldSchema, enhancePromptSchema, type ApiErrorBody } from '../shared/contracts';
-import { describeAttributes } from '../shared/avatarPrompt';
+import { describeAttributes, describeSelectedAttributesPt } from '../shared/avatarPrompt';
 import type { AttributeSelection } from '../shared/attributes';
 
 export type AppEnv = { Variables: { userId: string } };
@@ -94,7 +94,7 @@ app.post('/prompt/enhance-character', async (c) => {
   if (!parsed.success) throw new ApiError('INVALID_INPUT', 'Descreva o personagem primeiro (mínimo 3 letras).');
   const prompt = await enhanceCharacterPrompt({
     description: parsed.data.description,
-    attributes: describeAttributes(parsed.data.attributes as AttributeSelection),
+    attributes: describeSelectedAttributesPt(parsed.data.attributes as AttributeSelection),
     characterWorld: parsed.data.characterWorld,
     hasBasePhoto: parsed.data.hasBasePhoto,
   });

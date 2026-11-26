@@ -23,9 +23,9 @@ export const ENGINES = [
 export type EngineId = (typeof ENGINES)[number]['id'];
 
 export const FRAMINGS = [
-  { id: 'rosto', label: 'Rosto', prompt: 'close-up portrait framing from the shoulders up' },
-  { id: 'meio-corpo', label: 'Meio corpo', prompt: 'medium shot framing from the waist up' },
-  { id: 'corpo-inteiro', label: 'Corpo inteiro', prompt: 'full body shot, head to toe visible' },
+  { id: 'rosto', label: 'Rosto', prompt: 'Enquadramento fechado de retrato, dos ombros para cima' },
+  { id: 'meio-corpo', label: 'Meio corpo', prompt: 'Plano médio, da cintura para cima' },
+  { id: 'corpo-inteiro', label: 'Corpo inteiro', prompt: 'Plano de corpo inteiro, com a pessoa visível da cabeça aos pés' },
 ] as const;
 export type FramingId = (typeof FRAMINGS)[number]['id'];
 

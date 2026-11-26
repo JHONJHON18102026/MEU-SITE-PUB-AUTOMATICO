@@ -265,7 +265,9 @@ avatarRoutes.post('/generate', async (c) => {
         name: suggestAvatarName(req.attributes as AttributeSelection, index, req.extraDetails),
         image_url: signed.data.signedUrl,
         storage_path: storagePath,
-        prompt: req.mode === 'prompt' ? req.prompt : prompt,
+        // Persist the exact assembled prompt sent to the image engine so the
+        // detail view exposes selected attributes, references, and constraints.
+        prompt,
         attributes: req.attributes,
         engine: raw.model,
         framing: req.framing,
