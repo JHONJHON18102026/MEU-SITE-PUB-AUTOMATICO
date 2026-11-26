@@ -35,6 +35,63 @@
   --shadow: 0 1px 2px rgba(17, 19, 29, 0.05), 0 6px 20px rgba(17, 19, 29, 0.05);
 }
 
+/* Polimento da landing pública: hierarquia, contraste e feedback contido. */
+.public-landing {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse at 50% -12rem, color-mix(in srgb, var(--accent) 12%, transparent), transparent 44rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 15%, transparent), transparent 36rem);
+}
+
+.public-landing main > section {
+  scroll-margin-top: 5.5rem;
+}
+
+.public-landing .public-hero-frame {
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .32), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+.public-landing .public-hero-frame > img {
+  transform: scale(1.005);
+}
+
+.public-landing .public-mode-card,
+.public-landing .public-product-card {
+  isolation: isolate;
+  box-shadow: 0 12px 34px rgba(7, 5, 17, .13), inset 0 1px 0 rgba(255, 255, 255, .045);
+}
+
+.public-landing .public-product-card > img {
+  transition: transform 220ms cubic-bezier(.23, 1, .32, 1), opacity 180ms ease;
+}
+
+.public-landing .public-product-card:hover > img {
+  transform: scale(1.045);
+}
+
+.public-landing a:focus-visible,
+.public-landing button:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 3px;
+}
+
+.public-landing .public-hero-tabs button:active,
+.public-landing [role="group"] button:active,
+.public-landing .public-product-card:active {
+  transform: scale(.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-landing *,
+  .public-landing *::before,
+  .public-landing *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
 [data-theme='dark'] {
   --bg: #0b0b11;
   --sidebar: #0e0e15;
