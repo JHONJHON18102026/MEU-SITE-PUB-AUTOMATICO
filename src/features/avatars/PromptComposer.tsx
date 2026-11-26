@@ -22,7 +22,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { MAX_PENDING_IMAGE_REQUESTS, MAX_PENDING_VIDEO_REQUESTS, useAvatarStudio } from './avatarStore';
 import { ImagePicker } from './ImagePicker';
 import { AvatarPickerModal } from './AvatarPickerModal';
-import { getDraggedAvatar, hasSupportedImageDrop } from './imageDrag';
+import { getDraggedAvatar, getDraggedImageUrl, hasSupportedImageDrop } from './imageDrag';
 import { prepareImage, prepareImageFromUrl, type PreparedImage } from '@/lib/image';
 
 function Slot({
@@ -114,8 +114,8 @@ export function PromptComposer({ onGenerate, pendingImageRequests = 0, pendingVi
     if (avatar) return { avatar };
     const file = Array.from(event.dataTransfer.files).find((item) => item.type.startsWith('image/'));
     if (file) return { image: await prepareImage(file) };
-    const uri = event.dataTransfer.getData('text/uri-list').split('\n').find((line) => line && !line.startsWith('#'))?.trim();
-    if (uri && /^https?:/i.test(uri)) return { image: await prepareImageFromUrl(uri, 'imagem-arrastada.jpg') };
+    const uri = getDraggedImageUrl(event.dataTransfer);
+    if (uri) return { image: await prepareImageFromUrl(uri, 'imagem-arrastada.jpg') };
     throw new Error('Solte um arquivo de imagem ou uma imagem gerada no site.');
   }
 
@@ -150,6 +150,8 @@ export function PromptComposer({ onGenerate, pendingImageRequests = 0, pendingVi
       if (remaining === 0) { toast.info(`O canvas aceita até ${MAX_REFERENCE_IMAGES} referências.`); return; }
       const images = await Promise.all(files.slice(0, remaining).map((file) => prepareImage(file)));
       if (!images.length && avatar) images.push(await prepareImageFromUrl(avatar.image_url, avatar.name));
+      const uri = getDraggedImageUrl(event.dataTransfer);
+      if (!images.length && uri) images.push(await prepareImageFromUrl(uri, 'imagem-arrastada.jpg'));
       if (!images.length) throw new Error('Nenhuma imagem válida foi encontrada.');
       images.forEach(st.addReference);
       if (files.length > remaining) toast.info(`Adicionei ${remaining} imagens. O limite de referências é ${MAX_REFERENCE_IMAGES}.`);

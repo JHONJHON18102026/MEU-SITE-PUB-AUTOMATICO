@@ -6,6 +6,9 @@ export function setDraggedAvatar(event: React.DragEvent<HTMLElement>, avatar: Av
   event.dataTransfer.effectAllowed = 'copy';
   event.dataTransfer.setData(AVATAR_IMAGE_DRAG_TYPE, JSON.stringify(avatar));
   event.dataTransfer.setData('text/uri-list', avatar.image_url);
+  // Alguns navegadores/provedores removem tipos MIME personalizados no drop.
+  // Manter a URL como texto simples preserva o arraste entre cartões e canvas.
+  event.dataTransfer.setData('text/plain', avatar.image_url);
 }
 
 export function getDraggedAvatar(dataTransfer: DataTransfer): AvatarDTO | null {
@@ -21,5 +24,11 @@ export function getDraggedAvatar(dataTransfer: DataTransfer): AvatarDTO | null {
 }
 
 export function hasSupportedImageDrop(dataTransfer: DataTransfer): boolean {
-  return Array.from(dataTransfer.types).some((type) => type === 'Files' || type === AVATAR_IMAGE_DRAG_TYPE || type === 'text/uri-list');
+  return Array.from(dataTransfer.types).some((type) => type === 'Files' || type === AVATAR_IMAGE_DRAG_TYPE || type === 'text/uri-list' || type === 'text/plain');
+}
+
+export function getDraggedImageUrl(dataTransfer: DataTransfer): string | null {
+  const raw = dataTransfer.getData('text/uri-list') || dataTransfer.getData('text/plain');
+  const url = raw.split('\n').find((line) => line && !line.startsWith('#'))?.trim();
+  return url && /^https?:\/\//i.test(url) ? url : null;
 }

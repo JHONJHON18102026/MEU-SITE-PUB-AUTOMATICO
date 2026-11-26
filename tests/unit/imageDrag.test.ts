@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AvatarDTO } from '@shared/contracts';
-import { AVATAR_IMAGE_DRAG_TYPE, getDraggedAvatar, hasSupportedImageDrop, setDraggedAvatar } from '@/features/avatars/imageDrag';
+import { AVATAR_IMAGE_DRAG_TYPE, getDraggedAvatar, getDraggedImageUrl, hasSupportedImageDrop, setDraggedAvatar } from '@/features/avatars/imageDrag';
 
 const avatar: AvatarDTO = {
   id: 'avatar-1',
@@ -32,18 +32,25 @@ describe('arrastar imagens geradas da galeria para o canvas', () => {
     expect(dataTransfer.effectAllowed).toBe('copy');
     expect(values.get(AVATAR_IMAGE_DRAG_TYPE)).toContain('avatar-1');
     expect(values.get('text/uri-list')).toBe(avatar.image_url);
+    expect(values.get('text/plain')).toBe(avatar.image_url);
     expect(getDraggedAvatar(dataTransfer)).toEqual(avatar);
+    expect(getDraggedImageUrl(dataTransfer)).toBe(avatar.image_url);
   });
 
   it('reconhece arquivos, imagens da aplicação e URLs externas como arrastáveis', () => {
     expect(hasSupportedImageDrop({ types: ['Files'] } as unknown as DataTransfer)).toBe(true);
     expect(hasSupportedImageDrop({ types: [AVATAR_IMAGE_DRAG_TYPE] } as unknown as DataTransfer)).toBe(true);
     expect(hasSupportedImageDrop({ types: ['text/uri-list'] } as unknown as DataTransfer)).toBe(true);
-    expect(hasSupportedImageDrop({ types: ['text/plain'] } as unknown as DataTransfer)).toBe(false);
+    expect(hasSupportedImageDrop({ types: ['text/plain'] } as unknown as DataTransfer)).toBe(true);
   });
 
   it('ignora dados de avatar inválidos', () => {
     const dataTransfer = { getData: () => '{"id":"avatar-1"}' } as unknown as DataTransfer;
     expect(getDraggedAvatar(dataTransfer)).toBeNull();
+  });
+
+  it('aceita somente URLs HTTP/HTTPS no fallback de texto', () => {
+    expect(getDraggedImageUrl({ getData: (type: string) => type === 'text/plain' ? 'https://cdn.example.test/image.png' : '' } as unknown as DataTransfer)).toBe('https://cdn.example.test/image.png');
+    expect(getDraggedImageUrl({ getData: (type: string) => type === 'text/plain' ? 'texto solto' : '' } as unknown as DataTransfer)).toBeNull();
   });
 });
