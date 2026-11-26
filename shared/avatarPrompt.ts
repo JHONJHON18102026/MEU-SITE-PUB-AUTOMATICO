@@ -29,12 +29,39 @@ const STYLIZED_CHARACTER_TYPES = new Set([
   'extremo', 'inseto', 'sapo', 'gato', 'cachorro', 'roedor', 'passaro', 'bebe-animado', 'orgao-animado', 'mao-desenhando', 'cartoon',
 ]);
 
-function withoutDefaultCharacterAttributes(selection: AttributeSelection): AttributeSelection {
+function descriptionOverridesDefault(group: AttributeGroupId, optionId: string, description: string): boolean {
+  const text = description.toLocaleLowerCase('pt-BR');
+  if (group === 'characterType' && optionId === 'realista') {
+    return /cartoon|desenh[oa]|anima(d[oa]|ção)|anime|ilustraç|caricatur|fant[aá]stic|alien|extraterrestr|inseto|insect|bug|sapo|frog|antropom[oó]rf|anthropomorphic|criatura|creature|n[aã]o.human[oa]|non.human|gigantic|gigante|esquisit|weird|bizarre|grotesque|unusual/i.test(text);
+  }
+  if (group === 'gender' && optionId === 'feminino') {
+    return /\bman\b|\bmale\b|masculin[oa]|homem|\bboy\b|menino/i.test(text);
+  }
+  if (group === 'gender' && optionId === 'masculino') {
+    return /\bwoman\b|\bfemale\b|feminin[oa]|mulher|\bgirl\b|menina/i.test(text);
+  }
+  if (group === 'age' && optionId === 'jovem') {
+    return /idos[oa]|velh[oa]|elderly|older adult|middle.?aged|mature|50\s*\+|60\s*\+|\b(3[5-9]|[4-9]\d)-year-old\b/i.test(text);
+  }
+  if (group === 'age' && optionId === 'adulto') {
+    return /teen|adolescen|teenager|in their twenties|20s|jovem|18.?29/i.test(text);
+  }
+  if (group === 'age' && optionId === 'maduro') {
+    return /teen|adolescen|teenager|in their twenties|20s|jovem|18.?29|early thirties/i.test(text);
+  }
+  return false;
+}
+
+function withoutConflictingDefaultAttributes(selection: AttributeSelection, description: string): AttributeSelection {
   const result: AttributeSelection = { ...selection };
   for (const [groupId, defaultIds] of Object.entries(DEFAULT_SELECTION)) {
     const id = groupId as AttributeGroupId;
     const selected = result[id];
-    if (selected?.length === defaultIds?.length && selected.every((value, index) => value === defaultIds[index])) {
+    if (
+      selected?.length === defaultIds?.length &&
+      selected.every((value, index) => value === defaultIds[index]) &&
+      selected.some((value) => descriptionOverridesDefault(id, value, description))
+    ) {
       delete result[id];
     }
   }
@@ -55,11 +82,56 @@ export function describeAttributes(selection: AttributeSelection): string[] {
   return parts;
 }
 
+/**
+ * Turns independent UI selections into one grammatical subject. A flat list
+ * such as “insect character; man; in their twenties” can be read as multiple
+ * subjects by image models, so gender and age must modify the selected type.
+ */
+function describeSingleCharacterProfile(selection: AttributeSelection): string | null {
+  const typeId = selection.characterType?.[0];
+  const type = typeId ? findOption('characterType', typeId)?.prompt : null;
+  const genderId = selection.gender?.[0];
+  const genderOption = genderId ? findOption('gender', genderId) : null;
+  const ageId = selection.age?.[0];
+  const ageOption = ageId ? findOption('age', ageId) : null;
+
+  const gender = genderId === 'masculino'
+    ? 'masculine gender presentation'
+    : genderId === 'feminino'
+      ? 'feminine gender presentation'
+      : genderId === 'menino'
+        ? 'masculine childlike gender presentation'
+        : genderId === 'menina'
+          ? 'feminine childlike gender presentation'
+          : genderOption?.prompt;
+  const age = ageId === 'jovem'
+    ? 'young adult age traits (18–29)'
+    : ageId === 'adulto'
+      ? 'adult age traits (30–49)'
+      : ageId === 'maduro'
+        ? 'mature adult age traits (50+)'
+        : ageOption?.prompt;
+
+  const otherTraits: string[] = [];
+  for (const group of [...ATTRIBUTE_GROUPS].sort((a, b) => a.promptOrder - b.promptOrder)) {
+    if (group.id === 'characterType' || group.id === 'gender' || group.id === 'age') continue;
+    for (const id of selection[group.id] ?? []) {
+      const prompt = findOption(group.id, id)?.prompt;
+      if (prompt) otherTraits.push(prompt);
+    }
+  }
+
+  const traits = [gender, age, ...otherTraits].filter(Boolean);
+  if (!type && traits.length === 0) return null;
+  const subject = type ?? 'one character';
+  return `ONE SUBJECT ONLY: Depict ${subject} as a single individual. This same character has these selected traits: ${traits.join(', ') || 'none'}. Do not add a separate human, model, companion, duplicate, or second figure.`;
+}
+
 export function buildAvatarPrompt(input: PromptInput): string {
   const framing = FRAMINGS.find((f) => f.id === input.framing)?.prompt ?? FRAMINGS[1].prompt;
   const lines: string[] = [];
   const selectedAttributes = input.extraDetails.trim()
-    ? withoutDefaultCharacterAttributes(input.attributes)
+    ? withoutConflictingDefaultAttributes(input.attributes, input.extraDetails)
     : input.attributes;
   const characterType = selectedAttributes.characterType?.[0];
   const explicitStylizedDirection = /cartoon|desenh[oa]|anima(d[oa]|ção)|anime|ilustraç|caricatur|fant[aá]stic|alien|extraterrestr|exagerad|exaggerat|strange|weird|bizarre|grotesque|unusual|inusitad|esquisit|gigantic|gigante|reference sheet|folha de refer[eê]ncia|turnaround/i.test(input.extraDetails);
@@ -93,15 +165,24 @@ export function buildAvatarPrompt(input: PromptInput): string {
     );
   }
 
-  const attrs = describeAttributes(selectedAttributes);
-  if (!input.prompt.trim()) {
-    lines.push(`Create a portrait of ${attrs.length ? attrs.join('; ') : input.extraDetails.trim() ? 'the custom character described below' : 'a photorealistic content creator'}.`);
-  } else {
-    lines.push(`Scene: ${input.prompt.trim()}`);
-    if (attrs.length) lines.push(`Character: ${attrs.join('; ')}.`);
+  const profile = describeSingleCharacterProfile(selectedAttributes);
+  if (profile) {
+    // The controls describe one influencer. Without this relationship, image
+    // models can read “insect + man + young” as an insect and a separate man.
+    lines.push(
+      `SINGLE CHARACTER PROFILE: ${profile} ` +
+        'The written scene may add people only when it explicitly asks for additional characters.',
+    );
   }
 
-  if (input.extraDetails.trim()) lines.push(`Personalized character design: ${input.extraDetails.trim()}`);
+  if (!input.prompt.trim()) {
+    lines.push(`Create a portrait of ${profile ? 'the single character described in the profile above' : input.extraDetails.trim() ? 'the single custom character described below' : 'one photorealistic content creator'}.`);
+  } else {
+    lines.push(`Scene: ${input.prompt.trim()}`);
+    if (profile) lines.push(`Primary character profile: ${profile}`);
+  }
+
+  if (input.extraDetails.trim()) lines.push(`Design of the same primary character, not an additional subject: ${input.extraDetails.trim()}`);
   if (input.characterWorld.trim()) lines.push(`Character world and context: ${input.characterWorld.trim()}`);
 
   if (input.hasProductImage) {
