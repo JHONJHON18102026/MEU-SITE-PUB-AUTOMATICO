@@ -26,6 +26,7 @@ import { useCommunityAvatars, useMyAvatars } from './useAvatarData';
 import { AvatarDetailModal } from './AvatarDetailModal';
 import { SHOWCASE_AVATARS } from './showcaseExamples';
 import { setDraggedAvatar } from './imageDrag';
+import { avatarCardName } from './avatarCardName';
 
 const TABS: { id: GalleryTab; label: string; icon: typeof Compass }[] = [
   { id: 'explore', label: 'Explorar', icon: Compass },
@@ -139,7 +140,7 @@ function AvatarGrid({ items, pending, onOpen, emptyText }: { items: AvatarDTO[];
 
   function handleUseBase(a: AvatarDTO) {
     set({ baseAvatar: a, basePhoto: null });
-    toast.success(`Influencer "${a.name}" carregado.`);
+    toast.success(`Influencer "${avatarCardName(a)}" carregado.`);
   }
 
   function handleRecreate(a: AvatarDTO) {
@@ -148,7 +149,7 @@ function AvatarGrid({ items, pending, onOpen, emptyText }: { items: AvatarDTO[];
       aspectRatio: (a.aspect_ratio as typeof aspectRatio) ?? '9:16',
       panelTab: 'create',
     });
-    toast.success(`Características de "${a.name}" carregadas no painel esquerdo.`);
+    toast.success(`Características de "${avatarCardName(a)}" carregadas no painel esquerdo.`);
   }
 
   return (
@@ -158,13 +159,15 @@ function AvatarGrid({ items, pending, onOpen, emptyText }: { items: AvatarDTO[];
           <div className="flex h-full items-end p-3 text-xs font-semibold text-fg-muted">Gerando com IA…</div>
         </div>
       ))}
-      {items.map((a) => (
+      {items.map((a) => {
+        const displayName = avatarCardName(a);
+        return (
         <div key={a.id} draggable onDragStart={(event) => setDraggedAvatar(event, a)} title="Arraste para o canvas para usar esta imagem" className="group relative break-inside-avoid cursor-grab overflow-hidden rounded-2xl border border-accent/20 bg-[linear-gradient(145deg,#1a1629,#111019)] shadow-[0_14px_34px_rgba(0,0,0,.2)] transition duration-300 hover:-translate-y-1 hover:border-accent/60 hover:shadow-[0_22px_48px_rgba(72,42,150,.3)] active:cursor-grabbing">
           <button type="button" onClick={() => onOpen(a)} className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            <img src={a.image_url} alt={a.name} loading="lazy" className={clsx('w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]', ratioClass(a.aspect_ratio))} />
+            <img src={a.image_url} alt={displayName} loading="lazy" className={clsx('w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]', ratioClass(a.aspect_ratio))} />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
             <div className="pointer-events-none absolute bottom-2.5 left-3 right-24 truncate text-xs font-semibold text-white opacity-90">
-              {a.name}
+              {displayName}
             </div>
           </button>
           <div className="absolute right-2 top-2 flex flex-col gap-1.5 md:opacity-0 md:transition md:group-hover:opacity-100">
@@ -173,7 +176,7 @@ function AvatarGrid({ items, pending, onOpen, emptyText }: { items: AvatarDTO[];
               onClick={() => handleUseBase(a)}
               className="grid size-8 place-items-center rounded-lg bg-black/65 text-white backdrop-blur hover:bg-black"
               title="Usar este rosto como base"
-              aria-label={`Usar rosto ${a.name}`}
+              aria-label={`Usar rosto ${displayName}`}
             >
               <ScanFace className="size-4" />
             </button>
@@ -187,7 +190,7 @@ function AvatarGrid({ items, pending, onOpen, emptyText }: { items: AvatarDTO[];
             <RefreshCcw className="size-3" /> Recriar
           </button>
         </div>
-      ))}
+      );})}
     </div>
   );
 }
@@ -347,16 +350,18 @@ function MyAvatarsPanel({
                   <div className="flex h-full items-end p-3 text-xs font-semibold text-fg-muted">Gerando…</div>
                 </div>
               ))}
-              {items.map((a) => (
+              {items.map((a) => {
+                const displayName = avatarCardName(a);
+                return (
                 <div key={a.id} draggable onDragStart={(event) => setDraggedAvatar(event, a)} title="Arraste para o canvas para usar esta imagem" className="group relative aspect-[3/4] cursor-grab overflow-hidden rounded-2xl border border-accent/20 bg-[linear-gradient(145deg,#1a1629,#111019)] shadow-[0_12px_30px_rgba(0,0,0,.18)] transition duration-300 hover:-translate-y-1 hover:border-accent/60 hover:shadow-[0_20px_44px_rgba(72,42,150,.28)] active:cursor-grabbing">
                   <button type="button" onClick={() => onOpen(a)} className="block h-full w-full text-left">
-                    <img src={a.image_url} alt={a.name} className="h-full w-full object-cover object-top transition duration-300 group-hover:scale-105" />
+                    <img src={a.image_url} alt={displayName} className="h-full w-full object-cover object-top transition duration-300 group-hover:scale-105" />
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent p-2.5">
-                      <div className="truncate text-xs font-semibold text-white">{a.name}</div>
+                      <div className="truncate text-xs font-semibold text-white">{displayName}</div>
                     </div>
                   </button>
                 </div>
-              ))}
+              );})}
             </div>
           )}
         </div>

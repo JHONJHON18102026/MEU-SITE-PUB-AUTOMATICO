@@ -206,8 +206,30 @@ export function buildAvatarPrompt(input: PromptInput): string {
   return lines.join('\n');
 }
 
+/** Cria um rótulo curto a partir da descrição visual do personagem. */
+function describeCustomCharacter(details: string): string | undefined {
+  let description = details
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/^(?:monte seu personagem|descri[cç][aã]o do personagem|personagem(?:\s+(?:personalizado|único))?|crie um personagem)\s*[:—–-]?\s*/i, '')
+    .replace(/^(?:um|uma|o|a)\s+/i, '');
+
+  // O cartão precisa identificar a criação sem transformar todo o briefing em título.
+  description = description.split(/[.!?\n]/, 1)[0]?.trim() ?? '';
+  if (!description) return undefined;
+
+  const maxLength = 38;
+  if (description.length > maxLength) {
+    const shortened = description.slice(0, maxLength);
+    const lastSpace = shortened.lastIndexOf(' ');
+    description = `${shortened.slice(0, lastSpace > 18 ? lastSpace : maxLength).trim()}…`;
+  }
+  return description.charAt(0).toLocaleUpperCase('pt-BR') + description.slice(1);
+}
+
 /** Nome curto e simpático para o card do avatar. */
-export function suggestAvatarName(selection: AttributeSelection, index: number): string {
+export function suggestAvatarName(selection: AttributeSelection, index: number, characterDescription = ''): string {
+  const customDescription = describeCustomCharacter(characterDescription);
   const type = selection.characterType?.[0];
   const typeLabel = type ? findOption('characterType', type)?.label : undefined;
   const base = typeLabel && typeLabel !== 'Realista' ? typeLabel : 'Influencer IA';
@@ -218,6 +240,6 @@ export function suggestAvatarName(selection: AttributeSelection, index: number):
   const identityLabel = identity
     ? findOption('ethnicity', identity)?.label ?? findOption('hair', identity)?.label ?? findOption('eyeColor', identity)?.label
     : undefined;
-  const namedBase = identityLabel ? `${base} · ${identityLabel}` : base;
+  const namedBase = customDescription ?? (identityLabel ? `${base} · ${identityLabel}` : base);
   return index > 0 ? `${namedBase} ${index + 1}` : namedBase;
 }

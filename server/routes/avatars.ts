@@ -262,7 +262,7 @@ avatarRoutes.post('/generate', async (c) => {
         id: avatarId,
         user_id: userId,
         generation_id: generationId,
-        name: suggestAvatarName(req.attributes as AttributeSelection, index),
+        name: suggestAvatarName(req.attributes as AttributeSelection, index, req.extraDetails),
         image_url: signed.data.signedUrl,
         storage_path: storagePath,
         prompt: req.mode === 'prompt' ? req.prompt : prompt,

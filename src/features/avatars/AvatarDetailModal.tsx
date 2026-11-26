@@ -11,6 +11,7 @@ import { downloadImage } from '@/lib/image';
 import { useSession } from '@/store/session';
 import { useAvatarStudio } from './avatarStore';
 import { useGalleryVersion } from './useAvatarData';
+import { avatarCardName } from './avatarCardName';
 
 export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: { avatar: AvatarDTO | null; onClose: () => void; items?: AvatarDTO[]; onNavigate?: (avatar: AvatarDTO) => void }) {
   const userId = useSession((s) => s.session?.user.id);
@@ -56,6 +57,7 @@ export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: {
   if (!avatar) return null;
   const mine = avatar.user_id === userId;
   const isShowcase = avatar.user_id === 'showcase';
+  const displayName = avatarCardName(avatar);
 
   // Chave única por grupo+opção: "Verde" existe em olhos E em cabelo.
   const chips = ATTRIBUTE_GROUPS.flatMap((g) =>
@@ -124,10 +126,10 @@ export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: {
   }
 
   return (
-    <Modal open={Boolean(avatar)} onClose={onClose} title={avatar.name} size="xl">
+    <Modal open={Boolean(avatar)} onClose={onClose} title={displayName} size="xl">
       <div className="grid gap-6 md:h-[70vh] md:min-h-[240px] md:max-h-[680px] md:grid-cols-[minmax(0,1fr)_320px]">
         <div className="relative flex h-[55vh] min-h-[240px] max-h-[680px] items-center justify-center overflow-hidden rounded-2xl bg-surface-2 md:h-full md:min-h-0">
-          <img src={avatar.image_url} alt={avatar.name} className="h-full w-full object-contain" />
+          <img src={avatar.image_url} alt={displayName} className="h-full w-full object-contain" />
           {canNavigate && <>
             <button type="button" onClick={() => onNavigate?.(items[currentIndex - 1]!)} disabled={currentIndex === 0} aria-label="Imagem anterior" title="Imagem anterior" className="absolute left-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg backdrop-blur transition hover:bg-black/85 disabled:pointer-events-none disabled:opacity-35">
               <ArrowLeft className="size-5" />
