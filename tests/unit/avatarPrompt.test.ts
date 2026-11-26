@@ -115,10 +115,13 @@ describe('montagem do prompt', () => {
     });
 
     expect(p).toContain('RESTRIÇÃO DE TIPO — BEBÊ ANIMADO');
-    expect(p).toContain('um bebê/criança pequena');
+    expect(p).toContain('mascote bebê fictício');
+    expect(p).toContain('roupa infantil confortável e totalmente vestida');
     expect(p).toContain('Gênero: Masculino');
-    expect(p).toContain('wearing casual fitted clothing and jeans');
+    expect(p).toContain('wearing casual clothing and jeans');
     expect(p).not.toMatch(/broad shoulders|narrow waist|lean, slightly lanky|male character/i);
+    expect(p).not.toContain('texturas fotorrealistas');
+    expect(p).not.toContain('textura de pele realista');
     expect(p).toContain('Referência visual de estilo: a miniatura da opção “Bebê animado”');
   });
 

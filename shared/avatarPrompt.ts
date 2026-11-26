@@ -88,7 +88,10 @@ function detailsForSelectedCharacterType(details: string, typeId?: string): stri
     .split(/(?<=[.!?;])\s+|,\s*/)
     .map((clause) => clause.trim())
     .filter(Boolean);
-  const compatible = clauses.filter((clause) => !adultMorphology.test(clause));
+  const compatible = clauses
+    .filter((clause) => !adultMorphology.test(clause))
+    .map((clause) => clause.replace(/\bfitted\b/gi, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
   return compatible.join(', ').replace(/\s+/g, ' ').trim();
 }
 
@@ -143,7 +146,10 @@ export function buildAvatarPrompt(input: PromptInput): string {
   const characterDetails = detailsForSelectedCharacterType(input.extraDetails, characterType);
   const explicitStylizedDirection = /cartoon|desenh[oa]|anima(d[oa]|ção)|anime|ilustraç|caricatur|fant[aá]stic|alien|extraterrestr|exagerad|strange|weird|bizarre|grotesque|unusual|inusitad|esquisit|gigantic|gigante|reference sheet|folha de refer[eê]ncia|turnaround/i.test(characterDetails);
   const isStylized = (characterType && STYLIZED_CHARACTER_TYPES.has(characterType)) || explicitStylizedDirection;
-  const quality = isStylized
+  const isAnimatedBaby = characterType === 'bebe-animado';
+  const quality = isAnimatedBaby
+    ? 'Ilustração de personagem 3D claramente fictícia e estilizada, acabamento de animação/cartoon, formas arredondadas de mascote infantil, roupa infantil confortável e totalmente vestida. Não fotorrealista; sem textura de pele fotográfica.'
+    : isStylized
     ? 'Renderização detalhada de personagem com exagero de caricatura, traços marcantes e intencionais, texturas fotorrealistas e fidelidade ao design solicitado.'
     : characterDetails
       ? 'Renderização detalhada e fotorrealista, fiel à aparência descrita, com luz natural suave, foco nítido, materiais convincentes e textura de pele realista.'
@@ -151,16 +157,19 @@ export function buildAvatarPrompt(input: PromptInput): string {
 
   if (characterDetails) {
     lines.push(
-      'DIREÇÃO DE PERSONAGEM PERSONALIZADO: trate a descrição do usuário como um briefing visual e converta-a em um design coerente e específico. ' +
+      (isAnimatedBaby
+        ? 'DIREÇÃO DE PERSONAGEM PERSONALIZADO: trate a descrição como um briefing para um personagem fictício em animação 3D. Preserve somente detalhes compatíveis com um bebê estilizado, totalmente vestido e apropriado para todas as idades. O tipo selecionado prevalece sobre qualquer aparência adulta. ' +
+          'Mantenha cores, materiais e detalhes de roupa compatíveis, sem acrescentar elementos sem relação com o pedido. Não introduza realismo fotográfico nem contexto adulto. '
+        : 'DIREÇÃO DE PERSONAGEM PERSONALIZADO: trate a descrição do usuário como um briefing visual e converta-a em um design coerente e específico. ' +
         'Combine-a com as opções selecionadas na lateral, que são obrigatórias para o mesmo personagem. Quando uma opção selecionada definir um tipo incompatível com um detalhe do texto, o tipo selecionado prevalece e o detalhe incompatível deve ser ignorado. ' +
         'Em personagens estranhos, fantásticos, não humanos ou caricaturais, preserve o traço distintivo pedido como uma assinatura visual inconfundível, com proporções humanas fotorrealistas e características cartunescas exageradas, além de renderização realista detalhada com exagero de caricatura. Exagere esse traço quando solicitado, mas respeite palavras de escala como pequeno ou sutil. ' +
         'Nunca transforme uma ideia incomum em uma influenciadora jovem genérica. Preserve os outros detalhes sem acrescentar elementos sem relação com o pedido. ' +
-        'Mantenha anatomia, rosto, cores, proporções, roupas e materiais coerentes. Não invente biografia, poderes nem características visuais que o usuário não pediu.',
+        'Mantenha anatomia, rosto, cores, proporções, roupas e materiais coerentes. Não invente biografia, poderes nem características visuais que o usuário não pediu.'),
     );
   }
 
-  if (characterType === 'bebe-animado') {
-    lines.push('RESTRIÇÃO DE TIPO — BEBÊ ANIMADO: o único personagem principal deve ser claramente um bebê/criança pequena em estilo 3D animado, com cabeça proporcionalmente maior, rosto infantil, tronco curto e membros curtos. Nunca representar adulto, adolescente ou corpo adulto. Gênero, cores, roupa e acessórios selecionados são aplicados a esse mesmo bebê. A miniatura “Bebê animado” é referência visual obrigatória da categoria; não criar um bebê adicional nem um adulto junto.');
+  if (isAnimatedBaby) {
+    lines.push('RESTRIÇÃO DE TIPO — BEBÊ ANIMADO: represente um único mascote bebê fictício, em ilustração 3D estilizada e amigável, com formas arredondadas, cabeça proporcionalmente maior, tronco curto e membros curtos. Use roupa infantil confortável, totalmente vestida e sem enquadramento sugestivo. Não retrate pessoa real, fotografia, corpo adulto ou contexto adulto. Gênero, cores, roupa e acessórios selecionados são aplicados a esse mesmo personagem. A miniatura “Bebê animado” é referência visual obrigatória; não crie outro personagem.');
   }
 
   if (input.referenceCount > 0 || input.hasBasePhoto || input.hasProductImage) {
