@@ -49,7 +49,7 @@ export const generateAvatarSchema = z.object({
   /** attributes = painel de características; prompt = caixa de texto central. */
   mode: z.enum(['attributes', 'prompt']),
   attributes: z.record(z.string(), z.array(z.string()).max(30)).default({}),
-  extraDetails: z.string().max(800).default(''),
+  extraDetails: z.string().max(1800).default(''),
   characterWorld: z.string().max(1200).default(''),
   prompt: z.string().max(2000).default(''),
   /** Foto do usuário (painel esquerdo) ou avatar escolhido como base. */
@@ -72,7 +72,7 @@ export const enhancePromptSchema = z.object({
 });
 
 export const enhanceCharacterPromptSchema = z.object({
-  description: z.string().min(3).max(800),
+  description: z.string().min(3).max(1800),
   attributes: z.record(z.string(), z.array(z.string()).max(30)).default({}),
   characterWorld: z.string().max(1200).default(''),
   hasBasePhoto: z.boolean().default(false),

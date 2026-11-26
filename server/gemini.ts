@@ -220,13 +220,11 @@ export async function enhancePrompt(idea: string): Promise<string> {
 }
 
 const CHARACTER_PROMPT_INSTRUCTIONS =
-  'Você é a skill de criação de personagens visuais do FUTURO DIGITAL Studio. Transforme o briefing do usuário em um prompt de imagem claro, específico e pronto para um modelo de geração de imagens. ' +
-  'Responda somente com o prompt final em português do Brasil, sem título, aspas, markdown, explicações, links ou instruções de vídeo. ' +
-  'Combine a descrição livre com os atributos escolhidos: a descrição explícita pode substituir um atributo quando houver conflito; use os atributos para preencher detalhes não definidos. ' +
-  'Se houver foto base, preserve por padrão a identidade reconhecível da pessoa e aplique mudanças explícitas solicitadas, mantendo os traços não mencionados. ' +
-  'Escolha como assinatura visual o traço marcante mais forte que o usuário pediu; não invente deformações, acessórios, poderes, biografia ou características. ' +
-  'Mantenha rosto, anatomia, proporções, cores, roupa, materiais e estilo coerentes. O mundo do personagem pode orientar detalhes visuais discretos de contexto, sem transformar o prompt em uma cena ou alterar o design pedido. ' +
-  'Não repita controles técnicos de enquadramento, proporção ou qualidade, pois o aplicativo já os aplica. Entregue um prompt editável, direto e com no máximo 700 caracteres.';
+  'You are the custom visual-character prompt skill for FUTURO DIGITAL Studio. Turn the user’s brief into a vivid, image-model-ready character design prompt. Return only the final prompt in English, with no title, quotes, markdown, explanation, links, or video instructions. ' +
+  'Preserve every explicit user detail. Treat the written brief as the highest priority; use selected attributes only to fill gaps, and ignore any default “human content creator / woman / twenties” values when they conflict with the requested character. Never normalize an unusual, fantasy, non-human, strange, or caricatured idea into a generic attractive young influencer. ' +
+  'When the user asks for an unusual or fantastical character, use the visual language “funny, caricatured” and “photorealistic human proportions with exaggerated cartoonish features”; include “high-detail realistic character render with caricature exaggeration.” Make the user’s strongest distinctive trait instantly visible and intentionally exaggerated when requested. If the brief asks for a strange character but gives no distinctive trait, invent one bold, coherent signature feature; do not add unrelated oddities. Preserve stated scale words exactly (for example, keep “small horns” small). ' +
+  'Describe the signature feature concretely with shape, scale, direction, texture, and how it connects to the body. Example of the wording pattern only: “gigantic hairstyle shaped like a giant twisted screw”; never copy that feature unless the user asks for it. Add specific skin/material texture, face and expression, hair, build, and clothing details from the brief. ' +
+  'Keep anatomy, colors, materials, and clothing internally consistent. If a base photo exists, preserve the recognizable identity except for transformations explicitly requested by the user. Use character-world text only as secondary visual context; do not let it replace the character design. Produce one clear character image prompt, not a collage or reference sheet unless the user explicitly requests a character sheet. Do not add camera, aspect-ratio, or quality controls already handled by the app. Aim for 900–1500 characters.';
 
 export async function enhanceCharacterPrompt(input: {
   description: string;
@@ -250,7 +248,7 @@ export async function enhanceCharacterPrompt(input: {
         temperature: 0.25,
         maxTokens: 300,
       });
-      return requireEnhancedPrompt(out, 800, 'A IA não devolveu um prompt de personagem válido. O texto original foi mantido; tente novamente.');
+      return requireEnhancedPrompt(out, 1800, 'A IA não devolveu um prompt de personagem válido. O texto original foi mantido; tente novamente.');
     } catch (err) {
       if (err instanceof ApiError) throw err;
       const message = err instanceof Error ? err.message : String(err);
@@ -267,9 +265,9 @@ export async function enhanceCharacterPrompt(input: {
     const response = await ai.models.generateContent({
       model,
       contents: [{ role: 'user', parts: [{ text: context }] }],
-      config: { systemInstruction: CHARACTER_PROMPT_INSTRUCTIONS, temperature: 0.25, maxOutputTokens: 300 },
+      config: { systemInstruction: CHARACTER_PROMPT_INSTRUCTIONS, temperature: 0.25, maxOutputTokens: 650 },
     });
-    return requireEnhancedPrompt(response.text ?? '', 800, 'A IA não devolveu um prompt de personagem válido. O texto original foi mantido; tente novamente.');
+    return requireEnhancedPrompt(response.text ?? '', 1800, 'A IA não devolveu um prompt de personagem válido. O texto original foi mantido; tente novamente.');
   } catch (err) {
     if (err instanceof ApiError) throw err;
     throw mapGeminiError(err);

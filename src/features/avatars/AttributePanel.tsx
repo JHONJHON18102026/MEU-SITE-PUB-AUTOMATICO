@@ -357,14 +357,14 @@ export function AttributePanel({ onGenerate, busy }: { onGenerate: () => void; b
             id="avatar-character-prompt"
             value={characterDraft}
             onChange={(e) => setCharacterDraft(e.target.value)}
-            maxLength={800}
+            maxLength={1800}
             rows={5}
             aria-label="Descrição para montar seu personagem"
             placeholder="Descreva a aparência e o estilo do personagem…"
             className="w-full resize-y rounded-xl border border-border bg-surface-2 p-3 text-sm outline-none focus:border-accent"
           />
           <div className="mt-2 flex items-center justify-between gap-3">
-            <span className="text-xs text-fg-subtle">{characterDraft.length}/800 · sem custo em créditos</span>
+            <span className="text-xs text-fg-subtle">{characterDraft.length}/1800 · sem custo em créditos</span>
             <Button
               variant="secondary"
               size="sm"

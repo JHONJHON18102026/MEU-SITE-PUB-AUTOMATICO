@@ -95,6 +95,18 @@ describe('montagem do prompt', () => {
     expect(p).toContain('Scene: tomando suplemento na cozinha');
   });
 
+  it('não deixa os atributos padrão transformarem uma descrição fantástica em influencer genérico', () => {
+    const p = buildAvatarPrompt({
+      ...base,
+      attributes: { characterType: ['realista'], gender: ['feminino'], age: ['jovem'] },
+      extraDetails: 'Funny, caricatured elderly woman with photorealistic human proportions and exaggerated cartoonish features.',
+    });
+    expect(p).not.toContain('photorealistic human content creator');
+    expect(p).not.toContain('woman; in their twenties');
+    expect(p).toContain('high-detail realistic character render with caricature exaggeration');
+    expect(p).toContain('Framing: medium shot');
+  });
+
   it('nomeia o avatar pelo tipo de personagem', () => {
     expect(suggestAvatarName({ characterType: ['gato'] }, 0)).toBe('Gato');
     expect(suggestAvatarName({ characterType: ['realista'] }, 1)).toBe('Influencer IA 2');
