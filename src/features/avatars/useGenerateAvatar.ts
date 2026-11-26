@@ -19,7 +19,6 @@ const strip = (img: { mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; data:
 
 export function useGenerateAvatar() {
   const pendingImagesRef = useRef(0);
-  const attributeRequestPendingRef = useRef(false);
   const [pendingImages, setPendingImages] = useState(0);
   const [lastResult, setLastResult] = useState<AvatarDTO[]>([]);
   const setBalance = useSession((s) => s.setBalance);
@@ -41,7 +40,6 @@ export function useGenerateAvatar() {
       return;
     }
     const st = useAvatarStudio.getState();
-    if (mode === 'attributes' && attributeRequestPendingRef.current) return;
     const pendingBeforeRequest = Math.max(pendingImagesRef.current, persistedPendingImageCount);
     const availableImageSlots = MAX_PENDING_IMAGE_REQUESTS - pendingBeforeRequest;
     if (availableImageSlots <= 0) {
@@ -75,7 +73,6 @@ export function useGenerateAvatar() {
 
     // Reserve synchronously so clicks made before React rerenders cannot
     // exceed the four-request concurrency limit.
-    if (mode === 'attributes') attributeRequestPendingRef.current = true;
     pendingImagesRef.current += requestedImageCount;
     setPendingImages(pendingImagesRef.current);
     useAvatarStudio.getState().set({ pendingCount: useAvatarStudio.getState().pendingCount + requestedImageCount });
@@ -144,7 +141,6 @@ export function useGenerateAvatar() {
       void useSession.getState().refreshProfile();
       bump();
     } finally {
-      if (mode === 'attributes') attributeRequestPendingRef.current = false;
       pendingImagesRef.current = Math.max(0, pendingImagesRef.current - requestedImageCount);
       setPendingImages(pendingImagesRef.current);
       const current = useAvatarStudio.getState();
@@ -152,5 +148,12 @@ export function useGenerateAvatar() {
     }
   }
 
-  return { generate, busy: pendingImages > 0, pendingRequests: pendingImageRequests, lastResult };
+  return {
+    generate,
+    // O painel só bloqueia quando os quatro slots da fila estão ocupados.
+    // Pedidos abaixo do limite podem continuar sendo enviados em paralelo.
+    busy: pendingImageRequests >= MAX_PENDING_IMAGE_REQUESTS,
+    pendingRequests: pendingImageRequests,
+    lastResult,
+  };
 }
