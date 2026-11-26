@@ -129,12 +129,40 @@ export function describeSelectedAttributesPt(selection: AttributeSelection): str
 function describeSingleCharacterProfile(selection: AttributeSelection): string | null {
   const typeId = selection.characterType?.[0];
   const type = typeId ? findOption('characterType', typeId)?.label : null;
+  const typeDescription = typeId ? CHARACTER_TYPE_DESCRIPTIONS_PT[typeId] : null;
   const traits = describeSelectedAttributesPt(selection)
     .filter((trait) => !trait.startsWith('Tipo de personagem:'));
   if (!type && traits.length === 0) return null;
   const subject = type ?? 'personagem';
-  return `PERSONAGEM ÚNICO: o tipo selecionado é “${subject}”; represente-o como o único sujeito principal. Aplique a este mesmo personagem todas as opções selecionadas: ${traits.join('; ') || 'nenhuma característica adicional'}. As opções descrevem o mesmo personagem; não adicione uma pessoa, bebê, modelo, acompanhante, duplicata ou segundo personagem para representar qualquer uma delas.`;
+  return `PERSONAGEM ÚNICO: o tipo selecionado é “${subject}”${typeDescription ? ` (${typeDescription})` : ''}; represente-o como o único sujeito principal. Aplique a este mesmo personagem todas as opções selecionadas: ${traits.join('; ') || 'nenhuma característica adicional'}. As opções descrevem o mesmo personagem; não adicione uma pessoa, bebê, modelo, acompanhante, duplicata ou segundo personagem para representar qualquer uma delas.`;
 }
+
+const CHARACTER_TYPE_DESCRIPTIONS_PT: Record<string, string> = {
+  realista: 'pessoa humana fotorrealista',
+  ousado: 'pessoa humana de presença marcante e visual arrojado',
+  extremo: 'personagem humano estilizado, extravagante e com cores vivas',
+  inseto: 'inseto antropomórfico com postura humana',
+  sapo: 'sapo antropomórfico com postura humana',
+  gato: 'gato antropomórfico com postura humana',
+  cachorro: 'cachorro antropomórfico com postura humana',
+  roedor: 'capivara antropomórfica com postura humana',
+  passaro: 'pássaro antropomórfico com postura humana',
+  monge: 'monge budista sereno',
+  curandeira: 'mulher sábia que prepara remédios tradicionais com ervas',
+  indigena: 'pessoa indígena brasileira com adornos tradicionais respeitosos',
+  cacique: 'liderança indígena com cocar tradicional de penas',
+  socialite: 'socialite glamourosa de alta sociedade',
+  cigana: 'cartomante romani com lenços coloridos',
+  vaqueiro: 'vaqueiro brasileiro com chapéu de couro',
+  saude: 'profissional de saúde confiável com jaleco branco',
+  milionario: 'empreendedor milionário confiante',
+  ciborgue: 'ciborgue futurista com implantes cromados sutis',
+  'bebe-animado': 'bebê fictício em animação 3D, com visual fofo e expressivo',
+  'orgao-animado': 'órgão humano antropomórfico fictício, animado em 3D e com rosto',
+  vovo: 'avó ou avô acolhedor e sábio',
+  'mao-desenhando': 'personagem mostrado por animação de quadro branco com uma mão desenhando',
+  cartoon: 'personagem de desenho animado 2D com ilustração chapada e limpa',
+};
 
 export function buildAvatarPrompt(input: PromptInput): string {
   const framing = FRAMINGS.find((f) => f.id === input.framing)?.prompt ?? FRAMINGS[1].prompt;
@@ -160,8 +188,7 @@ export function buildAvatarPrompt(input: PromptInput): string {
       (isAnimatedBaby
         ? 'DIREÇÃO DE PERSONAGEM PERSONALIZADO: trate a descrição como um briefing para um personagem fictício em animação 3D. Preserve somente detalhes compatíveis com um bebê estilizado, totalmente vestido e apropriado para todas as idades. O tipo selecionado prevalece sobre qualquer aparência adulta. ' +
           'Mantenha cores, materiais e detalhes de roupa compatíveis, sem acrescentar elementos sem relação com o pedido. Não introduza realismo fotográfico nem contexto adulto. '
-        : 'DIREÇÃO DE PERSONAGEM PERSONALIZADO: trate a descrição do usuário como um briefing visual e converta-a em um design coerente e específico. ' +
-        'Combine-a com as opções selecionadas na lateral, que são obrigatórias para o mesmo personagem. Quando uma opção selecionada definir um tipo incompatível com um detalhe do texto, o tipo selecionado prevalece e o detalhe incompatível deve ser ignorado. ' +
+        : 'DIREÇÃO DE PERSONAGEM PERSONALIZADO: trate a descrição escrita em “Monte seu Personagem” como a fonte principal da identidade e do design. Preserve primeiro o conceito, a silhueta, os traços, os materiais e os detalhes que o usuário especificou. Combine no mesmo personagem as opções selecionadas e as características visuais compatíveis da referência anexada; elas complementam o briefing e não o substituem. Se houver conflito direto, mantenha o detalhe explicitamente pedido no briefing e aproveite da referência os demais traços que combinarem. ' +
         'Em personagens estranhos, fantásticos, não humanos ou caricaturais, preserve o traço distintivo pedido como uma assinatura visual inconfundível, com proporções humanas fotorrealistas e características cartunescas exageradas, além de renderização realista detalhada com exagero de caricatura. Exagere esse traço quando solicitado, mas respeite palavras de escala como pequeno ou sutil. ' +
         'Nunca transforme uma ideia incomum em uma influenciadora jovem genérica. Preserve os outros detalhes sem acrescentar elementos sem relação com o pedido. ' +
         'Mantenha anatomia, rosto, cores, proporções, roupas e materiais coerentes. Não invente biografia, poderes nem características visuais que o usuário não pediu.'),
@@ -174,8 +201,7 @@ export function buildAvatarPrompt(input: PromptInput): string {
 
   if (input.referenceCount > 0 || input.hasBasePhoto || input.hasProductImage) {
     lines.push(
-      'PRIORIDADE DAS REFERÊNCIAS: siga a cena escrita e o design personalizado do personagem quanto a ação, pose, roupa, local, iluminação e câmera. ' +
-        'Aplique as opções selecionadas como características obrigatórias do mesmo personagem, salvo contradição explícita do usuário. Use cada imagem anexada apenas para a identidade, produto ou detalhes que ela representa; não copie pose, roupa ou fundo quando o texto pedir mudanças.',
+      'HIERARQUIA E MISTURA VISUAL: a descrição de “Monte seu Personagem” é a fonte principal para a identidade e o design do personagem; preserve o que ela especifica. As opções marcadas e cada referência visual têm influência real, mas complementar: incorpore no mesmo personagem traços reconhecíveis e compatíveis das referências, sem substituir o briefing nem criar um segundo sujeito. Em conflito direto, o briefing explícito prevalece; os demais traços da referência ainda devem aparecer. A cena escrita define ação, pose, local, enquadramento, iluminação e câmera.',
     );
   }
 
@@ -188,7 +214,8 @@ export function buildAvatarPrompt(input: PromptInput): string {
   if (input.hasCharacterStyleReference) {
     const selectedType = selectedAttributes.characterType?.[0];
     const typeLabel = selectedType ? findOption('characterType', selectedType)?.label : 'selecionado';
-    lines.push(`Referência visual de estilo: a miniatura da opção “${typeLabel}” será enviada ao motor separadamente como guia para a categoria, as proporções e os traços visuais do mesmo personagem. Não a use como outro sujeito nem copie sua pose ou cenário.`);
+    const typeDescription = selectedType ? CHARACTER_TYPE_DESCRIPTIONS_PT[selectedType] : undefined;
+    lines.push(`REFERÊNCIA VISUAL DO TIPO “${typeLabel}”${typeDescription ? ` (${typeDescription})` : ''}: observe a miniatura anexada e transfira para o personagem principal pelo menos dois traços visuais característicos que sejam compatíveis com o briefing, como adorno, silhueta, paleta, textura ou material. Essa miniatura complementa a identidade descrita em “Monte seu Personagem”; não copie a pessoa, a pose ou o fundo, não a omita e não a transforme em um segundo personagem.`);
   }
 
   const profile = describeSingleCharacterProfile(selectedAttributes);
@@ -219,7 +246,7 @@ export function buildAvatarPrompt(input: PromptInput): string {
     lines.push(
       input.hasBasePhoto
         ? `Use as ${input.referenceCount} imagem(ns) de referência adicional(is) para os objetos ou detalhes representados; preserve a identidade da foto base e siga o texto para pose, roupa, enquadramento e cenário.`
-        : `Use a PRIMEIRA imagem de referência anexada como fonte principal do sujeito. Se mostrar uma pessoa, preserve a identidade reconhecível exata, formato do rosto, olhos, tom de pele, cabelo, idade e corpo; se mostrar um objeto, preserve seu design característico. Não substitua por pessoa ou objeto sem relação e não misture uma nova identidade. Preserve a identidade, mas siga o texto quando ele alterar roupa, pose, composição ou fundo. Use as ${Math.max(0, input.referenceCount - 1)} imagem(ns) restante(s) como restrições visuais secundárias.`,
+        : `Use as ${input.referenceCount} imagem(ns) de referência como fonte de características visuais para formar um personagem híbrido com o briefing de “Monte seu Personagem”. Transfira para o mesmo personagem alguns traços visíveis e compatíveis (por exemplo, paleta, cabelo, silhueta, adornos, roupa, textura ou materiais); não copie automaticamente a identidade exata de uma pessoa, nem troque o conceito do briefing. Em conflito direto, preserve o que o usuário especificou no briefing e mantenha da referência os demais traços compatíveis. Não crie outro sujeito.`,
     );
   }
 

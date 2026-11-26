@@ -85,9 +85,9 @@ describe('montagem do prompt', () => {
   it('com produto e referências, explica o papel de cada imagem', () => {
     const p = buildAvatarPrompt({ ...base, hasProductImage: true, referenceCount: 2 });
     expect(p).toContain('produto');
-    expect(p).toContain('PRIMEIRA imagem de referência anexada como fonte principal');
-    expect(p).toContain('Use as 1 imagem(ns) restante(s) como restrições visuais secundárias');
-    expect(p).toContain('Não substitua por pessoa ou objeto sem relação');
+    expect(p).toContain('fonte de características visuais para formar um personagem híbrido');
+    expect(p).toContain('briefing explícito prevalece');
+    expect(p).toContain('Não crie outro sujeito');
   });
 
   it('modo prompt usa a cena escrita pelo usuário', () => {
@@ -100,10 +100,27 @@ describe('montagem do prompt', () => {
     const p = buildAvatarPrompt({ ...base, attributes: selection, hasBasePhoto: true, hasCharacterStyleReference: true });
     expect(p).toContain('o tipo selecionado é “Bebê animado”');
     expect(p).toContain('Gênero: Masculino');
-    expect(p).toContain('Referência visual de estilo: a miniatura da opção “Bebê animado”');
-    expect(p).toContain('Não a use como outro sujeito');
+    expect(p).toContain('REFERÊNCIA VISUAL DO TIPO “Bebê animado”');
+    expect(p).toContain('não a transforme em um segundo personagem');
     expect(p).not.toContain('Idade: Jovem (18–29)');
     expect(CHARACTER_TYPES_WITH_STYLE_REFERENCE.has('bebe-animado')).toBe(true);
+  });
+
+  it('combina Cacique e referência visual sem deixar a miniatura substituir o briefing', () => {
+    const p = buildAvatarPrompt({
+      ...base,
+      attributes: { characterType: ['cacique'], gender: ['masculino'] },
+      extraDetails: 'Personagem masculino simpático, com roupa casual e aparência de animação 3D.',
+      hasCharacterStyleReference: true,
+      referenceCount: 1,
+    });
+
+    expect(p).toMatch(/Cacique.*liderança indígena com cocar tradicional de penas/);
+    expect(p).toContain('descrição escrita em “Monte seu Personagem” como a fonte principal');
+    expect(p).toContain('personagem híbrido');
+    expect(p).toContain('pelo menos dois traços visuais característicos');
+    expect(p).toContain('o briefing explícito prevalece');
+    expect(p).not.toContain('preserve a identidade reconhecível exata');
   });
 
   it('anexa a miniatura para todos os tipos de personagem que têm imagem', () => {
@@ -133,7 +150,7 @@ describe('montagem do prompt', () => {
     expect(p).not.toMatch(/broad shoulders|narrow waist|lean, slightly lanky|male character/i);
     expect(p).not.toContain('texturas fotorrealistas');
     expect(p).not.toContain('textura de pele realista');
-    expect(p).toContain('Referência visual de estilo: a miniatura da opção “Bebê animado”');
+    expect(p).toContain('REFERÊNCIA VISUAL DO TIPO “Bebê animado”');
   });
 
   it('não deixa os atributos padrão transformarem uma descrição fantástica em influencer genérico', () => {

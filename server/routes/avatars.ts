@@ -232,17 +232,13 @@ avatarRoutes.post('/generate', async (c) => {
   }
   req.referenceImages.forEach((image, index) => {
     images.push(image);
-    imageDescriptions.push(
-      !basePhoto && index === 0
-        ? 'REFERÊNCIA PRINCIPAL DO USUÁRIO: use o sujeito principal desta imagem como base do resultado e preserve sua identidade reconhecível. Aplique neste mesmo sujeito todas as opções selecionadas; se o tipo escolhido pedir transformação (por exemplo, bebê animado ou criatura), essa transformação tem prioridade sobre idade, anatomia humana adulta e estilo da foto. Não substitua por alguém sem relação nem crie um segundo sujeito.'
-        : `REFERÊNCIA VISUAL SECUNDÁRIA ${index + 1}: use para os detalhes visuais pedidos sem trocar a identidade principal e sem acrescentar outro personagem.`,
-    );
+    imageDescriptions.push(`REFERÊNCIA VISUAL DO USUÁRIO ${index + 1}: use a imagem como fonte de características para formar um híbrido com o briefing de “Monte seu Personagem”. Transfira para o mesmo personagem traços visíveis e compatíveis (como paleta, cabelo, silhueta, adornos, roupa, textura ou materiais), sem copiar automaticamente a identidade exata da pessoa e sem substituir o conceito escrito. Em conflito direto, o briefing escrito prevalece; aproveite os demais traços compatíveis da referência. Não crie um segundo sujeito.`);
   });
   if (req.characterStyleReference) {
     const typeId = req.attributes.characterType?.[0];
     const typeLabel = typeId ? findOption('characterType', typeId)?.label : undefined;
     images.push(req.characterStyleReference);
-    imageDescriptions.push(`REFERÊNCIA VISUAL DO TIPO DE PERSONAGEM${typeLabel ? ` “${typeLabel}”` : ''}: use esta miniatura para reproduzir no mesmo sujeito a categoria, o estilo, as proporções e os traços visuais característicos. Não copie a identidade exata, a pose ou o fundo da miniatura. Não a interprete como um segundo personagem; preserve somente a identidade da foto base quando ela não entrar em conflito com o tipo selecionado.`);
+    imageDescriptions.push(`REFERÊNCIA VISUAL DO TIPO DE PERSONAGEM${typeLabel ? ` “${typeLabel}”` : ''}: esta miniatura é uma referência visual complementar obrigatória. Transfira para o personagem principal pelo menos dois traços visíveis e compatíveis com “Monte seu Personagem”, como adorno, silhueta, paleta, textura ou material. O briefing escrito define a identidade principal e tem prioridade em qualquer conflito; não substitua o personagem pelo sujeito da miniatura. Não copie a pose ou o fundo nem crie um segundo personagem. ${basePhoto ? 'Mantenha a identidade da foto base e combine nela os traços compatíveis da miniatura.' : 'Crie um único personagem híbrido com a descrição e os traços compatíveis da miniatura.'}`);
   }
   if (req.productImage) {
     images.push(req.productImage);

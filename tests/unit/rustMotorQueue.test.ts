@@ -9,10 +9,11 @@ describe('instruções multimodais do motor Rust', () => {
       'REFERÊNCIA VISUAL DO TIPO “Monge”: use a miniatura como guia de estilo do personagem.',
     ]);
 
-    expect(result).toContain('PAPEL DAS IMAGENS ANEXADAS');
-    expect(result).toContain('use-a como guia obrigatório da categoria, design, proporções e traços característicos');
+    expect(result).toContain('HIERARQUIA VISUAL');
+    expect(result).toContain('o briefing textual de “Monte seu Personagem” define a identidade e o design principal, com o maior peso');
     expect(result).toContain('REFERÊNCIA VISUAL DO TIPO “Monge”');
-    expect(result).toContain('A referência de estilo define a aparência e categoria do personagem');
+    expect(result).toContain('extraia delas traços visíveis compatíveis');
+    expect(result).toContain('incorpore-os no mesmo personagem híbrido');
     expect(result).not.toContain('Attached photos are identity/product references only');
   });
 

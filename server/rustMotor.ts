@@ -52,9 +52,9 @@ export function buildRustImagePrompt(prompt: string, images: ImageInput[], image
     imageDescriptions[index] ?? `REFERÊNCIA VISUAL ${index + 1}: use de acordo com a finalidade descrita pelo usuário.`,
   ).join('\n');
   return [
-    'PAPEL DAS IMAGENS ANEXADAS: siga a finalidade indicada ao lado de cada imagem. Quando for uma REFERÊNCIA VISUAL DE ESTILO, use-a como guia obrigatório da categoria, design, proporções e traços característicos do mesmo personagem. Não copie sua identidade, pose ou cenário, a menos que o texto peça isso. Quando for uma FOTO BASE DE IDENTIDADE, preserve a pessoa reconhecível e aplique as transformações de tipo pedidas. Quando for FOTO DO PRODUTO, preserve o produto e seus detalhes.',
+    'HIERARQUIA VISUAL: o briefing textual de “Monte seu Personagem” define a identidade e o design principal, com o maior peso. As referências visuais são obrigatórias e complementares: extraia delas traços visíveis compatíveis (por exemplo, silhueta, adorno, paleta, textura ou material) e incorpore-os no mesmo personagem híbrido. Não ignore as referências nem substitua o conceito do briefing pelo sujeito da imagem. Se houver conflito direto, preserve o detalhe explícito do briefing e aproveite os demais traços compatíveis da referência. Uma foto base mantém a identidade da pessoa enviada; uma foto de produto mantém fielmente o produto.',
     visualInstructions,
-    'PRIORIDADE DA CENA: siga o texto para ação, pose, roupa, local, enquadramento, iluminação e câmera. A referência de estilo define a aparência e categoria do personagem; as demais imagens seguem a finalidade indicada acima.',
+    'PRIORIDADE DA CENA: siga a cena escrita para ação, pose, roupa, local, enquadramento, iluminação e câmera, respeitando o design principal do briefing. As referências acrescentam características visuais ao mesmo personagem, sem virar outros sujeitos nem impor pose ou cenário.',
     'CENA DO USUÁRIO: ' + prompt,
   ].filter(Boolean).join('\n\n');
 }
