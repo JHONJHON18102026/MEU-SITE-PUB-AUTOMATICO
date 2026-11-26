@@ -42,6 +42,23 @@ function endpoint(path: string): string {
   return `${env.rustMotorUrl}${path}`;
 }
 
+/**
+ * Mantém a semântica das referências anexadas. A miniatura de tipo é guia de
+ * estilo/proporção do personagem, não uma foto de identidade nem um produto.
+ */
+export function buildRustImagePrompt(prompt: string, images: ImageInput[], imageDescriptions: string[] = []): string {
+  if (!images.length) return prompt;
+  const visualInstructions = images.map((_, index) =>
+    imageDescriptions[index] ?? `REFERÊNCIA VISUAL ${index + 1}: use de acordo com a finalidade descrita pelo usuário.`,
+  ).join('\n');
+  return [
+    'PAPEL DAS IMAGENS ANEXADAS: siga a finalidade indicada ao lado de cada imagem. Quando for uma REFERÊNCIA VISUAL DE ESTILO, use-a como guia obrigatório da categoria, design, proporções e traços característicos do mesmo personagem. Não copie sua identidade, pose ou cenário, a menos que o texto peça isso. Quando for uma FOTO BASE DE IDENTIDADE, preserve a pessoa reconhecível e aplique as transformações de tipo pedidas. Quando for FOTO DO PRODUTO, preserve o produto e seus detalhes.',
+    visualInstructions,
+    'PRIORIDADE DA CENA: siga o texto para ação, pose, roupa, local, enquadramento, iluminação e câmera. A referência de estilo define a aparência e categoria do personagem; as demais imagens seguem a finalidade indicada acima.',
+    'CENA DO USUÁRIO: ' + prompt,
+  ].filter(Boolean).join('\n\n');
+}
+
 async function requestJson(path: string, init: RequestInit, timeoutMs = 10 * 60_000): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -81,16 +98,7 @@ export function rustGenerateImage(opts: {
         referenceImages.push(referencePath);
       }
     }
-    const visualInstructions = images.map((_, index) =>
-      opts.imageDescriptions?.[index] ?? ('Attached visual ' + (index + 1) + '.'),
-    ).join('\n');
-    const prompt = images.length
-      ? [
-          'WRITTEN SCENE PRIORITY: Follow the user prompt exactly for action, pose, clothing, location, framing, lighting, and camera. Attached photos are identity/product references only; do not copy their pose, outfit, or background unless the written prompt asks for it.',
-          visualInstructions,
-          'USER SCENE: ' + opts.prompt,
-        ].filter(Boolean).join('\n\n')
-      : opts.prompt;
+    const prompt = buildRustImagePrompt(opts.prompt, images, opts.imageDescriptions);
     const body = await requestJson('/v1/images/generations', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

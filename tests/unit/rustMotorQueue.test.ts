@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../server/errors';
-import { withRustEngineQueue } from '../../server/rustMotor';
+import { buildRustImagePrompt, withRustEngineQueue } from '../../server/rustMotor';
+
+describe('instruções multimodais do motor Rust', () => {
+  it('trata a miniatura selecionada como referência de estilo, sem confundi-la com identidade', () => {
+    const image = { mimeType: 'image/webp' as const, data: 'dGVzdA==' };
+    const result = buildRustImagePrompt('Um personagem no estúdio', [image], [
+      'REFERÊNCIA VISUAL DO TIPO “Monge”: use a miniatura como guia de estilo do personagem.',
+    ]);
+
+    expect(result).toContain('PAPEL DAS IMAGENS ANEXADAS');
+    expect(result).toContain('use-a como guia obrigatório da categoria, design, proporções e traços característicos');
+    expect(result).toContain('REFERÊNCIA VISUAL DO TIPO “Monge”');
+    expect(result).toContain('A referência de estilo define a aparência e categoria do personagem');
+    expect(result).not.toContain('Attached photos are identity/product references only');
+  });
+
+  it('não altera prompt quando a geração não tem imagens anexadas', () => {
+    expect(buildRustImagePrompt('Crie uma cena', [])).toBe('Crie uma cena');
+  });
+});
 
 describe('fila compartilhada do motor Hust', () => {
   it('executa imagem e vídeo em ordem, sem sobrepor operações na sessão Flow', async () => {

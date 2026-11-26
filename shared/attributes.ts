@@ -351,11 +351,12 @@ export const DEFAULT_SELECTION: AttributeSelection = {
   age: ['jovem'],
 };
 
-/** Tipos cuja miniatura precisa orientar visualmente a geração (não só o texto). */
-export const CHARACTER_TYPES_WITH_STYLE_REFERENCE = new Set([
-  'extremo', 'inseto', 'sapo', 'gato', 'cachorro', 'roedor', 'passaro',
-  'ciborgue', 'bebe-animado', 'orgao-animado', 'mao-desenhando', 'cartoon',
-]);
+/** Todo tipo com miniatura envia essa imagem como referência visual da geração. */
+export const CHARACTER_TYPES_WITH_STYLE_REFERENCE = new Set(
+  (ATTRIBUTE_GROUP_MAP.characterType?.options ?? [])
+    .filter((option) => Boolean(option.image))
+    .map((option) => option.id),
+);
 
 export function findOption(groupId: AttributeGroupId, optionId: string): AttributeOption | undefined {
   return ATTRIBUTE_GROUP_MAP[groupId]?.options.find((opt) => opt.id === optionId);

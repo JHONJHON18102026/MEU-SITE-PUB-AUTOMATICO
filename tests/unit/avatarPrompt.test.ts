@@ -106,6 +106,17 @@ describe('montagem do prompt', () => {
     expect(CHARACTER_TYPES_WITH_STYLE_REFERENCE.has('bebe-animado')).toBe(true);
   });
 
+  it('anexa a miniatura para todos os tipos de personagem que têm imagem', () => {
+    const allTypesWithImages = ATTRIBUTE_GROUP_MAP.characterType.options
+      .filter((option) => option.image)
+      .map((option) => option.id)
+      .sort();
+    expect(allTypesWithImages).toHaveLength(24);
+    expect([...CHARACTER_TYPES_WITH_STYLE_REFERENCE].sort()).toEqual(allTypesWithImages);
+    expect(CHARACTER_TYPES_WITH_STYLE_REFERENCE.has('monge')).toBe(true);
+    expect(CHARACTER_TYPES_WITH_STYLE_REFERENCE.has('ousado')).toBe(true);
+  });
+
   it('faz Bebê animado prevalecer sobre anatomia adulta salva no prompt personalizado', () => {
     const p = buildAvatarPrompt({
       ...base,
