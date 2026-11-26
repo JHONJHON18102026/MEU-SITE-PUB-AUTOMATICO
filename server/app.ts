@@ -7,7 +7,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { ApiError } from './errors';
 import { getUserIdFromToken } from './supabaseAdmin';
 import { missingKeys } from './env';
-import { enhancePrompt, resolveModels } from './gemini';
+import { enhanceCharacterPrompt, enhancePrompt, resolveModels } from './gemini';
 import { rustEnabled } from './rustMotor';
 import { checkRustMotor } from './rustMotorSupervisor';
 import { avatarRoutes } from './routes/avatars';
@@ -16,7 +16,9 @@ import { projectRoutes } from './routes/projects';
 import { studioRoutes } from './routes/studio';
 import { viralRoutes } from './routes/viral';
 import { directorRoutes } from './routes/director';
-import { enhancePromptSchema, type ApiErrorBody } from '../shared/contracts';
+import { enhanceCharacterPromptSchema, enhancePromptSchema, type ApiErrorBody } from '../shared/contracts';
+import { describeAttributes } from '../shared/avatarPrompt';
+import type { AttributeSelection } from '../shared/attributes';
 
 export type AppEnv = { Variables: { userId: string } };
 
@@ -84,5 +86,17 @@ app.post('/prompt/enhance', async (c) => {
   const parsed = enhancePromptSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw new ApiError('INVALID_INPUT', 'Escreva a ideia primeiro (mínimo 3 letras).');
   const prompt = await enhancePrompt(parsed.data.prompt);
+  return c.json({ prompt });
+});
+
+app.post('/prompt/enhance-character', async (c) => {
+  const parsed = enhanceCharacterPromptSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw new ApiError('INVALID_INPUT', 'Descreva o personagem primeiro (mínimo 3 letras).');
+  const prompt = await enhanceCharacterPrompt({
+    description: parsed.data.description,
+    attributes: describeAttributes(parsed.data.attributes as AttributeSelection),
+    characterWorld: parsed.data.characterWorld,
+    hasBasePhoto: parsed.data.hasBasePhoto,
+  });
   return c.json({ prompt });
 });

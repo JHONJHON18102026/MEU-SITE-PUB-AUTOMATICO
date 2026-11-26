@@ -18,3 +18,5 @@ caddy run --config C:\Caddy\Caddyfile
 ```
 
 O Caddy solicita e renova automaticamente o certificado de `api.futurodigitalai.com.br` e encaminha para a API local em `127.0.0.1:8787`.
+
+Para acessar a VPS e diagnosticar os serviços, siga [`RUNBOOK-VPS-API.md`](RUNBOOK-VPS-API.md). Ele é o ponto de partida atual para API, Rust, Flow/CDP, contas oficiais, recuperação de sessão, limites de cota e cadastro de novas contas. Consulte primeiro **Guia rápido: Flow/CDP e contas oficiais**; não finalize processos em lote.

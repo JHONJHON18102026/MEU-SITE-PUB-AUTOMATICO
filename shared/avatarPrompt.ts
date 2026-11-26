@@ -22,10 +22,14 @@ export interface PromptInput {
   referenceCount: number;
 }
 
-const QUALITY_SUFFIX =
-  'Ultra-realistic UGC smartphone photo look, natural soft lighting, sharp focus on the face, ' +
-  'true-to-life skin texture, authentic social media creator aesthetic. ' +
-  'No text, no captions, no logos, no watermarks in the image.';
+const REALISTIC_QUALITY =
+  'Photorealistic creator portrait, natural soft lighting, sharp focus, believable materials and skin texture, authentic social media creator aesthetic.';
+const STYLIZED_QUALITY =
+  'Polished, cohesive rendering faithful to the requested character type and art style; keep the design intentional and visually readable.';
+const IMAGE_CONSTRAINTS = 'No text, no captions, no logos, no watermarks in the image.';
+const STYLIZED_CHARACTER_TYPES = new Set([
+  'extremo', 'inseto', 'sapo', 'gato', 'cachorro', 'roedor', 'passaro', 'bebe-animado', 'orgao-animado', 'mao-desenhando', 'cartoon',
+]);
 
 /** Converte a seleção de botões em frases descritivas, na ordem certa. */
 export function describeAttributes(selection: AttributeSelection): string[] {
@@ -44,18 +48,31 @@ export function describeAttributes(selection: AttributeSelection): string[] {
 export function buildAvatarPrompt(input: PromptInput): string {
   const framing = FRAMINGS.find((f) => f.id === input.framing)?.prompt ?? FRAMINGS[1].prompt;
   const lines: string[] = [];
+  const characterType = input.attributes.characterType?.[0];
+  const explicitStylizedDirection = /cartoon|desenh[oa]|anima(d[oa]|ção)|anime|ilustraç|caricatura|fant[aá]stic|alien|extraterrestr|3d/i.test(input.extraDetails);
+  const quality = (characterType && STYLIZED_CHARACTER_TYPES.has(characterType)) || explicitStylizedDirection
+    ? STYLIZED_QUALITY
+    : REALISTIC_QUALITY;
+
+  if (input.extraDetails.trim()) {
+    lines.push(
+      'PERSONALIZED CHARACTER CREATION SKILL: Treat the user’s character description as a visual design brief. ' +
+        'Translate it into a coherent, specific image design. Combine it with selected attribute controls; those controls remain constraints unless the user explicitly overrides one in the description. ' +
+        'Use the strongest requested distinctive trait as the character’s signature and make it intentional, while preserving all other requested details without adding unrelated exaggerations. ' +
+        'Keep anatomy, face, colors, proportions, clothing and materials internally consistent. Do not invent biography, powers, benefits or visual traits the user did not request.',
+    );
+  }
 
   if (input.referenceCount > 0 || input.hasBasePhoto || input.hasProductImage) {
     lines.push(
-      'SCENE PRIORITY: Follow the user-written scene for requested actions, pose, clothing, location, framing, lighting, and camera. ' +
-        'Use attached images only for the identity or product they represent. Do not copy their pose, clothing, or background when the written scene changes them.',
+      'USER DIRECTION PRIORITY: Follow the written scene and personalized character design for requested actions, pose, clothing, location, lighting, and camera. ' +
+        'Use selected attributes as constraints unless the user explicitly overrides them. Use attached images only for the identity, product, or details they represent; do not copy their pose, clothing, or background when the user changes them.',
     );
   }
 
   if (input.hasBasePhoto) {
     lines.push(
-      'Use the person in the FIRST attached image as the identity reference: keep the same face, ' +
-        'facial structure and recognizable features, while following the written scene for everything else.',
+      'Use the person in the FIRST attached image as the identity reference. By default preserve their recognizable face and facial structure; apply any explicit transformation requested in the personalized character description, and keep unmentioned identity traits recognizable.',
     );
   }
 
@@ -67,7 +84,7 @@ export function buildAvatarPrompt(input: PromptInput): string {
     if (attrs.length) lines.push(`Character: ${attrs.join('; ')}.`);
   }
 
-  if (input.extraDetails.trim()) lines.push(`Extra details: ${input.extraDetails.trim()}`);
+  if (input.extraDetails.trim()) lines.push(`Personalized character design: ${input.extraDetails.trim()}`);
   if (input.characterWorld.trim()) lines.push(`Character world and context: ${input.characterWorld.trim()}`);
 
   if (input.hasProductImage) {
@@ -84,7 +101,8 @@ export function buildAvatarPrompt(input: PromptInput): string {
     );
   }
 
-  lines.push(`Framing: ${framing}.`);  lines.push(QUALITY_SUFFIX);
+  lines.push(`Framing: ${framing}.`);
+  lines.push(quality, IMAGE_CONSTRAINTS);
   return lines.join('\n');
 }
 

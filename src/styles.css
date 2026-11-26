@@ -220,6 +220,13 @@ button, a {
 .app-shell .premium-workspace .object-cover { object-position: center top; }
 .app-shell .modal-panel { box-shadow: 0 28px 90px rgba(0,0,0,.36), 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
 
+/* The character builder stays on the product's neutral indigo surfaces. */
+.character-builder-modal > header,
+.character-builder-modal > footer {
+  background-color: var(--surface) !important;
+  background-image: none !important;
+}
+
 [data-theme='light'] .app-shell .bg-surface,
 [data-theme='light'] .app-shell .premium-tabbar,
 [data-theme='light'] .app-shell .premium-empty {

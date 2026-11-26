@@ -80,6 +80,8 @@ export const api = {
     request<{ avatars: import('@shared/contracts').AvatarDTO[] }>(`/avatars/gallery?scope=${scope}`),
   enhancePrompt: (prompt: string) =>
     request<{ prompt: string }>('/prompt/enhance', { method: 'POST', body: JSON.stringify({ prompt }) }),
+  enhanceCharacterPrompt: (payload: import('@shared/contracts').EnhanceCharacterPromptRequest) =>
+    request<{ prompt: string }>('/prompt/enhance-character', { method: 'POST', body: JSON.stringify(payload) }),
   createDirectorPlan: (payload: DirectorPlanRequest) =>
     request<{ plan: DirectorPlan }>('/director/plan', { method: 'POST', body: JSON.stringify(payload) }),
   deleteAvatar: (id: string) => request<{ ok: true }>(`/avatars/${id}`, { method: 'DELETE' }),

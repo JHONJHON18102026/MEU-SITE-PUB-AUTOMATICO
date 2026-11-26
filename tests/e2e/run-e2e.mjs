@@ -621,7 +621,7 @@ async function run() {
     }
     await page.getByRole('button', { name: /^Tipo de personagem/ }).waitFor();
     const groupButtons = await page.locator('aside[aria-label="Criar influencer"] section > button[aria-expanded]').count();
-    check(groupButtons === 20, `19 grupos de características + Detalhes extras no painel (${groupButtons})`);
+    check(groupButtons === 19, `19 grupos de características disponíveis no painel (${groupButtons})`);
     const thumbsOk = await page
       .waitForFunction(() => {
         const imgs = [...document.querySelectorAll('[role="group"][aria-label="Tipo de personagem"] img')];
@@ -662,10 +662,12 @@ async function run() {
     const after = await page.evaluate(() => localStorage.getItem('fd-avatar-studio'));
     check(before !== after, 'Botão Aleatório sorteia novas características (e salva no navegador)');
 
-    await page.getByRole('button', { name: /Mundo do personagem/ }).click();
-    await page.getByRole('dialog', { name: 'Mundo do personagem' }).getByRole('button', { name: /Avó mineira/ }).click();
+    await page.getByRole('button', { name: /Monte seu Personagem/ }).click();
+    const characterDialog = page.getByRole('dialog', { name: 'Monte seu Personagem' });
+    await characterDialog.getByLabel('Descrição para montar seu personagem').fill('Uma personagem fantástica com cabelo azul volumoso e roupa dourada.');
+    await characterDialog.getByLabel('Descrição do mundo do personagem').fill('Vive em uma cidade futurista iluminada por letreiros.');
     await page.getByRole('button', { name: 'Salvar' }).click();
-    check(await page.getByText(/Avó mineira que ensina/).first().isVisible(), 'Mundo do personagem salva e aparece no painel');
+    check(await page.getByText(/Uma personagem fantástica/).first().isVisible(), 'Prompt personalizado salva e aparece no painel');
 
     await page.getByTestId('base-photo-input').setInputFiles({ name: 'rosto.png', mimeType: 'image/png', buffer: rawImg });
     await page.getByText('Foto base enviada').waitFor();

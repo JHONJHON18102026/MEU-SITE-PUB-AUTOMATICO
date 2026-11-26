@@ -170,7 +170,7 @@ export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: {
                   <UsedValue label="Foto base" value={basePhoto ? basePhoto.name ?? 'Foto base enviada' : generationParams.hasBasePhoto ? 'Foto base usada' : generationParams.baseAvatarId ? 'Avatar existente usado como base' : 'Nenhuma'} />
                   <UsedValue label="Produto" value={productImage ? productImage.name ?? 'Imagem de produto enviada' : generationParams.hasProduct ? 'Imagem de produto usada' : 'Nenhum'} />
                   <UsedValue label="Referências" value={references.length ? references.map((item, index) => String(item.name ?? `Referência ${index + 1}`)).join(', ') : generationParams.referenceCount ? `${generationParams.referenceCount} referência(s) usada(s)` : 'Nenhuma'} />
-                  <UsedValue label="Detalhes extras" value={generationParams.extraDetails} />
+                  <UsedValue label="Monte seu Personagem" value={generationParams.extraDetails} />
                   <UsedValue label="Mundo do personagem" value={generationParams.characterWorld} />
                   <UsedValue label="Compartilhamento" value={generationParams.makePublic === true ? 'Pública na comunidade' : generationParams.makePublic === false ? 'Privada' : undefined} />
                 </dl>

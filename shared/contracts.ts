@@ -71,6 +71,14 @@ export const enhancePromptSchema = z.object({
   prompt: z.string().min(3).max(2000),
 });
 
+export const enhanceCharacterPromptSchema = z.object({
+  description: z.string().min(3).max(800),
+  attributes: z.record(z.string(), z.array(z.string()).max(30)).default({}),
+  characterWorld: z.string().max(1200).default(''),
+  hasBasePhoto: z.boolean().default(false),
+});
+export type EnhanceCharacterPromptRequest = z.input<typeof enhanceCharacterPromptSchema>;
+
 export function avatarCost(count: number): number {
   return PRICING.avatarImage * Math.max(1, Math.min(MAX_IMAGES_PER_REQUEST, Math.floor(count)));
 }

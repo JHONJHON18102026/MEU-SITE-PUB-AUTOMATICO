@@ -16,7 +16,7 @@ function seeded(seed = 42) {
 }
 
 describe('catálogo de características', () => {
-  it('tem os 19 grupos de opções mapeados (+ Detalhes extras no painel)', () => {
+  it('tem os 19 grupos de opções mapeados', () => {
     expect(ATTRIBUTE_GROUPS).toHaveLength(19);
   });
 

@@ -173,13 +173,13 @@ const ENHANCE_INSTRUCTIONS =
   'Reescreva a ideia como uma cena de anúncio UGC visual e concisa, em português do Brasil. Preserve a pessoa, o produto e as instruções centrais fornecidas pelo usuário. ' +
   'Inclua ação, ambiente e luz sem inventar marcas. Responda em até 2 frases, sem introdução nem aspas.';
 
-function requireEnhancedPrompt(value: string): string {
+function requireEnhancedPrompt(value: string, maxLength = 2000, errorMessage = 'A IA devolveu um link em vez de um prompt. O texto original foi mantido; tente novamente.'): string {
   const prompt = value.trim();
   if (
-    prompt.length < 12 ||
+    prompt.length < 12 || prompt.length > maxLength ||
     /https?:\/\/|googleusercontent\.com\/image_generation_content|\bdata:image\//i.test(prompt)
   ) {
-    throw new ApiError('GENERATION_FAILED', 'A IA devolveu um link em vez de um prompt. O texto original foi mantido; tente novamente.');
+    throw new ApiError('GENERATION_FAILED', errorMessage);
   }
   return prompt;
 }
@@ -213,6 +213,63 @@ export async function enhancePrompt(idea: string): Promise<string> {
       config: { systemInstruction: ENHANCE_INSTRUCTIONS, temperature: 0.2, maxOutputTokens: 120 },
     });
     return requireEnhancedPrompt(response.text ?? '');
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw mapGeminiError(err);
+  }
+}
+
+const CHARACTER_PROMPT_INSTRUCTIONS =
+  'Você é a skill de criação de personagens visuais do FUTURO DIGITAL Studio. Transforme o briefing do usuário em um prompt de imagem claro, específico e pronto para um modelo de geração de imagens. ' +
+  'Responda somente com o prompt final em português do Brasil, sem título, aspas, markdown, explicações, links ou instruções de vídeo. ' +
+  'Combine a descrição livre com os atributos escolhidos: a descrição explícita pode substituir um atributo quando houver conflito; use os atributos para preencher detalhes não definidos. ' +
+  'Se houver foto base, preserve por padrão a identidade reconhecível da pessoa e aplique mudanças explícitas solicitadas, mantendo os traços não mencionados. ' +
+  'Escolha como assinatura visual o traço marcante mais forte que o usuário pediu; não invente deformações, acessórios, poderes, biografia ou características. ' +
+  'Mantenha rosto, anatomia, proporções, cores, roupa, materiais e estilo coerentes. O mundo do personagem pode orientar detalhes visuais discretos de contexto, sem transformar o prompt em uma cena ou alterar o design pedido. ' +
+  'Não repita controles técnicos de enquadramento, proporção ou qualidade, pois o aplicativo já os aplica. Entregue um prompt editável, direto e com no máximo 700 caracteres.';
+
+export async function enhanceCharacterPrompt(input: {
+  description: string;
+  attributes: string[];
+  characterWorld: string;
+  hasBasePhoto: boolean;
+}): Promise<string> {
+  const context = [
+    `DESCRIÇÃO DO USUÁRIO: ${input.description.trim()}`,
+    input.attributes.length ? `ATRIBUTOS SELECIONADOS: ${input.attributes.join('; ')}` : '',
+    input.characterWorld.trim() ? `MUNDO DO PERSONAGEM (contexto secundário): ${input.characterWorld.trim()}` : '',
+    `FOTO BASE ENVIADA: ${input.hasBasePhoto ? 'sim; preservar identidade por padrão, salvo transformação explícita' : 'não'}`,
+  ].filter(Boolean).join('\n');
+
+  if (rustEnabled()) {
+    try {
+      const out = await rustChatCompletion({
+        prompt: context,
+        system: CHARACTER_PROMPT_INSTRUCTIONS,
+        model: 'gemini-4-argon',
+        temperature: 0.25,
+        maxTokens: 300,
+      });
+      return requireEnhancedPrompt(out, 800, 'A IA não devolveu um prompt de personagem válido. O texto original foi mantido; tente novamente.');
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      if (/fetch failed|econnrefused|enotfound|aborted/i.test(message)) {
+        throw new ApiError('GENERATION_FAILED', 'O motor oficial não está acessível. Abra o serviço Hust/Motor e tente novamente.');
+      }
+      throw new ApiError('GENERATION_FAILED', `Não consegui montar o prompt do personagem: ${message.slice(0, 180)}`);
+    }
+  }
+
+  const ai = getClient();
+  const { text: model } = await resolveModels();
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: context }] }],
+      config: { systemInstruction: CHARACTER_PROMPT_INSTRUCTIONS, temperature: 0.25, maxOutputTokens: 300 },
+    });
+    return requireEnhancedPrompt(response.text ?? '', 800, 'A IA não devolveu um prompt de personagem válido. O texto original foi mantido; tente novamente.');
   } catch (err) {
     if (err instanceof ApiError) throw err;
     throw mapGeminiError(err);
