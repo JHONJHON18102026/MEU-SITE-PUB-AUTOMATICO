@@ -30,7 +30,7 @@ import {
   type GenerationDTO,
   type ImageInput,
 } from '../../shared/contracts';
-import type { AttributeSelection } from '../../shared/attributes';
+import { findOption, type AttributeSelection } from '../../shared/attributes';
 import type { AppEnv } from '../app';
 import { avatarTemplateInputSchema, type AvatarTemplateDTO } from '../../shared/avatarTemplateContracts';
 
@@ -178,6 +178,7 @@ avatarRoutes.post('/generate', async (c) => {
     framing: req.framing,
     hasBasePhoto: Boolean(basePhoto),
     hasProductImage: Boolean(req.productImage),
+    hasCharacterStyleReference: Boolean(req.characterStyleReference),
     referenceCount: req.referenceImages.length,
   });
 
@@ -193,10 +194,12 @@ avatarRoutes.post('/generate', async (c) => {
     count: req.count,
     hasBasePhoto: Boolean(basePhoto),
     hasProduct: Boolean(req.productImage),
+    hasCharacterStyleReference: Boolean(req.characterStyleReference),
     referenceCount: req.referenceImages.length,
     basePhoto: req.basePhoto ? { name: req.basePhoto.name ?? 'Foto base', mimeType: req.basePhoto.mimeType } : null,
     baseAvatarId: req.baseAvatarId,
     productImage: req.productImage ? { name: req.productImage.name ?? 'Produto', mimeType: req.productImage.mimeType } : null,
+    characterStyleReference: req.characterStyleReference ? { name: req.characterStyleReference.name ?? 'Referência de estilo do personagem', mimeType: req.characterStyleReference.mimeType } : null,
     referenceImages: req.referenceImages.map((image, index) => ({ name: image.name ?? `Referência ${index + 1}`, mimeType: image.mimeType })),
     makePublic: req.makePublic,
   };
@@ -225,19 +228,25 @@ avatarRoutes.post('/generate', async (c) => {
   const imageDescriptions: string[] = [];
   if (basePhoto) {
     images.push(basePhoto);
-    imageDescriptions.push('PRIMARY IDENTITY PHOTO: use this exact person as the subject and preserve their recognizable identity.');
+    imageDescriptions.push('FOTO BASE DE IDENTIDADE: preserve os traços reconhecíveis desta pessoa, mas aplique no mesmo sujeito todas as opções explícitas do usuário. Se o tipo selecionado pedir bebê animado, criatura ou caricatura, essa transformação tem prioridade sobre a idade, anatomia humana adulta e estilo da foto. Não acrescente a transformação como segundo personagem.');
   }
   req.referenceImages.forEach((image, index) => {
     images.push(image);
     imageDescriptions.push(
       !basePhoto && index === 0
-        ? 'PRIMARY USER REFERENCE: use the main subject in this exact image as the subject of the result. Preserve the same person and recognizable identity (face, skin tone, hair, age, and body), or preserve the same defining object if no person is shown. Do not replace the subject with someone unrelated.'
-        : `SECONDARY VISUAL REFERENCE ${index + 1}: use as a constraint for requested visual details while keeping the primary subject identity unchanged.`,
+        ? 'REFERÊNCIA PRINCIPAL DO USUÁRIO: use o sujeito principal desta imagem como base do resultado e preserve sua identidade reconhecível. Aplique neste mesmo sujeito todas as opções selecionadas; se o tipo escolhido pedir transformação (por exemplo, bebê animado ou criatura), essa transformação tem prioridade sobre idade, anatomia humana adulta e estilo da foto. Não substitua por alguém sem relação nem crie um segundo sujeito.'
+        : `REFERÊNCIA VISUAL SECUNDÁRIA ${index + 1}: use para os detalhes visuais pedidos sem trocar a identidade principal e sem acrescentar outro personagem.`,
     );
   });
+  if (req.characterStyleReference) {
+    const typeId = req.attributes.characterType?.[0];
+    const typeLabel = typeId ? findOption('characterType', typeId)?.label : undefined;
+    images.push(req.characterStyleReference);
+    imageDescriptions.push(`REFERÊNCIA VISUAL DO TIPO DE PERSONAGEM${typeLabel ? ` “${typeLabel}”` : ''}: use esta miniatura para reproduzir no mesmo sujeito a categoria, o estilo, as proporções e os traços visuais característicos. Não copie a identidade exata, a pose ou o fundo da miniatura. Não a interprete como um segundo personagem; preserve somente a identidade da foto base quando ela não entrar em conflito com o tipo selecionado.`);
+  }
   if (req.productImage) {
     images.push(req.productImage);
-    imageDescriptions.push('PRODUCT PHOTO: reproduce this product faithfully; do not use it as the person/identity reference.');
+    imageDescriptions.push('FOTO DO PRODUTO: reproduza fielmente a embalagem e as características visíveis; não a use como referência de identidade do personagem.');
   }
 
   const results = await Promise.allSettled(

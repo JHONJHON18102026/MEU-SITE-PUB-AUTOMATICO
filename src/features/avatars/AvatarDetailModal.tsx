@@ -72,6 +72,8 @@ export function AvatarDetailModal({ avatar, onClose, items = [], onNavigate }: {
   const references = Array.isArray(generationParams?.referenceImages)
     ? generationParams.referenceImages.map(generationAsset).filter((x): x is Record<string, unknown> => Boolean(x))
     : [];
+  const characterStyleReference = generationAsset(generationParams?.characterStyleReference);
+  if (characterStyleReference) references.push(characterStyleReference);
 
   async function togglePublic() {
     if (!supabase || !avatar) return;

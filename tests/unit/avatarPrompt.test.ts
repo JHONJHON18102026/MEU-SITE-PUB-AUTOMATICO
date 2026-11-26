@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ATTRIBUTE_GROUPS, ATTRIBUTE_GROUP_MAP, findOption, randomSelection, type AttributeGroupId } from '../../shared/attributes';
+import { ATTRIBUTE_GROUPS, ATTRIBUTE_GROUP_MAP, CHARACTER_TYPES_WITH_STYLE_REFERENCE, findOption, randomSelection, type AttributeGroupId } from '../../shared/attributes';
 import { buildAvatarPrompt, describeAttributes, suggestAvatarName } from '../../shared/avatarPrompt';
 import { avatarCost, generateAvatarSchema, MAX_IMAGES_PER_REQUEST, PRICING } from '../../shared/contracts';
 import { SHOWCASE_AVATARS } from '../../src/features/avatars/showcaseExamples';
@@ -73,26 +73,37 @@ describe('montagem do prompt', () => {
 
   it('inclui enquadramento e proíbe texto/marca d’água gerados pela IA', () => {
     const p = buildAvatarPrompt(base);
-    expect(p).toContain('medium shot');
-    expect(p).toContain('No text');
-    expect(p).toContain('no watermarks');
+    expect(p).toContain('Plano médio');
+    expect(p).toContain('Não incluir texto');
+    expect(p).toContain('nem marcas-d’água');
   });
 
   it('com foto base, manda manter o rosto da primeira imagem', () => {
-    expect(buildAvatarPrompt({ ...base, hasBasePhoto: true })).toMatch(/FIRST attached image/);
+    expect(buildAvatarPrompt({ ...base, hasBasePhoto: true })).toContain('PRIMEIRA imagem anexada');
   });
 
   it('com produto e referências, explica o papel de cada imagem', () => {
     const p = buildAvatarPrompt({ ...base, hasProductImage: true, referenceCount: 2 });
-    expect(p).toContain('product');
-    expect(p).toContain('Treat the FIRST attached reference image as the primary source');
-    expect(p).toContain('Use the remaining 1 reference image(s) as secondary visual constraints');
-    expect(p).toContain('Do not substitute an unrelated person/object');
+    expect(p).toContain('produto');
+    expect(p).toContain('PRIMEIRA imagem de referência anexada como fonte principal');
+    expect(p).toContain('Use as 1 imagem(ns) restante(s) como restrições visuais secundárias');
+    expect(p).toContain('Não substitua por pessoa ou objeto sem relação');
   });
 
   it('modo prompt usa a cena escrita pelo usuário', () => {
     const p = buildAvatarPrompt({ ...base, mode: 'prompt', prompt: 'tomando suplemento na cozinha' });
-    expect(p).toContain('Scene: tomando suplemento na cozinha');
+    expect(p).toContain('Cena: tomando suplemento na cozinha');
+  });
+
+  it('inclui Bebê animado no prompt e direciona a miniatura como referência do mesmo personagem', () => {
+    const selection = { characterType: ['bebe-animado'], gender: ['masculino'], age: ['jovem'] };
+    const p = buildAvatarPrompt({ ...base, attributes: selection, hasBasePhoto: true, hasCharacterStyleReference: true });
+    expect(p).toContain('o tipo selecionado é “Bebê animado”');
+    expect(p).toContain('Gênero: Masculino');
+    expect(p).toContain('Referência visual de estilo: a miniatura da opção “Bebê animado”');
+    expect(p).toContain('Não a use como outro sujeito');
+    expect(p).not.toContain('Idade: Jovem (18–29)');
+    expect(CHARACTER_TYPES_WITH_STYLE_REFERENCE.has('bebe-animado')).toBe(true);
   });
 
   it('não deixa os atributos padrão transformarem uma descrição fantástica em influencer genérico', () => {
@@ -103,8 +114,8 @@ describe('montagem do prompt', () => {
     });
     expect(p).not.toContain('photorealistic human content creator');
     expect(p).not.toContain('woman; in their twenties');
-    expect(p).toContain('high-detail realistic character render with caricature exaggeration');
-    expect(p).toContain('Framing: medium shot');
+    expect(p).toContain('Renderização detalhada de personagem com exagero de caricatura');
+    expect(p).toContain('Enquadramento: Plano médio');
   });
 
   it('nomeia o avatar pelo tipo de personagem', () => {

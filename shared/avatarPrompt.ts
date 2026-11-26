@@ -19,6 +19,7 @@ export interface PromptInput {
   framing: FramingId;
   hasBasePhoto: boolean;
   hasProductImage: boolean;
+  hasCharacterStyleReference?: boolean;
   referenceCount: number;
 }
 
@@ -54,6 +55,10 @@ function descriptionOverridesDefault(group: AttributeGroupId, optionId: string, 
 
 function withoutConflictingDefaultAttributes(selection: AttributeSelection, description: string): AttributeSelection {
   const result: AttributeSelection = { ...selection };
+  // “Bebê animado” não pode herdar a faixa padrão de adulto jovem.
+  if (result.characterType?.includes('bebe-animado') && result.age?.includes('jovem')) {
+    delete result.age;
+  }
   for (const [groupId, defaultIds] of Object.entries(DEFAULT_SELECTION)) {
     const id = groupId as AttributeGroupId;
     const selected = result[id];
@@ -112,7 +117,7 @@ function describeSingleCharacterProfile(selection: AttributeSelection): string |
 export function buildAvatarPrompt(input: PromptInput): string {
   const framing = FRAMINGS.find((f) => f.id === input.framing)?.prompt ?? FRAMINGS[1].prompt;
   const lines: string[] = [];
-  const selectedAttributes = input.extraDetails.trim()
+  const selectedAttributes = input.extraDetails.trim() || input.attributes.characterType?.includes('bebe-animado')
     ? withoutConflictingDefaultAttributes(input.attributes, input.extraDetails)
     : input.attributes;
   const characterType = selectedAttributes.characterType?.[0];
@@ -143,15 +148,21 @@ export function buildAvatarPrompt(input: PromptInput): string {
 
   if (input.hasBasePhoto) {
     lines.push(
-      'Use a pessoa da PRIMEIRA imagem anexada como referência de identidade. Preserve por padrão o rosto reconhecível e sua estrutura; aplique as transformações explicitamente pedidas na descrição personalizada e mantenha reconhecíveis as características de identidade não mencionadas.',
+      'Use a pessoa da PRIMEIRA imagem anexada como referência de identidade. Preserve por padrão os traços reconhecíveis, mas aplique no mesmo sujeito as transformações explicitamente selecionadas nos atributos ou pedidas na descrição personalizada. Mantenha reconhecíveis as características de identidade não conflitantes.',
     );
+  }
+
+  if (input.hasCharacterStyleReference) {
+    const selectedType = selectedAttributes.characterType?.[0];
+    const typeLabel = selectedType ? findOption('characterType', selectedType)?.label : 'selecionado';
+    lines.push(`Referência visual de estilo: a miniatura da opção “${typeLabel}” será enviada ao motor separadamente como guia para a categoria, as proporções e os traços visuais do mesmo personagem. Não a use como outro sujeito nem copie sua pose ou cenário.`);
   }
 
   const profile = describeSingleCharacterProfile(selectedAttributes);
   if (profile) {
     // As opções se referem a um único personagem, nunca a sujeitos separados.
     lines.push(
-      `PERFIL DE PERSONAGEM ÚNICO: ${profile} ` +
+      `PERFIL: ${profile} ` +
         'A cena escrita só pode acrescentar pessoas quando pedir explicitamente outros personagens.',
     );
   }

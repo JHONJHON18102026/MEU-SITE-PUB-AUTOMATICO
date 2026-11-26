@@ -12,6 +12,7 @@ import { useSession } from '@/store/session';
 import { useUi } from '@/store/ui';
 import { clearDirectorCanvasHandoff, MAX_PENDING_IMAGE_REQUESTS, useAvatarStudio } from './avatarStore';
 import { useGalleryVersion, useGenerations } from './useAvatarData';
+import { CHARACTER_TYPES_WITH_STYLE_REFERENCE, findOption } from '@shared/attributes';
 
 const strip = (img: { mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; data: string; name?: string } | null) =>
   img ? { mimeType: img.mimeType, data: img.data, name: img.name } : null;
@@ -90,6 +91,17 @@ export function useGenerateAvatar() {
         baseAvatarId = null;
       }
 
+      // A miniatura da opção escolhida não era enviada ao motor: ela só
+      // aparecia no seletor. Envie-a como referência de estilo, separada da
+      // foto de identidade enviada pela pessoa.
+      const characterTypeId = useInfluencerPreset ? st.selection.characterType?.[0] : undefined;
+      const characterTypeOption = characterTypeId ? findOption('characterType', characterTypeId) : undefined;
+      let preparedCharacterStyleReference: GenerateAvatarRequest['characterStyleReference'] = null;
+      if (characterTypeId && CHARACTER_TYPES_WITH_STYLE_REFERENCE.has(characterTypeId) && characterTypeOption?.image) {
+        const prepared = await prepareImageFromUrl(characterTypeOption.image, `referencia-estilo-${characterTypeId}.jpg`);
+        preparedCharacterStyleReference = { mimeType: prepared.mimeType, data: prepared.data, name: prepared.name };
+      }
+
       const payload: GenerateAvatarRequest = {
         mode,
         attributes: (useInfluencerPreset ? st.selection : {}) as Record<string, string[]>,
@@ -98,6 +110,7 @@ export function useGenerateAvatar() {
         prompt: st.prompt,
         basePhoto,
         baseAvatarId,
+        characterStyleReference: preparedCharacterStyleReference,
         productImage: strip(st.productImage),
         referenceImages: st.referenceImages.map((r) => ({ mimeType: r.mimeType, data: r.data, name: r.name })),
         engine: st.engine,

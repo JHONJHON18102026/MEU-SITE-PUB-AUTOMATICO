@@ -56,6 +56,8 @@ export const generateAvatarSchema = z.object({
   basePhoto: imageInput.nullable().default(null),
   /** URL de um avatar já gerado, usado como rosto base. */
   baseAvatarId: z.string().uuid().nullable().default(null),
+  /** Miniatura da opção de personagem selecionada, usada como referência visual de estilo. */
+  characterStyleReference: imageInput.nullable().default(null),
   productImage: imageInput.nullable().default(null),
   referenceImages: z.array(imageInput).max(MAX_REFERENCE_IMAGES).default([]),
   engine: z.enum(['nano-banana-2', 'nano-banana-pro']).default('nano-banana-2'),
