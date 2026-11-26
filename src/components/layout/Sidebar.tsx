@@ -80,17 +80,19 @@ function SidebarInner({
             title={collapsed ? item.label : undefined}
             className={({ isActive }) =>
               clsx(
-                'group relative flex items-center gap-2.5 rounded-xl border text-[12px] font-medium transition-all duration-200',
-                collapsed ? 'h-10 justify-center px-0' : 'h-8 px-2.5',
+                'group relative flex items-center gap-2.5 rounded-xl border text-[12px] font-medium transition-[transform,border-color,background-color,color,box-shadow] duration-150 ease-out',
+                collapsed ? 'h-10 justify-center px-0' : 'h-10 px-2.5',
                 isActive
-                  ? 'border-accent/25 bg-accent-soft text-white font-semibold shadow-[0_8px_24px_rgba(138,97,255,0.16)] before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent-light'
-                  : 'border-transparent text-fg-muted hover:translate-x-0.5 hover:bg-white/[0.04] hover:text-fg',
+                  ? 'border-accent/45 bg-[linear-gradient(105deg,rgba(138,97,255,.24),rgba(138,97,255,.07)_70%,transparent)] text-white font-bold shadow-[0_8px_24px_rgba(77,48,153,0.2),inset_0_1px_0_rgba(255,255,255,.06)] before:absolute before:left-0 before:top-1/2 before:h-6 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-accent-light before:shadow-[0_0_12px_rgba(170,139,255,.8)]'
+                  : 'border-transparent text-fg-muted hover:translate-x-0.5 hover:border-white/[0.07] hover:bg-white/[0.045] hover:text-fg',
               )
             }
           >
             {({ isActive }) => (
               <>
-                <item.icon className={clsx('shrink-0', collapsed ? 'size-[17px]' : 'size-3.5', isActive && 'opacity-100')} />
+                <span className={clsx('grid shrink-0 place-items-center rounded-lg transition-[background-color,color,box-shadow] duration-150', collapsed ? 'size-8' : 'size-7', isActive ? 'bg-accent/20 text-accent-light shadow-[inset_0_1px_0_rgba(255,255,255,.08)]' : 'text-fg-subtle group-hover:bg-white/[.06] group-hover:text-fg')}>
+                  <item.icon className={clsx(collapsed ? 'size-[17px]' : 'size-3.5')} />
+                </span>
                 {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
               </>
             )}

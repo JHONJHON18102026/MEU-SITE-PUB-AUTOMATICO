@@ -451,6 +451,287 @@ textarea:disabled {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
   .skeleton, .guide-spotlight, .route-surface, .modal-backdrop, .modal-panel { animation: none; }
 }
+
+/* Sistema visual Studio: hierarquia forte e estados legíveis sem alterar ações ou fluxos. */
+.app-route-dashboard { --route-glow: #8a61ff; }
+.app-route-agente-diretor { --route-glow: #aa78ff; }
+.app-route-avatars { --route-glow: #a67bff; }
+.app-route-viral { --route-glow: #38bdf8; }
+.app-route-ai-ugc { --route-glow: #22c7b8; }
+.app-route-studio { --route-glow: #9471ff; }
+.app-route-projects { --route-glow: #45c6de; }
+.app-route-image-ads { --route-glow: #679dff; }
+
+.app-shell main {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse at 78% -12%, color-mix(in srgb, var(--route-glow, var(--accent)) 20%, transparent), transparent 38rem),
+    radial-gradient(ellipse at 8% 34%, color-mix(in srgb, var(--route-glow, var(--accent)) 7%, transparent), transparent 34rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 18%, transparent), transparent 32rem);
+}
+.app-shell > div > header {
+  border-bottom-color: color-mix(in srgb, var(--route-glow, var(--accent)) 32%, var(--border));
+  background-image: linear-gradient(105deg, color-mix(in srgb, var(--route-glow, var(--accent)) 11%, #111019), #111019 58%, color-mix(in srgb, var(--route-glow, var(--accent)) 8%, #111019));
+}
+.app-shell .workspace-ribbon {
+  min-height: 2.8rem;
+  border-bottom-color: color-mix(in srgb, var(--route-glow, var(--accent)) 20%, var(--border));
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--route-glow, var(--accent)) 13%, transparent), transparent 48%, color-mix(in srgb, var(--route-glow, var(--accent)) 8%, transparent));
+}
+.app-shell .workspace-ribbon > span:first-child > span {
+  background: var(--route-glow, var(--accent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--route-glow, var(--accent)) 85%, transparent);
+}
+
+/* Superfícies do editor e dos painéis: borda, luz superior e relevo perceptíveis. */
+.app-shell .premium-workspace .rounded-xl.bg-surface,
+.app-shell .premium-workspace .rounded-2xl.bg-surface,
+.app-shell .premium-workspace .rounded-3xl.bg-surface,
+.app-shell .premium-workspace [class*="rounded-[24px]"][class*="bg-surface"] {
+  border-color: color-mix(in srgb, var(--route-glow, var(--accent)) 30%, var(--border));
+  background-image: linear-gradient(145deg, color-mix(in srgb, var(--surface) 89%, var(--route-glow, var(--accent)) 11%), var(--surface) 58%);
+  box-shadow: 0 18px 44px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.055);
+}
+.app-shell .premium-workspace .rounded-xl.bg-surface-2,
+.app-shell .premium-workspace .rounded-2xl.bg-surface-2,
+.app-shell .premium-workspace .rounded-3xl.bg-surface-2 {
+  border-color: color-mix(in srgb, var(--route-glow, var(--accent)) 22%, var(--border));
+  background-image: linear-gradient(145deg, color-mix(in srgb, var(--surface-2) 86%, var(--route-glow, var(--accent)) 14%), var(--surface-2));
+}
+.app-shell .premium-workspace h1 {
+  text-shadow: 0 8px 32px color-mix(in srgb, var(--route-glow, var(--accent)) 18%, transparent);
+}
+
+/* Ações principais ficam visualmente distintas; controles pequenos continuam compactos. */
+.app-shell button.bg-brand,
+.app-shell a.bg-brand,
+.app-shell button.bg-accent,
+.app-shell a.bg-accent {
+  border: 1px solid color-mix(in srgb, var(--route-glow, var(--accent-light)) 34%, white 16%);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--route-glow, var(--accent)) 30%, transparent), inset 0 1px 0 rgba(255,255,255,.18);
+  text-shadow: 0 1px 1px rgba(0,0,0,.16);
+}
+.app-shell button.bg-brand:hover:not(:disabled),
+.app-shell a.bg-brand:hover,
+.app-shell button.bg-accent:hover:not(:disabled),
+.app-shell a.bg-accent:hover {
+  filter: brightness(1.1) saturate(1.08);
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--route-glow, var(--accent)) 38%, transparent), inset 0 1px 0 rgba(255,255,255,.24);
+}
+.app-shell button[aria-pressed="true"],
+.app-shell button[aria-selected="true"],
+.app-shell [role="tab"][aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--route-glow, var(--accent)) 72%, white 8%);
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--route-glow, var(--accent)) 23%, var(--surface)), color-mix(in srgb, var(--route-glow, var(--accent)) 12%, var(--surface-2)));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--route-glow, var(--accent)) 22%, transparent), 0 10px 26px color-mix(in srgb, var(--route-glow, var(--accent)) 16%, transparent), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.app-shell .premium-tabbar [aria-selected="true"],
+.app-shell .premium-tabbar a[aria-current="page"] {
+  background-image: linear-gradient(120deg, color-mix(in srgb, var(--route-glow, var(--accent)) 82%, white 18%), color-mix(in srgb, var(--route-glow, var(--accent)) 78%, #5635c7));
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--route-glow, var(--accent)) 34%, transparent), inset 0 1px 0 rgba(255,255,255,.2);
+}
+.app-shell button:not(:disabled),
+.app-shell a {
+  transition-property: transform, border-color, background-color, color, box-shadow, filter;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(.23,1,.32,1);
+}
+.app-shell button:not(:disabled):active,
+.app-shell a:active { transform: translateY(1px) scale(.985); }
+.app-shell :where(button,a,input,select,textarea):focus-visible {
+  outline-color: color-mix(in srgb, var(--route-glow, var(--accent-light)) 75%, white 25%);
+  outline-offset: 3px;
+}
+
+/* Cards de fluxo: deixar evidente que são escolhas clicáveis e não cartões estáticos. */
+.app-route-agente-diretor .route-surface > main > section:nth-of-type(2) button.group.rounded-2xl {
+  position: relative;
+  overflow: hidden;
+  min-height: 9.1rem;
+  padding: 1rem;
+  border-color: rgba(166,123,255,.28);
+  background-image: linear-gradient(145deg, rgba(166,123,255,.12), rgba(25,23,39,.96) 60%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 8px 22px rgba(0,0,0,.12);
+}
+.app-route-agente-diretor .route-surface > main > section:nth-of-type(2) button.group.rounded-2xl::after {
+  content: '↗';
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  color: rgba(190,169,255,.7);
+  font-size: 1rem;
+  opacity: .55;
+  transform: translate(-2px, 2px);
+  transition: opacity 150ms ease-out, transform 150ms cubic-bezier(.23,1,.32,1);
+}
+.app-route-agente-diretor .route-surface > main > section:nth-of-type(2) button.group.rounded-2xl:hover {
+  border-color: rgba(184,153,255,.7);
+  background-image: linear-gradient(145deg, rgba(142,96,255,.24), rgba(28,23,48,.98) 62%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 16px 34px rgba(70,44,138,.24), 0 0 0 1px rgba(166,123,255,.1);
+  transform: translateY(-3px);
+}
+.app-route-agente-diretor .route-surface > main > section:nth-of-type(2) button.group.rounded-2xl:hover::after {
+  opacity: 1;
+  transform: translate(0,0);
+}
+.app-route-agente-diretor .route-surface > main > section:nth-of-type(2) button.group.rounded-2xl > span:first-child {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid rgba(166,123,255,.24);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+}
+.app-route-agente-diretor .route-surface > main > section:nth-of-type(2) button.group.rounded-2xl > span:nth-child(2) {
+  margin-top: .8rem;
+  font-size: .82rem;
+}
+.app-route-agente-diretor .route-surface > main > section:nth-of-type(2) button.group.rounded-2xl:hover > span:nth-child(2) {
+  color: #fff;
+}
+.app-route-agente-diretor .route-surface > main > section:nth-of-type(2) button.group.rounded-2xl:hover > span:first-child {
+  box-shadow: 0 6px 18px rgba(138,97,255,.32);
+}
+
+/* O estado vazio do plano continua sem conteúdo fictício, mas ganha forma e orientação visual. */
+.app-route-agente-diretor .route-surface > main aside > section:has(> p) {
+  position: relative;
+  overflow: hidden;
+  min-height: 20rem;
+  background-image: radial-gradient(ellipse at 85% 0%, rgba(138,97,255,.16), transparent 52%), linear-gradient(155deg, rgba(138,97,255,.07), var(--surface) 58%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 18px 42px rgba(0,0,0,.16);
+}
+.app-route-agente-diretor .route-surface > main aside > section:has(> p)::after {
+  content: '✦';
+  position: absolute;
+  right: 1.4rem;
+  bottom: 1rem;
+  color: rgba(170,139,255,.14);
+  font-size: 5rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Avatar: o painel de atributos mantém a coluna e a lógica atuais, com escolhas mais claras. */
+.app-route-avatars .route-surface section[class*="bg-surface-2/65"] {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--route-glow) 20%, var(--border));
+  background-image: linear-gradient(120deg, color-mix(in srgb, var(--route-glow) 8%, var(--surface-2)), color-mix(in srgb, var(--surface-2) 94%, #08080e));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+}
+.app-route-avatars .route-surface section[class*="bg-surface-2/65"] > button[aria-expanded] {
+  min-height: 2.8rem;
+  font-weight: 600;
+  letter-spacing: .005em;
+}
+.app-route-avatars .route-surface section[class*="bg-surface-2/65"] > button[aria-expanded="true"] {
+  color: var(--fg);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--route-glow) 14%, transparent), transparent 82%);
+}
+.app-route-avatars .route-surface button[aria-pressed="true"]:not([class*="bg-white"]) {
+  color: #fff;
+  background-image: linear-gradient(140deg, color-mix(in srgb, var(--route-glow) 40%, var(--surface)), color-mix(in srgb, var(--route-glow) 23%, var(--surface-2)));
+  border-color: color-mix(in srgb, var(--route-glow) 75%, white 15%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--route-glow) 28%, transparent), 0 8px 18px color-mix(in srgb, var(--route-glow) 20%, transparent), inset 0 1px 0 rgba(255,255,255,.13);
+}
+
+/* Studio: distinguir o guia de entrada, os números operacionais e os dados de apoio. */
+.app-route-studio .premium-workspace > section.rounded-xl.border-accent {
+  background-image: radial-gradient(ellipse at 100% 0%, rgba(138,97,255,.14), transparent 52%), linear-gradient(145deg, rgba(138,97,255,.08), var(--surface) 66%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 16px 36px rgba(0,0,0,.14);
+}
+.app-route-studio .premium-workspace > section.rounded-xl.border-accent > div.grid > a {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(138,97,255,.28);
+  background-image: linear-gradient(145deg, rgba(138,97,255,.14), var(--surface) 72%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 10px 24px rgba(0,0,0,.13);
+}
+.app-route-studio .premium-workspace > section.rounded-xl.border-accent > div.grid > a:hover {
+  border-color: rgba(178,148,255,.7);
+  background-image: linear-gradient(145deg, rgba(138,97,255,.25), color-mix(in srgb, var(--surface) 94%, #2b1a52));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 18px 38px rgba(63,39,128,.24);
+}
+.app-route-studio .premium-workspace > div.grid > div {
+  position: relative;
+  overflow: hidden;
+  background-image: linear-gradient(145deg, rgba(138,97,255,.1), var(--surface) 76%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 12px 26px rgba(0,0,0,.12);
+}
+.app-route-studio .premium-workspace > div.grid > div:nth-child(2) {
+  background-image: linear-gradient(145deg, rgba(39,201,143,.1), var(--surface) 76%);
+}
+.app-route-studio .premium-workspace > div.grid > div:nth-child(4) {
+  background-image: linear-gradient(145deg, rgba(56,189,248,.1), var(--surface) 76%);
+}
+.app-route-studio .premium-workspace > div.grid > div > p:last-child,
+.app-route-studio .premium-workspace > div.grid > div > div:last-child {
+  font-size: 1.6rem;
+  line-height: 1;
+  letter-spacing: -.03em;
+}
+
+/* Os estados selecionados continuam iguais, agora com contraste consistente em cada área. */
+.app-shell .premium-tabbar [aria-selected="true"],
+.app-shell .premium-tabbar [aria-current="page"] {
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.16);
+}
+.app-route-ai-ugc .premium-tabbar [aria-selected="true"] { background-image: linear-gradient(120deg,#25c8c0,#087f93); box-shadow: 0 8px 22px rgba(19,184,177,.28), inset 0 1px 0 rgba(255,255,255,.2); }
+.app-route-viral .premium-tabbar [aria-selected="true"] { background-image: linear-gradient(120deg,#48b8f0,#4065db); box-shadow: 0 8px 22px rgba(64,135,219,.28), inset 0 1px 0 rgba(255,255,255,.2); }
+.app-route-projects .premium-tabbar [aria-selected="true"] { background-image: linear-gradient(120deg,#55d8ed,#208ea9); box-shadow: 0 8px 22px rgba(42,171,197,.27), inset 0 1px 0 rgba(255,255,255,.22); }
+.app-route-studio .premium-tabbar [aria-selected="true"],
+.app-route-studio .premium-tabbar [aria-current="page"] { background-image: linear-gradient(120deg,#a889ff,#7049df); }
+
+/* Secondary actions look like controls; primary actions retain the brighter CTA treatment. */
+.app-shell button[class*="border-border"][class*="bg-surface-2"],
+.app-shell a[class*="border-border"][class*="bg-surface-2"] {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+}
+.app-shell button[class*="border-border"][class*="bg-surface-2"]:hover:not(:disabled),
+.app-shell a[class*="border-border"][class*="bg-surface-2"]:hover {
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--route-glow, var(--accent)) 13%, var(--surface-2)), var(--surface-2));
+}
+
+/* Galerias e ferramentas respondem ao ponteiro sem mexer no clique nem no conteúdo. */
+@media (hover: hover) and (pointer: fine) {
+  .app-shell .premium-workspace a.group[class*="rounded-2xl"],
+  .app-shell .premium-workspace button.group[class*="rounded-2xl"] {
+    transition-property: transform, border-color, background-color, box-shadow;
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(.23,1,.32,1);
+  }
+  .app-shell .premium-workspace a.group[class*="rounded-2xl"]:hover,
+  .app-shell .premium-workspace button.group[class*="rounded-2xl"]:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 38px rgba(0,0,0,.24), 0 0 0 1px color-mix(in srgb, var(--route-glow, var(--accent)) 20%, transparent);
+  }
+  .app-shell .premium-workspace a.group[class*="rounded-2xl"] img,
+  .app-shell .premium-workspace button.group[class*="rounded-2xl"] img {
+    transition: transform 240ms cubic-bezier(.23,1,.32,1), filter 180ms ease;
+  }
+  .app-shell .premium-workspace a.group[class*="rounded-2xl"]:hover img,
+  .app-shell .premium-workspace button.group[class*="rounded-2xl"]:hover img {
+    filter: saturate(1.08) contrast(1.025);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app-shell .premium-workspace a[class*="rounded"][class*="border"]:hover,
+  .app-shell .premium-workspace button[class*="rounded"][class*="border"]:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--route-glow, var(--accent)) 58%, var(--border));
+    box-shadow: 0 12px 28px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+}
+
+[data-theme='light'] .app-shell main {
+  background-image:
+    radial-gradient(ellipse at 78% -12%, color-mix(in srgb, var(--route-glow, var(--accent)) 13%, transparent), transparent 38rem),
+    linear-gradient(180deg, rgba(255,255,255,.35), transparent 32rem);
+}
+[data-theme='light'] .app-shell .premium-workspace .rounded-xl.bg-surface,
+[data-theme='light'] .app-shell .premium-workspace .rounded-2xl.bg-surface,
+[data-theme='light'] .app-shell .premium-workspace .rounded-3xl.bg-surface {
+  box-shadow: 0 14px 34px rgba(51,39,84,.09), inset 0 1px 0 rgba(255,255,255,.9);
+}
 /* ADS: medidas e navegação lateral verificadas no assistente de referência. */
 @media (min-width: 1024px) {
   .ads-wizard {

@@ -12,11 +12,11 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<Variant, string> = {
-  brand: 'bg-gradient-to-r from-[#7955e8] to-[#986cff] text-white shadow-[0_8px_24px_rgba(121,85,232,0.24)] hover:-translate-y-0.5 hover:brightness-110',
-  primary: 'bg-accent text-accent-fg shadow-[0_8px_20px_rgba(138,97,255,0.18)] hover:-translate-y-0.5 hover:brightness-110',
-  secondary: 'border border-white/10 bg-surface text-fg shadow-[0_6px_18px_rgba(0,0,0,.12)] hover:border-accent/40 hover:bg-[var(--surface-hover)]',
-  ghost: 'text-fg-muted hover:bg-surface-2 hover:text-fg',
-  danger: 'border border-danger/20 bg-danger/10 text-danger hover:border-danger/40 hover:bg-danger/20',
+  brand: 'border border-white/20 bg-gradient-to-br from-[#a88aff] via-[#8759ff] to-[#6541df] text-white shadow-[0_12px_28px_rgba(121,85,232,0.34),inset_0_1px_0_rgba(255,255,255,.24)] hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_16px_34px_rgba(121,85,232,0.42)]',
+  primary: 'border border-accent-light/35 bg-gradient-to-br from-accent to-[#6946db] text-accent-fg shadow-[0_10px_24px_rgba(138,97,255,0.26),inset_0_1px_0_rgba(255,255,255,.16)] hover:-translate-y-0.5 hover:brightness-110',
+  secondary: 'border border-white/15 bg-[linear-gradient(145deg,var(--surface-hover),var(--surface))] text-fg shadow-[0_6px_18px_rgba(0,0,0,.16),inset_0_1px_0_rgba(255,255,255,.05)] hover:-translate-y-px hover:border-accent/55 hover:bg-[var(--surface-hover)] hover:text-white',
+  ghost: 'border border-transparent text-fg-muted hover:border-white/10 hover:bg-white/[.06] hover:text-fg',
+  danger: 'border border-danger/30 bg-gradient-to-br from-danger/15 to-danger/5 text-danger shadow-[inset_0_1px_0_rgba(255,255,255,.04)] hover:border-danger/55 hover:bg-danger/20',
 };
 
 const sizes: Record<Size, string> = {
@@ -36,7 +36,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={clsx(
-        'inline-flex items-center justify-center font-semibold transition-all duration-150 select-none',
+        'inline-flex items-center justify-center font-semibold transition-[transform,border-color,background-color,box-shadow,color,filter] duration-150 ease-out select-none',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
         'disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]',
         variants[variant],
