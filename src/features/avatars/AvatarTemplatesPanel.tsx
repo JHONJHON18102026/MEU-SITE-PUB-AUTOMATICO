@@ -125,9 +125,60 @@ const BUILT_INS: CustomAvatarTemplate[] = [
 ];
 
 function buildTemplatePrompt(prompt: string, skillIds: string[], mode: AvatarTemplateMode) {
-  return [prompt.trim(), ...SKILLS.filter((skill) => skillIds.includes(skill.id)).map((skill) => skill.prompt[mode])]
+  const selectedSkills = SKILLS.filter((skill) => skillIds.includes(skill.id));
+  const expanded = [prompt.trim(), ...selectedSkills.map((skill) => skill.prompt[mode])].filter(Boolean).join('\n\n');
+  if (expanded.length <= 2000) return { text: expanded, compacted: false };
+
+  const compactRules: Record<TemplateSkillId, Record<AvatarTemplateMode, string>> = {
+    identity: {
+      image: 'Mantenha os traços descritos ou referenciados; sem criar identidade conflitante.',
+      video: 'Mantenha rosto, espécie, cores, roupa e proporções em todos os quadros.',
+    },
+    product: {
+      image: 'Preserve forma, cores e detalhes da referência anexada; não troque o personagem.',
+      video: 'Preserve a referência em todos os quadros; sem mudar espécie, cor, forma ou roupa.',
+    },
+    ugc: {
+      image: 'Use pose legível e natural; evite membros extras e gestos impossíveis.',
+      video: 'Movimentos naturais e contínuos; sem repetição, membros extras ou deformações.',
+    },
+    cinematic: {
+      image: 'Luz e composição coerentes; personagem e ação sempre em foco.',
+      video: 'Mantenha luz e enquadramento; câmera suave, sem cortes ou flicker.',
+    },
+    hook: {
+      image: 'Mostre um instante intrigante que deixe o conflito claro.',
+      video: 'Comece pela tensão e termine com revelação ou pergunta.',
+    },
+    'fruit-identity': {
+      image: 'A fruta define o personagem: preserve casca, forma, folhas e cores.',
+      video: 'Mantenha espécie, casca, forma e cores estáveis em todos os quadros.',
+    },
+    'character-bible': {
+      image: 'Personagens legíveis e distintos; não acrescente outros sem pedido.',
+      video: 'Não duplique nem troque personagens, roupas ou papéis.',
+    },
+    'story-beats': {
+      image: 'Escolha um instante decisivo com conflito e emoção claros.',
+      video: 'Construa gancho, conflito e reação; termine com reviravolta coerente.',
+    },
+    'story-world': {
+      image: 'Use cenário e poucos objetos que expliquem a situação.',
+      video: 'Mantenha local e objetos principais estáveis durante a cena.',
+    },
+    'visual-acting': {
+      image: 'Mostre emoção por rosto, mãos e postura coerentes.',
+      video: 'Gestos e expressão acompanham ação; sem braços extras.',
+    },
+    'dialogue-ptbr': {
+      image: 'Sem texto na imagem, salvo pedido explícito.',
+      video: 'Falas em pt-BR, com frases curtas e completas antes do fim.',
+    },
+  };
+  const compact = [prompt.trim(), ...selectedSkills.map((skill) => compactRules[skill.id][mode])]
     .filter(Boolean)
     .join('\n\n');
+  return { text: compact, compacted: true };
 }
 
 export function AvatarTemplatesPanel() {
@@ -199,7 +250,7 @@ export function AvatarTemplatesPanel() {
   }
 
   function applyTemplate() {
-    const finalPrompt = buildTemplatePrompt(prompt, skillIds, mode);
+    const { text: finalPrompt, compacted } = buildTemplatePrompt(prompt, skillIds, mode);
     if (!finalPrompt) {
       toast.error('Escreva a ideia do template antes de aplicar.');
       return;
@@ -209,7 +260,9 @@ export function AvatarTemplatesPanel() {
       return;
     }
     setStudio({ prompt: finalPrompt, composerMode: mode });
-    toast.success('Prompt aplicado ao canvas. Nenhuma geração ou cobrança foi feita.');
+    toast.success(compacted
+      ? 'Prompt aplicado ao canvas com as Skills compactadas para caber. Nenhuma geração foi feita.'
+      : 'Prompt aplicado ao canvas. Nenhuma geração ou cobrança foi feita.');
   }
 
   async function saveTemplate() {
