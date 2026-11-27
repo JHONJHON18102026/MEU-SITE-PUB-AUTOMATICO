@@ -25,6 +25,8 @@ export interface PromptInput {
 
 const REALISTIC_QUALITY =
   'Retrato fotorrealista de criador de conteúdo, luz natural suave, foco nítido, materiais e textura de pele convincentes, estética autêntica de redes sociais.';
+const FREE_PROMPT_QUALITY =
+  'Imagem detalhada e bem composta. Preserve o estilo visual, os materiais, a iluminação e o cenário pedidos pelo usuário; não imponha estética de retrato UGC ou de estúdio quando ela não estiver descrita.';
 const IMAGE_CONSTRAINTS = 'Não incluir texto, legendas, logotipos nem marcas-d’água na imagem.';
 const STYLIZED_CHARACTER_TYPES = new Set([
   'extremo', 'inseto', 'sapo', 'gato', 'cachorro', 'roedor', 'passaro', 'bebe-animado', 'orgao-animado', 'mao-desenhando', 'cartoon',
@@ -172,13 +174,16 @@ export function buildAvatarPrompt(input: PromptInput): string {
     : input.attributes;
   const characterType = selectedAttributes.characterType?.[0];
   const characterDetails = detailsForSelectedCharacterType(input.extraDetails, characterType);
-  const explicitStylizedDirection = /cartoon|desenh[oa]|anima(d[oa]|ção)|anime|ilustraç|caricatur|fant[aá]stic|alien|extraterrestr|exagerad|strange|weird|bizarre|grotesque|unusual|inusitad|esquisit|gigantic|gigante|reference sheet|folha de refer[eê]ncia|turnaround/i.test(characterDetails);
+  const visualBrief = `${input.prompt}\n${characterDetails}`;
+  const explicitStylizedDirection = /cartoon|desenh[oa]|anima(d[oa]|ção|tion)|anime|ilustraç|caricatur|fant[aá]stic|alien|extraterrestr|exagerad|strange|weird|bizarre|grotesque|unusual|inusitad|esquisit|gigantic|gigante|reference sheet|folha de refer[eê]ncia|turnaround|antropom[oó]rf|anthropomorphic|\bfrut[ao]s?\b|\bfruit\b|\b3d\b|pixar/i.test(visualBrief);
   const isStylized = (characterType && STYLIZED_CHARACTER_TYPES.has(characterType)) || explicitStylizedDirection;
   const isAnimatedBaby = characterType === 'bebe-animado';
   const quality = isAnimatedBaby
     ? 'Ilustração de personagem 3D claramente fictícia e estilizada, acabamento de animação/cartoon, formas arredondadas de mascote infantil, roupa infantil confortável e totalmente vestida. Não fotorrealista; sem textura de pele fotográfica.'
     : isStylized
     ? 'Renderização detalhada de personagem com exagero de caricatura, traços marcantes e intencionais, texturas fotorrealistas e fidelidade ao design solicitado.'
+    : input.mode === 'prompt'
+      ? FREE_PROMPT_QUALITY
     : characterDetails
       ? 'Renderização detalhada e fotorrealista, fiel à aparência descrita, com luz natural suave, foco nítido, materiais convincentes e textura de pele realista.'
       : REALISTIC_QUALITY;
@@ -252,6 +257,9 @@ export function buildAvatarPrompt(input: PromptInput): string {
 
   if (!/reference sheet|folha de refer[eê]ncia|turnaround/i.test(input.extraDetails)) {
     lines.push(`Enquadramento: ${framing}.`);
+  }
+  if (input.mode === 'prompt') {
+    lines.push('Siga o cenário descrito no prompt. Se nenhum local for especificado, escolha um ambiente narrativo novo que combine com o personagem; não repita automaticamente estúdio de criador, microfone, mesa ou prateleiras, salvo se forem pedidos.');
   }
   lines.push(quality, IMAGE_CONSTRAINTS);
   return lines.join('\n');
