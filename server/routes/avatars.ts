@@ -38,6 +38,71 @@ export const avatarRoutes = new Hono<AppEnv>();
 
 const BUCKET = 'avatars';
 
+// Each result in a batch gets its own concrete art direction. A shared prompt
+// alone makes the image engine repeat the same set and wardrobe across results.
+const FRUIT_IMAGE_VARIATIONS = [
+  { id: 'fruit-orchard-dawn', direction: 'um pomar ao amanhecer, com névoa leve; figurinos de trabalho rural em tecidos naturais, cada fruta com peças e cores próprias' },
+  { id: 'fruit-night-market', direction: 'uma feira noturna iluminada por barracas; figurinos urbanos de passeio, com camadas e acessórios diferentes para cada fruta' },
+  { id: 'fruit-restaurant-kitchen', direction: 'uma cozinha de restaurante antes do movimento; aventais e roupas de cozinha adaptados ao papel de cada fruta' },
+  { id: 'fruit-rain-greenhouse', direction: 'uma estufa tropical depois da chuva; roupas práticas impermeáveis, com cortes e paletas distintos entre os personagens' },
+  { id: 'fruit-old-station', direction: 'uma estação ferroviária antiga no fim da tarde; roupas de viagem elegantes, com casacos e acessórios diferentes' },
+  { id: 'fruit-bakery-close', direction: 'uma confeitaria de bairro em horário de fechamento; figurinos ligados ao trabalho e à ocasião, sem repetir aventais idênticos' },
+  { id: 'fruit-town-festival', direction: 'uma praça de cidade pequena durante uma festa local; roupas festivas coerentes com a personalidade de cada fruta' },
+  { id: 'fruit-municipal-market', direction: 'um mercado municipal pela manhã; figurinos casuais inspirados no papel de cada personagem, com silhuetas claramente distintas' },
+  { id: 'fruit-riverside-picnic', direction: 'um pomar à beira de um riacho no fim da tarde; roupas leves de passeio com paletas individuais' },
+  { id: 'fruit-school-garden', direction: 'uma horta escolar durante uma atividade; roupas práticas diferentes, adequadas às funções dos personagens' },
+  { id: 'fruit-coastal-fair', direction: 'uma feira de rua perto do litoral em dia ensolarado; roupas ventiladas e acessórios próprios de cada personagem' },
+  { id: 'fruit-winter-greenhouse', direction: 'uma estufa aquecida numa manhã fria; casacos e cachecóis distintos, coerentes com cada papel' },
+  { id: 'fruit-cafe-terrace', direction: 'o terraço de um café de bairro depois da chuva; figurinos de encontro casual com cores e cortes diferentes' },
+  { id: 'fruit-harvest-barn', direction: 'um galpão de colheita no interior; roupas de trabalho com texturas naturais e peças próprias para cada personagem' },
+  { id: 'fruit-flower-market', direction: 'um mercado de flores colorido no começo da manhã; roupas elegantes de passeio sem uniformizar os personagens' },
+  { id: 'fruit-rooftop-garden', direction: 'uma horta comunitária no alto de um prédio ao pôr do sol; figurinos urbanos e práticos, individualizados' },
+];
+
+const CHARACTER_IMAGE_VARIATIONS = [
+  { id: 'character-botanical-garden', direction: 'um jardim botânico depois da chuva; roupas adequadas ao papel, em materiais naturais e silhuetas próprias' },
+  { id: 'character-old-bookstore', direction: 'uma livraria antiga perto do fechamento; figurinos de passeio com camadas, texturas e cores diferentes' },
+  { id: 'character-creative-atelier', direction: 'um ateliê de criação com luz lateral; roupas de trabalho ou expressão artística, sem uniformizar os personagens' },
+  { id: 'character-historic-station', direction: 'uma estação histórica no fim da tarde; figurinos de viagem coerentes com a personalidade e o papel' },
+  { id: 'character-culture-fair', direction: 'uma pequena feira cultural ao ar livre; roupas casuais com detalhes individuais e paleta harmoniosa' },
+  { id: 'character-home-kitchen', direction: 'uma cozinha acolhedora durante o preparo de uma receita; roupas adequadas à ação, com peças distintas' },
+  { id: 'character-observatory', direction: 'um observatório no início da noite; figurinos funcionais com materiais e silhuetas próprios do personagem' },
+  { id: 'character-artisan-workshop', direction: 'uma oficina artesanal iluminada pelo sol; roupas de trabalho coerentes com a atividade descrita' },
+  { id: 'character-museum-gallery', direction: 'uma galeria de museu antes da abertura; roupas sociais adaptadas à personalidade e função' },
+  { id: 'character-rooftop-evening', direction: 'um terraço urbano na hora azul; figurinos contemporâneos com cortes individuais' },
+  { id: 'character-riverside', direction: 'um caminho à beira-rio no início da manhã; roupas de passeio apropriadas ao clima e diferentes entre personagens' },
+  { id: 'character-flower-greenhouse', direction: 'uma estufa de flores coloridas; roupas leves e coerentes com a ocupação de cada personagem' },
+  { id: 'character-antique-cafe', direction: 'um café antigo em uma tarde chuvosa; figurinos aconchegantes e distintos' },
+  { id: 'character-night-library', direction: 'uma biblioteca moderna à noite; roupas discretas com materiais e silhuetas individualizadas' },
+  { id: 'character-desert-workshop', direction: 'uma oficina no interior em tarde seca; roupas funcionais adequadas ao ambiente' },
+  { id: 'character-seaside-promenade', direction: 'um calçadão à beira-mar no fim da tarde; roupas ventiladas e acessórios próprios de cada personagem' },
+];
+
+function variationOffset(seed: string, length: number): number {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % length;
+}
+
+function buildAvatarVariationPrompts(prompt: string, count: number, seed: string, recentlyUsed: Set<string>) {
+  const fruitPrompt = prompt.includes('AMBIENTE DE PERSONAGEM-FRUTA');
+  const variations = fruitPrompt ? FRUIT_IMAGE_VARIATIONS : CHARACTER_IMAGE_VARIATIONS;
+  const offset = variationOffset(seed, variations.length);
+  const ordered = [...variations.slice(offset), ...variations.slice(0, offset)];
+  const fresh = ordered.filter((variation) => !recentlyUsed.has(variation.id));
+  const selected = [...fresh, ...ordered.filter((variation) => recentlyUsed.has(variation.id))].slice(0, count);
+  return selected.map((variation, index) => ({
+    variationId: variation.id,
+    prompt: [
+      prompt,
+      `DIREÇÃO VISUAL EXCLUSIVA DESTA IMAGEM (${index + 1} de ${count}): crie uma composição nova usando ${variation.direction}. Preserve exatamente a identidade, espécie, rosto, cores naturais, papel, emoção, ação e relação entre os personagens definidos pelo usuário. Não reutilize cenário nem combinação de roupas de outra imagem deste mesmo pedido. Dê a cada personagem um figurino próprio, coerente com seu papel e diferente do figurino dos demais; roupas podem variar sem descaracterizar a identidade. A descrição explícita do usuário para local ou roupa sempre prevalece: varie apenas o que ficou em aberto. Não acrescente personagens.`,
+    ].join('\n\n'),
+  }));
+}
+
 avatarRoutes.get('/templates', async (c) => {
   const userId = c.get('userId');
   const { data, error } = await getAdmin()
@@ -193,6 +258,21 @@ avatarRoutes.post('/generate', async (c) => {
     referenceCount: req.referenceImages.length,
   });
 
+  const { data: previousGenerations, error: historyError } = await admin
+    .from('generations')
+    .select('params')
+    .eq('user_id', userId)
+    .eq('kind', 'avatar_image')
+    .eq('status', 'done')
+    .order('created_at', { ascending: false })
+    .limit(12);
+  if (historyError) throw new ApiError('INTERNAL', `Não consegui conferir as variações anteriores: ${historyError.message}`);
+  const recentlyUsedVariations = new Set((previousGenerations ?? []).flatMap((generation) => {
+    const variations = (generation.params as { imageVariations?: unknown } | null)?.imageVariations;
+    return Array.isArray(variations) ? variations.filter((value): value is string => typeof value === 'string') : [];
+  }));
+  const imageVariations = buildAvatarVariationPrompts(prompt, req.count, generationId, recentlyUsedVariations);
+
   const params = {
     mode: req.mode,
     attributes: req.attributes,
@@ -203,6 +283,7 @@ avatarRoutes.post('/generate', async (c) => {
     framing: req.framing,
     aspectRatio: req.aspectRatio,
     count: req.count,
+    imageVariations: imageVariations.map((variation) => variation.variationId),
     hasBasePhoto: Boolean(basePhoto),
     hasProduct: Boolean(req.productImage),
     hasCharacterStyleReference: Boolean(req.characterStyleReference),
@@ -258,7 +339,8 @@ avatarRoutes.post('/generate', async (c) => {
 
   const results = await Promise.allSettled(
     Array.from({ length: req.count }, async (_, index) => {
-      const raw = await generateImage({ prompt, engine: req.engine, aspectRatio: req.aspectRatio, images, imageDescriptions });
+      const imagePrompt = imageVariations[index]!.prompt;
+      const raw = await generateImage({ prompt: imagePrompt, engine: req.engine, aspectRatio: req.aspectRatio, images, imageDescriptions });
       const branded = (await isOwnerUser(userId)) ? await applyWatermark(raw.buffer) : raw.buffer;
       const avatarId = randomUUID();
       const storagePath = `${userId}/${avatarId}.png`;
@@ -283,7 +365,7 @@ avatarRoutes.post('/generate', async (c) => {
         storage_path: storagePath,
         // Persist the exact assembled prompt sent to the image engine so the
         // detail view exposes selected attributes, references, and constraints.
-        prompt,
+        prompt: imagePrompt,
         attributes: req.attributes,
         engine: raw.model,
         framing: req.framing,

@@ -92,6 +92,14 @@ export const enhanceCharacterWorldSchema = z.object({
 );
 export type EnhanceCharacterWorldRequest = z.input<typeof enhanceCharacterWorldSchema>;
 
+export const generateAvatarIdeaSchema = z.object({
+  templateName: z.string().trim().min(1).max(60),
+  templatePrompt: z.string().trim().min(1).max(1200),
+  skills: z.array(z.object({ name: z.string().trim().min(1).max(80), instruction: z.string().trim().min(1).max(400) })).max(14),
+  recentPrompts: z.array(z.string().trim().max(1800)).max(20).default([]),
+});
+export type GenerateAvatarIdeaRequest = z.input<typeof generateAvatarIdeaSchema>;
+
 export function avatarCost(count: number): number {
   return PRICING.avatarImage * Math.max(1, Math.min(MAX_IMAGES_PER_REQUEST, Math.floor(count)));
 }

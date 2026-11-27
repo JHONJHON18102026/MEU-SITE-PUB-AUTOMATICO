@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Check, Film, Image as ImageIcon, Plus, Save, Sparkles, Trash2 } from 'lucide-react';
+import { Check, Dices, Film, Image as ImageIcon, Plus, Save, Sparkles, Trash2 } from 'lucide-react';
 import { useCreateUgcProject } from '@/features/projects/previewProjectsStore';
 import { prepareImageFromUrl } from '@/lib/image';
 import { calculateUgcCost } from '@shared/ugcContracts';
@@ -187,6 +187,7 @@ export function AvatarTemplatesPanel() {
   const setStudio = useAvatarStudio((s) => s.set);
   const legacyLocalTemplates = useAvatarStudio((s) => s.customTemplates);
   const sessionStatus = useSession((s) => s.status);
+  const profile = useSession((s) => s.profile);
   const [savedTemplates, setSavedTemplates] = useState<CustomAvatarTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -197,11 +198,25 @@ export function AvatarTemplatesPanel() {
   const [prompt, setPrompt] = useState(BUILT_INS.find((template) => template.id === 'fruit-family-drama')!.prompt);
   const [skillIds, setSkillIds] = useState<string[]>([...BUILT_INS.find((template) => template.id === 'fruit-family-drama')!.skillIds]);
   const [preparing, setPreparing] = useState(false);
+  const [generatingIdea, setGeneratingIdea] = useState(false);
+  const [randomIdea, setRandomIdea] = useState('');
+  const recentIdeasRef = useRef<string[]>([]);
+  const recentIdeasKey = `fd-avatar-random-ideas:${profile?.id ?? 'local'}`;
   const submitRef = useRef<() => Promise<void>>(async () => undefined);
   const videoSubmitLockRef = useRef(false);
   const videoEngine = useAvatarStudio((s) => s.videoEngine);
   const videoCost = calculateUgcCost({ engine: videoEngine, sceneCount: 1 });
   const visibleTemplates = useMemo(() => [...BUILT_INS, ...savedTemplates].filter((template) => template.mode === mode), [mode, savedTemplates]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(recentIdeasKey) ?? '[]');
+      recentIdeasRef.current = Array.isArray(saved) ? saved.filter((item): item is string => typeof item === 'string').slice(0, 20) : [];
+    } catch {
+      recentIdeasRef.current = [];
+    }
+    setRandomIdea('');
+  }, [recentIdeasKey]);
 
   useEffect(() => {
     if (sessionStatus !== 'signed-in') return;
@@ -233,6 +248,7 @@ export function AvatarTemplatesPanel() {
   }, [setStudio]);
 
   function chooseTemplate(template: CustomAvatarTemplate) {
+    setRandomIdea('');
     setSelectedId(template.id);
     setName(template.name);
     setPrompt(template.prompt);
@@ -240,6 +256,7 @@ export function AvatarTemplatesPanel() {
   }
 
   function switchMode(nextMode: AvatarTemplateMode) {
+    setRandomIdea('');
     setMode(nextMode);
     const nextTemplate = [...BUILT_INS, ...savedTemplates].find((template) => template.mode === nextMode);
     if (nextTemplate) chooseTemplate(nextTemplate);
@@ -249,8 +266,35 @@ export function AvatarTemplatesPanel() {
     setSkillIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
+  async function generateRandomIdea() {
+    if (generatingIdea || !prompt.trim()) return;
+    setGeneratingIdea(true);
+    try {
+      const skills = SKILLS.filter((skill) => skillIds.includes(skill.id)).map((skill) => ({
+        name: skill.name,
+        instruction: skill.prompt.image,
+      }));
+      const { idea } = await api.generateAvatarIdea({
+        templateName: name.trim() || 'Personagem personalizado',
+        templatePrompt: prompt.trim(),
+        skills,
+        recentPrompts: recentIdeasRef.current.slice(0, 12),
+      });
+      setRandomIdea(idea);
+      recentIdeasRef.current = [idea, ...recentIdeasRef.current.filter((item) => item !== idea)].slice(0, 20);
+      localStorage.setItem(recentIdeasKey, JSON.stringify(recentIdeasRef.current));
+      toast.success('Nova ideia criada pelo Argon, sem consumir créditos.');
+    } catch (error) {
+      toast.error(error instanceof ApiClientError ? error.message : 'Não consegui criar uma nova ideia agora.');
+    } finally {
+      setGeneratingIdea(false);
+    }
+  }
+
   function applyTemplate() {
-    const { text: finalPrompt, compacted } = buildTemplatePrompt(prompt, skillIds, mode);
+    const { text: finalPrompt, compacted } = randomIdea.trim()
+      ? { text: randomIdea.trim(), compacted: false }
+      : buildTemplatePrompt(prompt, skillIds, mode);
     if (!finalPrompt) {
       toast.error('Escreva a ideia do template antes de aplicar.');
       return;
@@ -458,7 +502,7 @@ export function AvatarTemplatesPanel() {
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3 thin-scroll">
         <div className="rounded-2xl border border-accent/40 bg-accent-soft/50 p-3">
           <div className="flex items-center gap-2 text-xs font-bold text-fg"><Sparkles className="size-4 text-accent" /> Templates personalizados</div>
-          <p className="mt-1 text-[11px] leading-relaxed text-fg-muted">Combine skills de personagens, narrativa, referências e direção. Os templates ficam salvos na conta; aplicar preenche o canvas sem cobrar créditos.</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-fg-muted">Combine skills de personagens, narrativa, cenário, referências e direção. Os templates ficam salvos na conta; aplicar preenche o canvas sem cobrar créditos.</p>
         </div>
 
         {legacyLocalTemplates.length > 0 && (
@@ -500,8 +544,22 @@ export function AvatarTemplatesPanel() {
 
         <section className="space-y-2">
           <div className="text-[11px] font-bold text-fg-muted">MONTE SEU TEMPLATE</div>
-          <input value={name} onChange={(event) => { setName(event.target.value); setSelectedId(''); }} maxLength={60} placeholder="Nome do template" className="w-full rounded-xl border border-border bg-surface-2 px-3 py-2 text-xs outline-none focus:border-accent" />
-          <textarea value={prompt} onChange={(event) => { setPrompt(event.target.value); setSelectedId(''); }} maxLength={1200} rows={4} placeholder="Escreva a estrutura ou a ideia principal..." className="w-full resize-y rounded-xl border border-border bg-surface-2 p-3 text-xs leading-relaxed outline-none focus:border-accent" />
+          <input value={name} onChange={(event) => { setName(event.target.value); setSelectedId(''); setRandomIdea(''); }} maxLength={60} placeholder="Nome do template" className="w-full rounded-xl border border-border bg-surface-2 px-3 py-2 text-xs outline-none focus:border-accent" />
+          <textarea value={prompt} onChange={(event) => { setPrompt(event.target.value); setSelectedId(''); setRandomIdea(''); }} maxLength={1200} rows={4} placeholder="Escreva a estrutura ou a ideia principal..." className="w-full resize-y rounded-xl border border-border bg-surface-2 p-3 text-xs leading-relaxed outline-none focus:border-accent" />
+          {mode === 'image' && (
+            <div className="space-y-2">
+              <button type="button" onClick={() => void generateRandomIdea()} disabled={generatingIdea || !prompt.trim()} className="flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border border-accent/50 bg-accent-soft/50 px-3 py-2 text-[11px] font-semibold text-fg hover:border-accent disabled:cursor-wait disabled:opacity-60">
+                <Dices className={`size-3.5 ${generatingIdea ? 'animate-spin' : ''}`} />
+                {generatingIdea ? 'Criando uma ideia inédita…' : 'Gerar nova ideia com o Argon'}
+              </button>
+              {randomIdea && (
+                <label className="block space-y-1.5">
+                  <span className="text-[10px] font-bold text-fg-muted">NOVA IDEIA · EDITÁVEL · SEM CUSTO EM CRÉDITOS</span>
+                  <textarea value={randomIdea} onChange={(event) => setRandomIdea(event.target.value)} maxLength={1800} rows={5} className="w-full resize-y rounded-xl border border-accent/40 bg-surface-2 p-3 text-xs leading-relaxed outline-none focus:border-accent" />
+                </label>
+              )}
+            </div>
+          )}
           <div className="text-[10px] font-bold text-fg-muted">SKILLS</div>
           <div className="flex flex-wrap gap-1.5">
             {SKILLS.map((skill) => {

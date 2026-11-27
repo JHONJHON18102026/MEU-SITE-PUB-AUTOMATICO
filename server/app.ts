@@ -5,9 +5,9 @@
 import { Hono, type Context, type Next } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { ApiError } from './errors';
-import { getUserIdFromToken } from './supabaseAdmin';
+import { getAdmin, getUserIdFromToken } from './supabaseAdmin';
 import { missingKeys } from './env';
-import { enhanceCharacterPrompt, enhanceCharacterWorld, enhancePrompt, resolveModels } from './gemini';
+import { enhanceCharacterPrompt, enhanceCharacterWorld, enhancePrompt, generateAvatarIdea, resolveModels } from './gemini';
 import { rustEnabled } from './rustMotor';
 import { checkRustMotor } from './rustMotorSupervisor';
 import { avatarRoutes } from './routes/avatars';
@@ -16,7 +16,7 @@ import { projectRoutes } from './routes/projects';
 import { studioRoutes } from './routes/studio';
 import { viralRoutes } from './routes/viral';
 import { directorRoutes } from './routes/director';
-import { enhanceCharacterPromptSchema, enhanceCharacterWorldSchema, enhancePromptSchema, type ApiErrorBody } from '../shared/contracts';
+import { enhanceCharacterPromptSchema, enhanceCharacterWorldSchema, enhancePromptSchema, generateAvatarIdeaSchema, type ApiErrorBody } from '../shared/contracts';
 import { describeAttributes, describeSelectedAttributesPt } from '../shared/avatarPrompt';
 import type { AttributeSelection } from '../shared/attributes';
 
@@ -111,4 +111,25 @@ app.post('/prompt/enhance-character-world', async (c) => {
     hasBasePhoto: parsed.data.hasBasePhoto,
   });
   return c.json({ world });
+});
+
+app.post('/prompt/avatar-random-idea', async (c) => {
+  const parsed = generateAvatarIdeaSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw new ApiError('INVALID_INPUT', 'Confira o template e as skills antes de criar uma nova ideia.');
+  const { data: recentGenerations, error } = await getAdmin()
+    .from('generations')
+    .select('params')
+    .eq('user_id', c.get('userId'))
+    .eq('kind', 'avatar_image')
+    .eq('status', 'done')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) throw new ApiError('INTERNAL', `Não consegui conferir as ideias recentes: ${error.message}`);
+  const generatedPrompts = (recentGenerations ?? []).flatMap((generation) => {
+    const prompt = (generation.params as { prompt?: unknown } | null)?.prompt;
+    return typeof prompt === 'string' && prompt.trim() ? [prompt.trim()] : [];
+  });
+  const recentPrompts = [...new Set([...parsed.data.recentPrompts, ...generatedPrompts])].slice(0, 20);
+  const idea = await generateAvatarIdea({ ...parsed.data, recentPrompts });
+  return c.json({ idea });
 });
