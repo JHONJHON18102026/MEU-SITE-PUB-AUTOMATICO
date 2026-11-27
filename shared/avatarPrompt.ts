@@ -175,6 +175,7 @@ export function buildAvatarPrompt(input: PromptInput): string {
   const characterType = selectedAttributes.characterType?.[0];
   const characterDetails = detailsForSelectedCharacterType(input.extraDetails, characterType);
   const visualBrief = `${input.prompt}\n${characterDetails}`;
+  const fruitCharacter = /\b(?:fruta|frutas|morango|ma[cç][aã]s?|banana|uvas?|laranjas?|abacaxis?|mangas?|peras?|melancias?|lim[aã]o|lim[oõ]es|cerejas?|p[eê]ssegos?|kiwi|cocos?|ameixas?|goiabas?|mam[aã]os?|abacates?|frut[ií]fer[oa]s?)\b/i.test(visualBrief);
   const explicitStylizedDirection = /cartoon|desenh[oa]|anima(d[oa]|ção|tion)|anime|ilustraç|caricatur|fant[aá]stic|alien|extraterrestr|exagerad|strange|weird|bizarre|grotesque|unusual|inusitad|esquisit|gigantic|gigante|reference sheet|folha de refer[eê]ncia|turnaround|antropom[oó]rf|anthropomorphic|\bfrut[ao]s?\b|\bfruit\b|\b3d\b|pixar/i.test(visualBrief);
   const isStylized = (characterType && STYLIZED_CHARACTER_TYPES.has(characterType)) || explicitStylizedDirection;
   const isAnimatedBaby = characterType === 'bebe-animado';
@@ -260,6 +261,9 @@ export function buildAvatarPrompt(input: PromptInput): string {
   }
   if (input.mode === 'prompt') {
     lines.push('Siga o cenário descrito no prompt. Se nenhum local for especificado, escolha um ambiente narrativo novo que combine com o personagem; não repita automaticamente estúdio de criador, microfone, mesa ou prateleiras, salvo se forem pedidos.');
+  }
+  if (fruitCharacter) {
+    lines.push('AMBIENTE DE PERSONAGEM-FRUTA: mantenha a fruta como personagem principal e coloque-a em um cenário narrativo específico que combine com sua espécie e papel. Se “Mundo do personagem” ou a cena já indicar um local, respeite esse local. Se não indicar, escolha um ambiente coerente com a história da fruta — por exemplo, plantação ou estufa para morango, pomar para maçã, feira ou cozinha para frutas usadas em receitas — e varie o local entre novas criações. Não use automaticamente estúdio de influencer, microfone, mesa de podcast ou prateleiras de criador; só inclua esses elementos se forem pedidos.');
   }
   lines.push(quality, IMAGE_CONSTRAINTS);
   return lines.join('\n');
