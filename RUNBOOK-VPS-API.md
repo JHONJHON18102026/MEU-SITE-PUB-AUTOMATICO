@@ -575,3 +575,11 @@ Este resumo é o estado mais recente para retomada; os registros anteriores acim
 - Sincronização da API VPS: backup anterior criado em `C:\site\backups\avatar-fruit-env-20261126`; `shared/avatarPrompt.ts` foi copiado para `C:\site\shared\avatarPrompt.ts`. SHA-256 local e remoto coincidem (`9c37ab89d0c2eb5b6840d867a93978e651dfda8c5edb44a9dfd13a6aa3111910`). `npm run typecheck` passou em `C:\site`.
 - Reinicialização: somente a tarefa existente `Futuro Digital - API Node` foi reiniciada e retornou a `Running`. Health local da VPS e público responderam `ok: true`, `engine: rust`, `motorConnected: true`, `missing: []`.
 - Validação: compilação e disponibilidade da API confirmadas. Nenhuma imagem real foi gerada neste passo; portanto, o resultado visual do novo ambiente ainda precisa ser confirmado numa próxima geração autorizada, que pode consumir créditos.
+
+### 2026-11-26 — carregamento da galeria Avatar
+
+- Teste real na sessão oficial DONO: em `/projects`, 24 projetos/19 concluídos apareceram após a navegação; em `/avatars`, a galeria mostrou 43 imagens e 11 vídeos. Ao atualizar Avatar, os cartões existentes permaneceram visíveis enquanto a página revalidava, e os mesmos totais continuaram disponíveis. Nenhuma geração ou crédito foi usado.
+- Causa concreta de lentidão no caminho de imagens: `/api/avatars/gallery` emitia uma chamada `createSignedUrl` ao Storage para cada avatar (até 120 por resposta). A página também monta dois leitores simultâneos da lista do DONO (`GalleryTabs` e `GeneratedMediaTabs`), duplicando o GET inicial e o trabalho de assinatura.
+- Correção local: assinar os caminhos em lote com `createSignedUrls` e compartilhar, por escopo e token da sessão, requisições concorrentes de `listAvatars` no frontend. Preserva o filtro privado/comunidade, TTL de 1 hora e tratamento individual de itens com URL inválida.
+- Validação local: `npm run build` passou (TypeScript e Vite). O Vite emite o aviso já conhecido de que Node 22.11.0 está abaixo do mínimo 22.12.0, sem impedir o build.
+- Publicação/sincronização e comparação pós-correção no domínio oficial ainda pendentes neste registro. A sessão DONO foi deixada na aba Avatar; nenhuma API VPS foi reiniciada neste passo.

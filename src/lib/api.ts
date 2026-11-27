@@ -34,6 +34,9 @@ export class ApiClientError extends Error {
   }
 }
 
+type AvatarGalleryResponse = { avatars: import('@shared/contracts').AvatarDTO[] };
+const avatarGalleryRequests = new Map<string, Promise<AvatarGalleryResponse>>();
+
 async function authHeader(): Promise<Record<string, string>> {
   const { data } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
   const token = data.session?.access_token;
@@ -76,8 +79,21 @@ export const api = {
   health: () => request<HealthResponse>('/health'),
   generateAvatar: (payload: GenerateAvatarRequest) =>
     request<GenerateAvatarResponse>('/avatars/generate', { method: 'POST', body: JSON.stringify(payload) }),
-  listAvatars: (scope: 'mine' | 'community') =>
-    request<{ avatars: import('@shared/contracts').AvatarDTO[] }>(`/avatars/gallery?scope=${scope}`),
+  listAvatars: async (scope: 'mine' | 'community') => {
+    // A aba Avatar lê a mesma galeria em mais de um componente. Compartilhe
+    // a requisição simultânea para não duplicar consultas e links assinados.
+    const headers = await authHeader();
+    const key = `${scope}:${headers.Authorization ?? 'anonymous'}`;
+    const existing = avatarGalleryRequests.get(key);
+    if (existing) return existing;
+    const pending = request<AvatarGalleryResponse>(`/avatars/gallery?scope=${scope}`, { headers });
+    avatarGalleryRequests.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (avatarGalleryRequests.get(key) === pending) avatarGalleryRequests.delete(key);
+    }
+  },
   enhancePrompt: (prompt: string) =>
     request<{ prompt: string }>('/prompt/enhance', { method: 'POST', body: JSON.stringify({ prompt }) }),
   enhanceCharacterPrompt: (payload: import('@shared/contracts').EnhanceCharacterPromptRequest) =>

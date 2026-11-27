@@ -123,14 +123,25 @@ avatarRoutes.get('/gallery', async (c) => {
   const { data, error } = await query;
   if (error) throw new ApiError('INTERNAL', `Não consegui carregar a galeria: ${error.message}`);
 
-  const avatars = await Promise.all((data ?? []).map(async (avatar) => {
-    const signed = await admin.storage.from(BUCKET).createSignedUrl(avatar.storage_path, SIGNED_IMAGE_TTL_SECONDS);
-    if (signed.error || !signed.data?.signedUrl) {
-      console.error(`[avatars] URL temporária falhou para ${avatar.id}:`, signed.error?.message);
+  const rows = data ?? [];
+  if (!rows.length) return c.json({ avatars: [] });
+
+  // O endpoint de lote gera as URLs temporárias em uma chamada ao Storage,
+  // em vez de fazer uma chamada por avatar (até 120 por carregamento).
+  const signed = await admin.storage
+    .from(BUCKET)
+    .createSignedUrls([...new Set(rows.map((avatar) => avatar.storage_path))], SIGNED_IMAGE_TTL_SECONDS);
+  if (signed.error) throw new ApiError('INTERNAL', `Não consegui preparar as imagens da galeria: ${signed.error.message}`);
+
+  const signedByPath = new Map(signed.data.map((item) => [item.path, item]));
+  const avatars = rows.map((avatar) => {
+    const item = signedByPath.get(avatar.storage_path);
+    if (item?.error || !item?.signedUrl) {
+      console.error(`[avatars] URL temporária falhou para ${avatar.id}:`, item?.error ?? 'URL ausente');
       return null;
     }
-    return { ...avatar, image_url: signed.data.signedUrl };
-  }));
+    return { ...avatar, image_url: item.signedUrl };
+  });
   return c.json({ avatars: avatars.filter((avatar): avatar is NonNullable<typeof avatar> => avatar !== null) });
 });
 
