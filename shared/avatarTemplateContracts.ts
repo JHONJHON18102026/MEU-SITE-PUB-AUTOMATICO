@@ -1,6 +1,18 @@
 import { z } from 'zod';
 
-export const AVATAR_TEMPLATE_SKILLS = ['identity', 'product', 'ugc', 'cinematic', 'hook'] as const;
+export const AVATAR_TEMPLATE_SKILLS = [
+  'identity',
+  'product',
+  'ugc',
+  'cinematic',
+  'hook',
+  'fruit-identity',
+  'character-bible',
+  'story-beats',
+  'story-world',
+  'visual-acting',
+  'dialogue-ptbr',
+] as const;
 export const avatarTemplateModeSchema = z.enum(['image', 'video']);
 export const avatarTemplateInputSchema = z.object({
   name: z.string().trim().min(1).max(60),

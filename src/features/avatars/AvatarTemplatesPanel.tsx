@@ -15,56 +15,113 @@ type TemplateSkillId = (typeof SKILLS)[number]['id'];
 const SKILLS = [
   {
     id: 'identity',
-    name: 'Identidade consistente',
-    detail: 'Mantém o mesmo rosto e aparência da referência.',
+    name: 'Continuidade do personagem',
+    detail: 'Mantém a aparência do personagem estável entre quadros e cenas.',
     prompt: {
-      image: 'Se uma imagem de referência de pessoa estiver anexada, preserve a identidade dela com fidelidade: rosto, cabelo, tom de pele, idade aparente e traços reconhecíveis. Não substitua nem misture a pessoa. Sem referência de pessoa, siga a descrição do prompt sem inventar uma identidade conflitante.',
-      video: 'Se houver uma pessoa de referência, preserve a mesma identidade do primeiro ao último quadro: rosto, cabelo, tom de pele, idade aparente e proporções estáveis. Evite troca de pessoa, oscilação facial, duplicação ou deformação. Sem referência, mantenha consistente a pessoa descrita no prompt.',
+      image: 'Siga a identidade visual e os traços descritos para o personagem. Se houver uma referência, use-a como orientação sem trocar a espécie, a aparência ou o papel definidos no prompt. Não invente uma identidade conflitante.',
+      video: 'Preserve a identidade visual de cada personagem do primeiro ao último quadro: espécie, rosto, cores, proporções, roupa e acessórios. Evite troca de identidade, duplicação ou deformação.',
     },
   },
   {
     id: 'product',
-    name: 'Produto fiel',
-    detail: 'Preserva formato, embalagem, cores e rótulo.',
+    name: 'Fidelidade às referências',
+    detail: 'Preserva os detalhes visuais das imagens de referência usadas na história.',
     prompt: {
-      image: 'Se houver imagem de referência do produto, preserve formato, proporções, cores, materiais e embalagem. Mantenha o produto reconhecível e sem deformações; não invente marca, rótulo, logotipo ou alegação. Sem referência, represente somente o produto descrito no prompt.',
-      video: 'Se houver referência de produto, mantenha formato, proporções, cores, materiais e embalagem consistentes em todos os quadros. Mostre o produto com clareza durante a ação; não o duplique, distorça ou oculte, nem invente marca, rótulo ou alegação. Sem referência, siga a descrição do prompt.',
+      image: 'Se houver referência da fruta, personagem ou objeto central, preserve seus traços identificáveis, forma, cores e detalhes importantes. Use a referência como guia visual sem substituir a identidade definida pelo prompt.',
+      video: 'Preserve os detalhes identificáveis da fruta, personagem ou objeto central de referência em todos os quadros. Não troque espécie, cores, formato, roupa ou atributos visuais definidos; não invente marcas ou elementos que não aparecem na referência.',
     },
   },
   {
     id: 'ugc',
-    name: 'UGC natural',
-    detail: 'Visual espontâneo, humano e próximo.',
+    name: 'Movimento natural',
+    detail: 'Evita gestos duros, movimentos robóticos e ações difíceis de entender.',
     prompt: {
-      image: 'Crie uma pose acessível e relaxada, com expressão espontânea, pele de textura natural e imperfeições sutis preservadas. Prefira sensação de conteúdo feito por criador real; evite retoque plástico, pose rígida e sorriso artificial.',
-      video: 'Use expressão espontânea, piscadas e respiração naturais, contato visual confortável e gestos pequenos e legíveis. Sincronize fala apenas se o prompt pedir fala. Evite atuação exagerada, movimento robótico, gestos repetitivos e instabilidade das mãos ou do rosto.',
+      image: 'Escolha uma pose clara e natural para o personagem, com mãos, braços e postura coerentes com a ação. Evite membros extras, gestos impossíveis ou elementos que se fundam ao corpo.',
+      video: 'Use movimentos contínuos, simples e naturais. Cada personagem deve executar uma ação compreensível; mantenha mãos, braços e objetos consistentes e evite movimentos robóticos, repetidos ou anatomicamente impossíveis.',
     },
   },
   {
     id: 'cinematic',
-    name: 'Direção cinematográfica',
+    name: 'Luz e câmera cinematográficas',
     detail: 'Mantém luz e composição coerentes com a cena.',
     prompt: {
-      image: 'Use composição intencional com hierarquia visual clara, perspectiva plausível, luz coerente com o ambiente e profundidade de campo natural. Preserve detalhes da pessoa e do produto; evite filtros, efeitos ou elementos decorativos que desviem o foco.',
-      video: 'Mantenha composição, exposição, direção da luz e aparência da lente coerentes ao longo da cena. Use movimento de câmera suave e contínuo somente quando combinar com o prompt. Evite flicker, mudanças de cenário, cortes, zooms ou movimentos bruscos não solicitados.',
+      image: 'Use composição intencional, perspectiva plausível e iluminação coerente com o cenário. Mantenha personagem e ação em destaque, com profundidade de campo natural; evite efeitos decorativos que distraiam.',
+      video: 'Mantenha enquadramento, exposição e direção da luz coerentes durante a cena. Use movimento de câmera suave quando combinar com a história; evite flicker, mudanças de cenário, cortes ou zooms não solicitados.',
     },
   },
   {
     id: 'hook',
-    name: 'Gancho e demonstração',
-    detail: 'Mostra o produto e seu benefício principal.',
+    name: 'Gancho viral',
+    detail: 'Começa com uma situação intrigante e termina mantendo a curiosidade.',
     prompt: {
-      image: 'Escolha um instante visual que comunique rapidamente a ação ou o benefício descrito, com pessoa e produto legíveis na composição. Não invente resultados, alegações, preço ou texto promocional; só inclua lettering se o prompt pedir.',
-      video: 'Abra imediatamente com uma ação visual relevante, mostre uma única demonstração fácil de entender e conclua com pessoa e produto em uma posição clara. Mantenha continuidade entre ação e enquadramento; não invente resultados, alegações, preço ou texto promocional.',
+      image: 'Escolha um instante visual intrigante que deixe claro quem está em cena e sugira o conflito ou a pergunta central. Não misture momentos diferentes na mesma imagem.',
+      video: 'Abra já no momento mais intrigante, desenvolva a situação sem introdução longa e termine com uma revelação, escolha ou pergunta que desperte curiosidade pelo próximo episódio.',
+    },
+  },
+  {
+    id: 'fruit-identity',
+    name: 'Identidade da fruta',
+    detail: 'A fruta é reconhecível e continua sendo a base visual do personagem.',
+    prompt: {
+      image: 'A fruta escolhida deve ser a identidade visual do personagem, não apenas um acessório: preserve formato, casca, polpa, sementes, folhas e cores reconhecíveis, integrados a rosto e corpo humanoides coerentes.',
+      video: 'Mantenha a fruta reconhecível em todos os quadros, preservando formato, casca, folhas, cores e proporções do personagem. Não transforme a fruta em uma pessoa comum nem altere sua espécie durante a cena.',
+    },
+  },
+  {
+    id: 'character-bible',
+    name: 'Elenco sem duplicações',
+    detail: 'Define aparência, papel, roupa e traços que não mudam entre cenas.',
+    prompt: {
+      image: 'Mostre um personagem original com olhos expressivos, boca, braços, mãos, pernas e postura legíveis. A roupa, o papel e os traços distintivos devem combinar com a descrição, sem adicionar outro personagem não solicitado.',
+      video: 'Mantenha cada personagem com a mesma fruta, rosto, cores, proporções, roupa e acessórios em toda a cena. Diferencie os personagens por aparência e posição; não os duplique nem troque seus papéis.',
+    },
+  },
+  {
+    id: 'story-beats',
+    name: 'Conflito e reviravolta',
+    detail: 'Organiza gancho, conflito, reação e revelação com continuidade causal.',
+    prompt: {
+      image: 'Escolha um instante decisivo que revele o conflito e a emoção da história por meio de expressões e gestos. Não misture momentos diferentes nem acrescente texto à imagem.',
+      video: 'Comece já com uma situação intrigante, desenvolva um conflito simples por meio de ação e reação e termine com uma revelação, escolha ou gancho coerente. Preserve causa e efeito; evite reviravolta aleatória.',
+    },
+  },
+  {
+    id: 'story-world',
+    name: 'Ambiente e objetos da cena',
+    detail: 'Usa ambiente e objetos para dar contexto à cena sem roubar o foco.',
+    prompt: {
+      image: 'Escolha um ambiente coerente com o papel e a situação. Inclua poucos objetos relevantes à ação e organize o cenário para manter personagem, emoção e objeto narrativo em destaque.',
+      video: 'Mantenha o mesmo local e os mesmos objetos importantes durante a cena. Faça cada objeto apoiar a ação ou o conflito; não troque de ambiente nem introduza elementos sem motivação narrativa.',
+    },
+  },
+  {
+    id: 'visual-acting',
+    name: 'Emoção em cena',
+    detail: 'Traduz emoção em expressão facial, gesto e postura claros.',
+    prompt: {
+      image: 'Expresse a emoção indicada com olhos, sobrancelhas, boca, mãos e postura coerentes. Use uma pose fácil de ler e evite expressões contraditórias ou gestos escondidos pelo enquadramento.',
+      video: 'Use movimentos naturais e contidos que expressem a emoção: olhar, expressão facial, postura e gesto devem acompanhar a fala e a ação. Evite gestos repetidos, braços extras ou mudanças bruscas de humor.',
+    },
+  },
+  {
+    id: 'dialogue-ptbr',
+    name: 'Falas em português brasileiro',
+    detail: 'Mantém falas naturais em pt-BR e curtas o bastante para terminar no vídeo.',
+    prompt: {
+      image: 'Como esta é uma imagem estática, não inclua balões de fala, legendas nem lettering, salvo se o prompt pedir texto explicitamente.',
+      video: 'Todo diálogo e narração devem ser exclusivamente em português brasileiro (pt-BR), com vocabulário e pronúncia naturais do Brasil. Use frases curtas que terminem antes do vídeo acabar; não acrescente falas em outro idioma.',
     },
   },
 ] as const;
 
 const BUILT_INS: CustomAvatarTemplate[] = [
-  { id: 'ugc-product', name: 'UGC · Apresentação de produto', mode: 'video', prompt: 'A influencer apresenta o produto com naturalidade, mostra os detalhes importantes e demonstra como ele é usado.', skillIds: ['identity', 'product', 'ugc', 'hook'] },
-  { id: 'fashion-editorial', name: 'Moda · Editorial de luxo', mode: 'image', prompt: 'Crie uma imagem editorial de moda sofisticada, valorizando o caimento, os materiais e os detalhes da peça em um cenário elegante.', skillIds: ['identity', 'cinematic'] },
-  { id: 'honest-review', name: 'Review · Demonstração sincera', mode: 'video', prompt: 'A influencer demonstra o produto em uso, destaca um benefício concreto e reage de forma espontânea, como em uma recomendação pessoal.', skillIds: ['identity', 'product', 'ugc'] },
-  { id: 'brand-campaign', name: 'Campanha · Cena de marca', mode: 'image', prompt: 'Crie uma imagem de campanha premium com foco no produto, cenário coerente com a marca e composição limpa, pronta para anúncio.', skillIds: ['product', 'cinematic'] },
+  { id: 'fruit-character', name: 'Personagem-fruta · Retrato 3D', mode: 'image', prompt: 'Crie um personagem antropomórfico original de [fruta], com traços humanos expressivos, postura legível, roupa ligada ao seu papel e detalhes visuais próprios. Use fundo e iluminação coerentes com sua personalidade.', skillIds: ['identity', 'product', 'fruit-identity', 'character-bible', 'visual-acting', 'cinematic'] },
+  { id: 'fruit-drama-scene', name: 'Cena dramática · Dupla de frutas', mode: 'image', prompt: 'Mostre [personagem principal] e [segundo personagem] em um momento decisivo da história. Dê a cada um uma emoção contrastante e uma interação clara, usando um cenário e objetos que revelem o conflito.', skillIds: ['identity', 'product', 'fruit-identity', 'character-bible', 'story-world', 'visual-acting', 'cinematic'] },
+  { id: 'fruit-family-drama', name: 'Novela de frutas · Drama familiar', mode: 'video', prompt: 'Crie um episódio de novela com frutas antropomórficas originais. Apresente rapidamente um conflito familiar, mostre uma reação emocional e termine com uma decisão ou revelação que abra o próximo capítulo.', skillIds: ['identity', 'product', 'fruit-identity', 'character-bible', 'story-beats', 'story-world', 'visual-acting', 'ugc', 'dialogue-ptbr'] },
+  { id: 'fruit-secret-twist', name: 'Microdrama · Segredo revelado', mode: 'video', prompt: 'Comece no instante em que algo estranho é percebido. Construa a suspeita com pistas visuais claras, faça os personagens reagirem e revele um segredo coerente no final, deixando uma pergunta para o próximo episódio.', skillIds: ['identity', 'product', 'fruit-identity', 'character-bible', 'story-beats', 'story-world', 'hook', 'ugc', 'dialogue-ptbr'] },
+  { id: 'fruit-romance-triangle', name: 'Romance frutado · Escolha difícil', mode: 'video', prompt: 'Crie uma cena romântica original entre personagens-fruta, com interesse, ciúme ou mal-entendido fácil de entender. Termine com uma escolha ou interrupção que deixe a relação em aberto.', skillIds: ['identity', 'product', 'fruit-identity', 'character-bible', 'story-beats', 'visual-acting', 'cinematic', 'ugc', 'dialogue-ptbr'] },
+  { id: 'fruit-comedy', name: 'Comédia frutada · Confusão do dia', mode: 'video', prompt: 'Crie uma situação cotidiana engraçada protagonizada por frutas antropomórficas originais. A confusão deve nascer de uma ação simples, crescer com uma reação inesperada e terminar em um desfecho visual claro.', skillIds: ['identity', 'product', 'fruit-identity', 'character-bible', 'story-world', 'visual-acting', 'hook', 'ugc', 'dialogue-ptbr'] },
+  { id: 'fruit-mystery', name: 'Mistério no pomar · Pista e gancho', mode: 'video', prompt: 'Crie uma cena curta de mistério em um mundo de frutas. Mostre uma pista concreta, uma investigação simples e uma descoberta parcial; encerre antes de explicar tudo para manter a curiosidade.', skillIds: ['identity', 'product', 'fruit-identity', 'character-bible', 'story-beats', 'story-world', 'cinematic', 'ugc', 'dialogue-ptbr'] },
 ];
 
 function buildTemplatePrompt(prompt: string, skillIds: string[], mode: AvatarTemplateMode) {
@@ -84,10 +141,10 @@ export function AvatarTemplatesPanel() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [migratingTemplates, setMigratingTemplates] = useState(false);
   const [mode, setMode] = useState<AvatarTemplateMode>('video');
-  const [selectedId, setSelectedId] = useState('ugc-product');
-  const [name, setName] = useState(BUILT_INS[0]!.name);
-  const [prompt, setPrompt] = useState(BUILT_INS[0]!.prompt);
-  const [skillIds, setSkillIds] = useState<string[]>([...BUILT_INS[0]!.skillIds]);
+  const [selectedId, setSelectedId] = useState('fruit-family-drama');
+  const [name, setName] = useState(BUILT_INS.find((template) => template.id === 'fruit-family-drama')!.name);
+  const [prompt, setPrompt] = useState(BUILT_INS.find((template) => template.id === 'fruit-family-drama')!.prompt);
+  const [skillIds, setSkillIds] = useState<string[]>([...BUILT_INS.find((template) => template.id === 'fruit-family-drama')!.skillIds]);
   const [preparing, setPreparing] = useState(false);
   const submitRef = useRef<() => Promise<void>>(async () => undefined);
   const videoSubmitLockRef = useRef(false);
@@ -348,7 +405,7 @@ export function AvatarTemplatesPanel() {
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3 thin-scroll">
         <div className="rounded-2xl border border-accent/40 bg-accent-soft/50 p-3">
           <div className="flex items-center gap-2 text-xs font-bold text-fg"><Sparkles className="size-4 text-accent" /> Templates personalizados</div>
-          <p className="mt-1 text-[11px] leading-relaxed text-fg-muted">Combine skills de identidade, produto, UGC e direção para montar o prompt. Seus templates ficam salvos na conta e disponíveis em outros dispositivos. Aplicar só preenche o canvas; os créditos são cobrados ao gerar.</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-fg-muted">Combine skills de personagens, narrativa, referências e direção. Os templates ficam salvos na conta; aplicar preenche o canvas sem cobrar créditos.</p>
         </div>
 
         {legacyLocalTemplates.length > 0 && (
