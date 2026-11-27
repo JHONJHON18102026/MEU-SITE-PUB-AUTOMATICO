@@ -31,7 +31,7 @@ export function QuickAvatarSelect({
   const storageKey = `fd-avatar-hidden-quick-select:${userId ?? 'anonymous'}`;
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
   const options = [
-    ...myAvatars.slice(0, 4).map((a) => ({ id: a.id, label: a.name, url: a.image_url })),
+    ...myAvatars.slice(0, 4).map((a) => ({ id: a.id, label: a.name, url: a.thumbnail_url ?? a.image_url })),
     ...SHOWCASE_AVATARS.slice(0, 6).map((a) => ({ id: a.id, label: a.name, url: a.image_url })),
   ];
 

@@ -111,6 +111,8 @@ export interface AvatarDTO {
   generation_id?: string | null;
   name: string;
   image_url: string;
+  /** Smaller WebP for gallery grids; image_url remains the full-resolution original. */
+  thumbnail_url?: string;
   prompt: string;
   attributes: Record<string, string[]>;
   engine: string;

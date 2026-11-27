@@ -9,7 +9,7 @@ function PickerGrid({ items, onPick }: { items: AvatarDTO[]; onPick: (avatar: Av
     <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
       {items.map((a) => (
         <button key={a.id} onClick={() => onPick(a)} className="group relative overflow-hidden rounded-xl border border-border hover:border-accent">
-          <img src={a.image_url} alt={avatarCardName(a)} className="aspect-[3/4] w-full object-cover object-top transition group-hover:scale-105" loading="lazy" />
+          <img src={a.thumbnail_url ?? a.image_url} alt={avatarCardName(a)} className="aspect-[3/4] w-full object-cover object-top transition group-hover:scale-105" loading="lazy" decoding="async" />
           <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-2 py-1.5 text-left text-[11px] font-semibold text-white">
             {avatarCardName(a)}
           </span>

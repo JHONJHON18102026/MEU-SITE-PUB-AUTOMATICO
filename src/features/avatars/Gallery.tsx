@@ -164,7 +164,7 @@ function AvatarGrid({ items, pending, onOpen, emptyText }: { items: AvatarDTO[];
         return (
         <div key={a.id} draggable onDragStart={(event) => setDraggedAvatar(event, a)} title="Arraste para o canvas para usar esta imagem" className="group relative break-inside-avoid cursor-grab overflow-hidden rounded-2xl border border-accent/20 bg-[linear-gradient(145deg,#1a1629,#111019)] shadow-[0_14px_34px_rgba(0,0,0,.2)] transition duration-300 hover:-translate-y-1 hover:border-accent/60 hover:shadow-[0_22px_48px_rgba(72,42,150,.3)] active:cursor-grabbing">
           <button type="button" onClick={() => onOpen(a)} className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            <img src={a.image_url} alt={displayName} loading="lazy" className={clsx('w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]', ratioClass(a.aspect_ratio))} />
+            <img src={a.thumbnail_url ?? a.image_url} alt={displayName} loading="lazy" decoding="async" className={clsx('w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]', ratioClass(a.aspect_ratio))} />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
             <div className="pointer-events-none absolute bottom-2.5 left-3 right-24 truncate text-xs font-semibold text-white opacity-90">
               {displayName}
@@ -355,7 +355,7 @@ function MyAvatarsPanel({
                 return (
                 <div key={a.id} draggable onDragStart={(event) => setDraggedAvatar(event, a)} title="Arraste para o canvas para usar esta imagem" className="group relative aspect-[3/4] cursor-grab overflow-hidden rounded-2xl border border-accent/20 bg-[linear-gradient(145deg,#1a1629,#111019)] shadow-[0_12px_30px_rgba(0,0,0,.18)] transition duration-300 hover:-translate-y-1 hover:border-accent/60 hover:shadow-[0_20px_44px_rgba(72,42,150,.28)] active:cursor-grabbing">
                   <button type="button" onClick={() => onOpen(a)} className="block h-full w-full text-left">
-                    <img src={a.image_url} alt={displayName} className="h-full w-full object-cover object-top transition duration-300 group-hover:scale-105" />
+                    <img src={a.thumbnail_url ?? a.image_url} alt={displayName} loading="lazy" decoding="async" className="h-full w-full object-cover object-top transition duration-300 group-hover:scale-105" />
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent p-2.5">
                       <div className="truncate text-xs font-semibold text-white">{displayName}</div>
                     </div>

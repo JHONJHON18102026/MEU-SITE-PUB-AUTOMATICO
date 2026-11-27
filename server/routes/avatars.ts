@@ -34,6 +34,7 @@ import { findOption, type AttributeSelection } from '../../shared/attributes';
 import type { AppEnv } from '../app';
 import { avatarTemplateInputSchema, type AvatarTemplateDTO } from '../../shared/avatarTemplateContracts';
 import { invalidateSignedStorageUrl, signedStorageUrls } from '../storage';
+import { avatarThumbnailPath, optimizeAvatarImage } from '../avatarImageOptimization';
 
 export const avatarRoutes = new Hono<AppEnv>();
 
@@ -200,13 +201,34 @@ avatarRoutes.get('/gallery', async (c) => {
   } catch (error) {
     throw new ApiError('INTERNAL', `Não consegui preparar as imagens da galeria: ${error instanceof Error ? error.message : String(error)}`);
   }
+  let thumbnailByPath = new Map<string, string>();
+  if (scope === 'mine') {
+    // One Storage listing per owner's folder reveals which legacy/new items have
+    // a thumbnail without probing every object or adding a database migration.
+    const { data: files, error: listError } = await admin.storage.from(BUCKET).list(userId, { limit: 1000 });
+    if (!listError) {
+      const fileNames = new Set((files ?? []).map((file) => file.name));
+      const thumbnailPaths = rows
+        .map((avatar) => avatarThumbnailPath(avatar.storage_path))
+        .filter((path) => fileNames.has(path.slice(userId.length + 1)));
+      try {
+        thumbnailByPath = await signedStorageUrls(BUCKET, thumbnailPaths, SIGNED_IMAGE_TTL_SECONDS);
+      } catch (signError) {
+        console.warn(`[avatars] Não foi possível assinar miniaturas: ${signError instanceof Error ? signError.message : String(signError)}`);
+      }
+    } else {
+      console.warn(`[avatars] Não foi possível listar miniaturas: ${listError.message}`);
+    }
+  }
   const avatars = rows.map((avatar) => {
     const signedUrl = signedByPath.get(avatar.storage_path);
     if (!signedUrl) {
       console.error(`[avatars] URL temporária falhou para ${avatar.id}: URL ausente`);
       return null;
     }
-    return { ...avatar, image_url: signedUrl };
+    const thumbnailPath = avatarThumbnailPath(avatar.storage_path);
+    const thumbnailUrl = thumbnailByPath.get(thumbnailPath);
+    return { ...avatar, image_url: signedUrl, ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}) };
   });
   return c.json({ avatars: avatars.filter((avatar): avatar is NonNullable<typeof avatar> => avatar !== null) });
 });
@@ -223,7 +245,7 @@ async function downloadAvatarAsInput(userId: string, avatarId: string): Promise<
   const file = await admin.storage.from(BUCKET).download(data.storage_path);
   if (file.error || !file.data) throw new ApiError('INTERNAL', 'Não consegui baixar o avatar base.');
   const buffer = Buffer.from(await file.data.arrayBuffer());
-  return { mimeType: 'image/png', data: buffer.toString('base64') };
+  return { mimeType: data.storage_path.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/png', data: buffer.toString('base64') };
 }
 
 avatarRoutes.post('/generate', async (c) => {
@@ -345,15 +367,27 @@ avatarRoutes.post('/generate', async (c) => {
       const branded = (await isOwnerUser(userId)) ? await applyWatermark(raw.buffer) : raw.buffer;
       const avatarId = randomUUID();
       const storagePath = `${userId}/${avatarId}.png`;
-      const up = await admin.storage.from(BUCKET).upload(storagePath, branded, {
+      const thumbnailPath = avatarThumbnailPath(storagePath);
+      const optimized = await optimizeAvatarImage(branded);
+      const up = await admin.storage.from(BUCKET).upload(storagePath, optimized.full, {
         contentType: 'image/png',
         cacheControl: '31536000',
         upsert: false,
       });
       if (up.error) throw new ApiError('INTERNAL', `Falha ao salvar a imagem: ${up.error.message}`);
+      const thumbnailUpload = await admin.storage.from(BUCKET).upload(thumbnailPath, optimized.thumbnail, {
+        contentType: 'image/webp',
+        cacheControl: '31536000',
+        upsert: false,
+      });
+      if (thumbnailUpload.error) {
+        // A full image is the product; a failed optional thumbnail must not fail
+        // a paid generation or hide a successfully generated image.
+        console.warn(`[avatars] Miniatura não salva para ${avatarId}: ${thumbnailUpload.error.message}`);
+      }
       // O bucket de avatares é privado; URL pública gera imagem quebrada no
       // navegador e impede que o Motion reutilize o avatar recém-criado.
-      const signed = await signedStorageUrls(BUCKET, [storagePath], SIGNED_IMAGE_TTL_SECONDS);
+      const signed = await signedStorageUrls(BUCKET, [storagePath, ...(thumbnailUpload.error ? [] : [thumbnailPath])], SIGNED_IMAGE_TTL_SECONDS);
       const signedUrl = signed.get(storagePath);
       if (!signedUrl) throw new ApiError('INTERNAL', 'Falha ao preparar a imagem para visualização: URL ausente');
       return {
@@ -362,6 +396,7 @@ avatarRoutes.post('/generate', async (c) => {
         generation_id: generationId,
         name: suggestAvatarName(req.attributes as AttributeSelection, index, req.extraDetails),
         image_url: signedUrl,
+        ...(signed.get(thumbnailPath) ? { thumbnail_url: signed.get(thumbnailPath)! } : {}),
         storage_path: storagePath,
         // Persist the exact assembled prompt sent to the image engine so the
         // detail view exposes selected attributes, references, and constraints.
@@ -380,9 +415,15 @@ avatarRoutes.post('/generate', async (c) => {
 
   let saved: AvatarDTO[] = [];
   if (ok.length) {
-    const ins = await admin.from('avatars').insert(ok).select();
+    const insertRows = ok.map(({ thumbnail_url: _thumbnailUrl, ...row }) => row);
+    const ins = await admin.from('avatars').insert(insertRows).select();
     if (ins.error) throw new ApiError('INTERNAL', `Falha ao gravar avatares: ${ins.error.message}`);
-    saved = ins.data as AvatarDTO[];
+    const thumbnailsById = new Map<string, string | undefined>();
+    for (const avatar of ok) thumbnailsById.set(avatar.id, avatar.thumbnail_url);
+    saved = (ins.data as AvatarDTO[]).map((avatar) => ({
+      ...avatar,
+      ...(thumbnailsById.get(avatar.id) ? { thumbnail_url: thumbnailsById.get(avatar.id)! } : {}),
+    }));
   }
 
   // ---- estorno proporcional ao que falhou
@@ -426,8 +467,16 @@ avatarRoutes.delete('/:id', async (c) => {
   const { data, error } = await admin.from('avatars').select('storage_path, user_id').eq('id', id).maybeSingle();
   if (error) throw new ApiError('INTERNAL', error.message);
   if (!data || data.user_id !== userId) throw new ApiError('INVALID_INPUT', 'Avatar não encontrado.');
-  await admin.storage.from(BUCKET).remove([data.storage_path]);
+  const thumbnailPath = avatarThumbnailPath(data.storage_path);
+  const thumbnailName = thumbnailPath.slice(userId.length + 1);
+  const { data: ownerFiles, error: listError } = await admin.storage.from(BUCKET).list(userId, { search: thumbnailName, limit: 10 });
+  if (listError) throw new ApiError('INTERNAL', `Não consegui verificar a miniatura antes da exclusão: ${listError.message}`);
+  const pathsToRemove = [data.storage_path];
+  if ((ownerFiles ?? []).some((file) => file.name === thumbnailName)) pathsToRemove.push(thumbnailPath);
+  const { error: removeError } = await admin.storage.from(BUCKET).remove(pathsToRemove);
+  if (removeError) throw new ApiError('INTERNAL', `Não consegui remover a imagem do armazenamento: ${removeError.message}`);
   invalidateSignedStorageUrl(BUCKET, data.storage_path);
+  if (pathsToRemove.includes(thumbnailPath)) invalidateSignedStorageUrl(BUCKET, thumbnailPath);
   const del = await admin.from('avatars').delete().eq('id', id);
   if (del.error) throw new ApiError('INTERNAL', del.error.message);
   return c.json({ ok: true });
