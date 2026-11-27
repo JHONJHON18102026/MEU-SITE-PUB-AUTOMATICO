@@ -113,8 +113,8 @@ export function HomePage() {
           className="group relative flex min-h-[232px] md:aspect-[620/232] flex-col justify-between overflow-hidden rounded-3xl border border-accent/30 bg-[#171229] p-7 text-white shadow-[0_22px_60px_rgba(72,42,150,0.24)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-1 hover:border-accent/65 hover:shadow-[0_28px_70px_rgba(72,42,150,.34)] md:p-8"
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_18%,rgba(138,97,255,0.34),rgba(23,18,41,0.94)_65%)]" />
-          <img src="/showcase/landing/influencer-ai-new.jpg" alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover object-center opacity-80 transition-transform duration-300 group-hover:scale-[1.03]" />
-          <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(90deg, #171229 0%, rgba(23,18,41,.97) 27%, rgba(23,18,41,.78) 48%, rgba(23,18,41,.28) 72%, rgba(23,18,41,0) 100%)' }} />
+          <img src="/showcase/landing/influencer-ai-new.jpg" alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover object-center opacity-80 transition-transform duration-300 group-hover:scale-[1.03]" style={{ maskImage: 'linear-gradient(90deg, transparent 12%, black 58%)', WebkitMaskImage: 'linear-gradient(90deg, transparent 12%, black 58%)' }} />
+          <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(90deg, #171229 0%, rgba(23,18,41,.98) 18%, rgba(23,18,41,.86) 36%, rgba(23,18,41,.55) 54%, rgba(23,18,41,.2) 74%, rgba(23,18,41,0) 100%)' }} />
           <img src="/brand/fd-logo-v4.png" alt="" className="absolute right-3.5 top-3 h-7 w-auto opacity-80" />
 
           <div className="relative z-10 max-w-[84%]">
@@ -141,8 +141,9 @@ export function HomePage() {
             loading="lazy"
             decoding="async"
             className="absolute inset-0 h-full w-full object-cover object-center opacity-90 transition-transform duration-300 group-hover:scale-[1.03]"
+            style={{ maskImage: 'linear-gradient(90deg, transparent 10%, black 56%)', WebkitMaskImage: 'linear-gradient(90deg, transparent 10%, black 56%)' }}
           />
-          <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(90deg, #111a2f 0%, rgba(17,26,47,.97) 25%, rgba(17,26,47,.8) 47%, rgba(17,26,47,.3) 72%, rgba(17,26,47,0) 100%)' }} />
+          <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(90deg, #111a2f 0%, rgba(17,26,47,.98) 16%, rgba(17,26,47,.87) 36%, rgba(17,26,47,.56) 55%, rgba(17,26,47,.22) 76%, rgba(17,26,47,0) 100%)' }} />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#0d0d18]/80 to-transparent" />
           <img src="/brand/fd-logo-v4.png" alt="" className="absolute right-3.5 top-3 h-7 w-auto opacity-80" />
 
