@@ -33,6 +33,7 @@ import {
 import { findOption, type AttributeSelection } from '../../shared/attributes';
 import type { AppEnv } from '../app';
 import { avatarTemplateInputSchema, type AvatarTemplateDTO } from '../../shared/avatarTemplateContracts';
+import { invalidateSignedStorageUrl, signedStorageUrls } from '../storage';
 
 export const avatarRoutes = new Hono<AppEnv>();
 
@@ -193,19 +194,19 @@ avatarRoutes.get('/gallery', async (c) => {
 
   // O endpoint de lote gera as URLs temporárias em uma chamada ao Storage,
   // em vez de fazer uma chamada por avatar (até 120 por carregamento).
-  const signed = await admin.storage
-    .from(BUCKET)
-    .createSignedUrls([...new Set(rows.map((avatar) => avatar.storage_path))], SIGNED_IMAGE_TTL_SECONDS);
-  if (signed.error) throw new ApiError('INTERNAL', `Não consegui preparar as imagens da galeria: ${signed.error.message}`);
-
-  const signedByPath = new Map(signed.data.map((item) => [item.path, item]));
+  let signedByPath: Map<string, string>;
+  try {
+    signedByPath = await signedStorageUrls(BUCKET, rows.map((avatar) => avatar.storage_path), SIGNED_IMAGE_TTL_SECONDS);
+  } catch (error) {
+    throw new ApiError('INTERNAL', `Não consegui preparar as imagens da galeria: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const avatars = rows.map((avatar) => {
-    const item = signedByPath.get(avatar.storage_path);
-    if (item?.error || !item?.signedUrl) {
-      console.error(`[avatars] URL temporária falhou para ${avatar.id}:`, item?.error ?? 'URL ausente');
+    const signedUrl = signedByPath.get(avatar.storage_path);
+    if (!signedUrl) {
+      console.error(`[avatars] URL temporária falhou para ${avatar.id}: URL ausente`);
       return null;
     }
-    return { ...avatar, image_url: item.signedUrl };
+    return { ...avatar, image_url: signedUrl };
   });
   return c.json({ avatars: avatars.filter((avatar): avatar is NonNullable<typeof avatar> => avatar !== null) });
 });
@@ -352,16 +353,15 @@ avatarRoutes.post('/generate', async (c) => {
       if (up.error) throw new ApiError('INTERNAL', `Falha ao salvar a imagem: ${up.error.message}`);
       // O bucket de avatares é privado; URL pública gera imagem quebrada no
       // navegador e impede que o Motion reutilize o avatar recém-criado.
-      const signed = await admin.storage.from(BUCKET).createSignedUrl(storagePath, 60 * 60);
-      if (signed.error || !signed.data?.signedUrl) {
-        throw new ApiError('INTERNAL', `Falha ao preparar a imagem para visualização: ${signed.error?.message ?? 'URL ausente'}`);
-      }
+      const signed = await signedStorageUrls(BUCKET, [storagePath], SIGNED_IMAGE_TTL_SECONDS);
+      const signedUrl = signed.get(storagePath);
+      if (!signedUrl) throw new ApiError('INTERNAL', 'Falha ao preparar a imagem para visualização: URL ausente');
       return {
         id: avatarId,
         user_id: userId,
         generation_id: generationId,
         name: suggestAvatarName(req.attributes as AttributeSelection, index, req.extraDetails),
-        image_url: signed.data.signedUrl,
+        image_url: signedUrl,
         storage_path: storagePath,
         // Persist the exact assembled prompt sent to the image engine so the
         // detail view exposes selected attributes, references, and constraints.
@@ -427,6 +427,7 @@ avatarRoutes.delete('/:id', async (c) => {
   if (error) throw new ApiError('INTERNAL', error.message);
   if (!data || data.user_id !== userId) throw new ApiError('INVALID_INPUT', 'Avatar não encontrado.');
   await admin.storage.from(BUCKET).remove([data.storage_path]);
+  invalidateSignedStorageUrl(BUCKET, data.storage_path);
   const del = await admin.from('avatars').delete().eq('id', id);
   if (del.error) throw new ApiError('INTERNAL', del.error.message);
   return c.json({ ok: true });

@@ -3,6 +3,71 @@ import { getAdmin } from './supabaseAdmin';
 
 export const VIDEO_BUCKET = 'videos';
 const SIGNED_URL_TTL = 60 * 60;
+const SIGNED_URL_REUSE_SECONDS = 50 * 60;
+
+type SignedUrlCacheEntry = { url: string; expiresAt: number };
+const signedUrlCache = new Map<string, SignedUrlCacheEntry>();
+const signedUrlBatches = new Map<string, Promise<void>>();
+
+function signedUrlKey(bucket: string, path: string) {
+  return `${bucket}\\0${path}`;
+}
+
+function pruneSignedUrlCache(now: number) {
+  for (const [key, entry] of signedUrlCache) {
+    if (entry.expiresAt <= now) signedUrlCache.delete(key);
+  }
+  while (signedUrlCache.size > 2_000) {
+    const oldestKey = signedUrlCache.keys().next().value;
+    if (!oldestKey) break;
+    signedUrlCache.delete(oldestKey);
+  }
+}
+
+/** Reuses stable signed URLs within one Node process so gallery refreshes do not
+ * generate a new CDN cache key for the same private Storage object. */
+export async function signedStorageUrls(bucket: string, paths: string[], ttlSeconds = SIGNED_URL_TTL) {
+  const uniquePaths = [...new Set(paths.filter(Boolean))];
+  const now = Date.now();
+  pruneSignedUrlCache(now);
+  const urls = new Map<string, string>();
+  const missing: string[] = [];
+  for (const path of uniquePaths) {
+    const entry = signedUrlCache.get(signedUrlKey(bucket, path));
+    if (entry && entry.expiresAt > now) urls.set(path, entry.url);
+    else missing.push(path);
+  }
+
+  if (missing.length) {
+    // Coalesce simultaneous requests for the same gallery set into one Storage call.
+    const batchKey = `${bucket}\\0${ttlSeconds}\\0${[...missing].sort().join('\\0')}`;
+    let batch = signedUrlBatches.get(batchKey);
+    if (!batch) {
+      batch = (async () => {
+        const { data, error } = await getAdmin().storage.from(bucket).createSignedUrls(missing, ttlSeconds);
+        if (error) throw error;
+        const expiresAt = Date.now() + SIGNED_URL_REUSE_SECONDS * 1000;
+        for (const item of data ?? []) {
+          if (item.path && item.signedUrl && !item.error) {
+            signedUrlCache.set(signedUrlKey(bucket, item.path), { url: item.signedUrl, expiresAt });
+          }
+        }
+        pruneSignedUrlCache(Date.now());
+      })().finally(() => signedUrlBatches.delete(batchKey));
+      signedUrlBatches.set(batchKey, batch);
+    }
+    await batch;
+    for (const path of missing) {
+      const entry = signedUrlCache.get(signedUrlKey(bucket, path));
+      if (entry && entry.expiresAt > Date.now()) urls.set(path, entry.url);
+    }
+  }
+  return urls;
+}
+
+export function invalidateSignedStorageUrl(bucket: string, path: string) {
+  signedUrlCache.delete(signedUrlKey(bucket, path));
+}
 
 export async function ensurePrivateGeneratedBuckets() {
   const admin = getAdmin();
@@ -14,9 +79,10 @@ export async function ensurePrivateGeneratedBuckets() {
 
 export async function signedMediaUrl(path: string | null | undefined) {
   if (!path) return null;
-  const { data, error } = await getAdmin().storage.from(VIDEO_BUCKET).createSignedUrl(path, SIGNED_URL_TTL);
-  if (error || !data?.signedUrl) throw new Error(`Não foi possível preparar o arquivo para visualização: ${error?.message ?? 'URL ausente'}`);
-  return data.signedUrl;
+  const urls = await signedStorageUrls(VIDEO_BUCKET, [path], SIGNED_URL_TTL);
+  const url = urls.get(path);
+  if (!url) throw new Error('Não foi possível preparar o arquivo para visualização: URL ausente');
+  return url;
 }
 
 /** Reidrata URLs privadas sem expor o caminho permanente do Storage. */
