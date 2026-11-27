@@ -196,10 +196,11 @@ export function AvatarTemplatesPanel() {
   const [selectedId, setSelectedId] = useState('fruit-family-drama');
   const [name, setName] = useState(BUILT_INS.find((template) => template.id === 'fruit-family-drama')!.name);
   const [prompt, setPrompt] = useState(BUILT_INS.find((template) => template.id === 'fruit-family-drama')!.prompt);
+  const [templatePrompt, setTemplatePrompt] = useState(BUILT_INS.find((template) => template.id === 'fruit-family-drama')!.prompt);
   const [skillIds, setSkillIds] = useState<string[]>([...BUILT_INS.find((template) => template.id === 'fruit-family-drama')!.skillIds]);
   const [preparing, setPreparing] = useState(false);
   const [generatingIdea, setGeneratingIdea] = useState(false);
-  const [randomIdea, setRandomIdea] = useState('');
+  const [promptIsArgonIdea, setPromptIsArgonIdea] = useState(false);
   const recentIdeasRef = useRef<string[]>([]);
   const recentIdeasKey = `fd-avatar-random-ideas:${profile?.id ?? 'local'}`;
   const submitRef = useRef<() => Promise<void>>(async () => undefined);
@@ -215,7 +216,7 @@ export function AvatarTemplatesPanel() {
     } catch {
       recentIdeasRef.current = [];
     }
-    setRandomIdea('');
+    setPromptIsArgonIdea(false);
   }, [recentIdeasKey]);
 
   useEffect(() => {
@@ -248,15 +249,15 @@ export function AvatarTemplatesPanel() {
   }, [setStudio]);
 
   function chooseTemplate(template: CustomAvatarTemplate) {
-    setRandomIdea('');
+    setPromptIsArgonIdea(false);
     setSelectedId(template.id);
     setName(template.name);
     setPrompt(template.prompt);
+    setTemplatePrompt(template.prompt);
     setSkillIds([...template.skillIds]);
   }
 
   function switchMode(nextMode: AvatarTemplateMode) {
-    setRandomIdea('');
     setMode(nextMode);
     const nextTemplate = [...BUILT_INS, ...savedTemplates].find((template) => template.mode === nextMode);
     if (nextTemplate) chooseTemplate(nextTemplate);
@@ -267,20 +268,22 @@ export function AvatarTemplatesPanel() {
   }
 
   async function generateRandomIdea() {
-    if (generatingIdea || !prompt.trim()) return;
+    if (generatingIdea || !templatePrompt.trim()) return;
     setGeneratingIdea(true);
     try {
       const skills = SKILLS.filter((skill) => skillIds.includes(skill.id)).map((skill) => ({
         name: skill.name,
-        instruction: skill.prompt.image,
+        instruction: skill.prompt[mode],
       }));
       const { idea } = await api.generateAvatarIdea({
         templateName: name.trim() || 'Personagem personalizado',
-        templatePrompt: prompt.trim(),
+        mode,
+        templatePrompt: templatePrompt.trim(),
         skills,
         recentPrompts: recentIdeasRef.current.slice(0, 12),
       });
-      setRandomIdea(idea);
+      setPrompt(idea);
+      setPromptIsArgonIdea(true);
       recentIdeasRef.current = [idea, ...recentIdeasRef.current.filter((item) => item !== idea)].slice(0, 20);
       localStorage.setItem(recentIdeasKey, JSON.stringify(recentIdeasRef.current));
       toast.success('Nova ideia criada pelo Argon, sem consumir créditos.');
@@ -292,8 +295,8 @@ export function AvatarTemplatesPanel() {
   }
 
   function applyTemplate() {
-    const { text: finalPrompt, compacted } = randomIdea.trim()
-      ? { text: randomIdea.trim(), compacted: false }
+    const { text: finalPrompt, compacted } = promptIsArgonIdea
+      ? { text: prompt.trim(), compacted: false }
       : buildTemplatePrompt(prompt, skillIds, mode);
     if (!finalPrompt) {
       toast.error('Escreva a ideia do template antes de aplicar.');
@@ -333,6 +336,8 @@ export function AvatarTemplatesPanel() {
       const template: CustomAvatarTemplate = { id: created.id, name: created.name, mode: created.mode, prompt: created.prompt, skillIds: created.skillIds };
       setSavedTemplates((current) => [template, ...current]);
       setSelectedId(template.id);
+      setTemplatePrompt(template.prompt);
+      setPromptIsArgonIdea(false);
       toast.success('Template salvo na sua conta. Você poderá reutilizá-lo em outros dispositivos.');
     } catch (error) {
       toast.error(error instanceof ApiClientError ? error.message : 'Não consegui salvar o template na sua conta.');
@@ -544,22 +549,14 @@ export function AvatarTemplatesPanel() {
 
         <section className="space-y-2">
           <div className="text-[11px] font-bold text-fg-muted">MONTE SEU TEMPLATE</div>
-          <input value={name} onChange={(event) => { setName(event.target.value); setSelectedId(''); setRandomIdea(''); }} maxLength={60} placeholder="Nome do template" className="w-full rounded-xl border border-border bg-surface-2 px-3 py-2 text-xs outline-none focus:border-accent" />
-          <textarea value={prompt} onChange={(event) => { setPrompt(event.target.value); setSelectedId(''); setRandomIdea(''); }} maxLength={1200} rows={4} placeholder="Escreva a estrutura ou a ideia principal..." className="w-full resize-y rounded-xl border border-border bg-surface-2 p-3 text-xs leading-relaxed outline-none focus:border-accent" />
-          {mode === 'image' && (
-            <div className="space-y-2">
-              <button type="button" onClick={() => void generateRandomIdea()} disabled={generatingIdea || !prompt.trim()} className="flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border border-accent/50 bg-accent-soft/50 px-3 py-2 text-[11px] font-semibold text-fg hover:border-accent disabled:cursor-wait disabled:opacity-60">
-                <Dices className={`size-3.5 ${generatingIdea ? 'animate-spin' : ''}`} />
-                {generatingIdea ? 'Criando uma ideia inédita…' : 'Gerar nova ideia com o Argon'}
-              </button>
-              {randomIdea && (
-                <label className="block space-y-1.5">
-                  <span className="text-[10px] font-bold text-fg-muted">NOVA IDEIA · EDITÁVEL · SEM CUSTO EM CRÉDITOS</span>
-                  <textarea value={randomIdea} onChange={(event) => setRandomIdea(event.target.value)} maxLength={1800} rows={5} className="w-full resize-y rounded-xl border border-accent/40 bg-surface-2 p-3 text-xs leading-relaxed outline-none focus:border-accent" />
-                </label>
-              )}
-            </div>
-          )}
+          <label className="block space-y-1.5">
+            <span className="text-[10px] font-bold text-fg-muted">{promptIsArgonIdea ? 'PROMPT GERADO PELO ARGON · EDITÁVEL · SEM CUSTO EM CRÉDITOS' : 'IDEIA E DIREÇÃO DO TEMPLATE'}</span>
+            <textarea value={prompt} onChange={(event) => { setPrompt(event.target.value); setSelectedId(''); if (!promptIsArgonIdea) setTemplatePrompt(event.target.value); }} maxLength={1800} rows={5} placeholder="Escreva a estrutura ou a ideia principal..." className={`w-full resize-y rounded-xl border ${promptIsArgonIdea ? 'border-accent/40' : 'border-border'} bg-surface-2 p-3 text-xs leading-relaxed outline-none focus:border-accent`} />
+          </label>
+          <button type="button" onClick={() => void generateRandomIdea()} disabled={generatingIdea || !templatePrompt.trim()} className="flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border border-accent/50 bg-accent-soft/50 px-3 py-2 text-[11px] font-semibold text-fg hover:border-accent disabled:cursor-wait disabled:opacity-60">
+            <Dices className={`size-3.5 ${generatingIdea ? 'animate-spin' : ''}`} />
+            {generatingIdea ? 'Criando uma ideia inédita…' : promptIsArgonIdea ? 'Gerar outra ideia com o Argon' : 'Gerar ideia com o Argon'}
+          </button>
           <div className="text-[10px] font-bold text-fg-muted">SKILLS</div>
           <div className="flex flex-wrap gap-1.5">
             {SKILLS.map((skill) => {

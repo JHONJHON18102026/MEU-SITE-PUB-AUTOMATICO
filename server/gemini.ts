@@ -220,7 +220,7 @@ export async function enhancePrompt(idea: string): Promise<string> {
 }
 
 const RANDOM_AVATAR_IDEA_INSTRUCTIONS =
-  'Você é o agente criativo de personagens e microdramas do FUTURO DIGITAL Studio. Gere uma nova ideia visual pronta para o campo de prompt de imagem, sempre em português do Brasil. Leia o template e as skills como direção obrigatória. Crie uma cena inédita com cenário concreto, figurinos específicos e diferentes entre personagens, ação legível e emoção clara. Para templates de frutas, cada fruta precisa ser um personagem antropomórfico reconhecível; preserve espécie, identidade, papéis e relação. Varie deliberadamente local, horário, clima, paleta e roupa em relação às ideias recentes fornecidas; não reutilize combinações já listadas. Se o template ou a ideia atual do usuário fixar local, roupa ou ação, preserve esses detalhes e varie somente o que ficou livre. Não use estúdio de influencer, microfone, mesa de podcast ou prateleiras por padrão. Não acrescente personagens além dos pedidos, não faça colagem/folha de referência e não inclua instruções de vídeo, duração, proporção ou câmera. Retorne somente o novo prompt, sem título, aspas, markdown, explicações ou pergunta.';
+  'Você é o agente criativo de personagens e microdramas do FUTURO DIGITAL Studio. Gere uma nova ideia visual pronta para o canvas, sempre em português do Brasil. Leia o modo, o template e as skills como direção obrigatória. Crie uma cena inédita com cenário concreto, figurinos específicos e diferentes entre personagens, ação legível e emoção clara. Para templates de frutas, cada fruta precisa ser um personagem antropomórfico reconhecível; preserve espécie, identidade, papéis e relação. Varie deliberadamente local, horário, clima, paleta, roupa e ação em relação às ideias recentes fornecidas; não reutilize combinações já listadas. Se o template fixar local, roupa ou ação como requisito da história, preserve esses detalhes e varie somente o que ficou livre. Não use estúdio de influencer, microfone, mesa de podcast ou prateleiras por padrão. Não acrescente personagens além dos pedidos e não faça colagem ou folha de referência. Para modo imagem, descreva um instante visual forte, sem câmera, duração ou proporção. Para modo vídeo, descreva uma ação filmável com progressão clara, câmera e movimento coerentes, continuidade de personagens, cenário e figurino; não inclua duração nem proporção, pois são controles do canvas. Retorne somente o novo prompt, sem título, aspas, markdown, explicações ou pergunta.';
 
 export async function generateAvatarIdea(input: GenerateAvatarIdeaRequest): Promise<string> {
   const recentPrompts = input.recentPrompts ?? [];
@@ -236,12 +236,12 @@ export async function generateAvatarIdea(input: GenerateAvatarIdeaRequest): Prom
   try {
     const out = await rustChatCompletion({
       prompt: context,
-      system: RANDOM_AVATAR_IDEA_INSTRUCTIONS,
+      system: `${RANDOM_AVATAR_IDEA_INSTRUCTIONS}\nModo selecionado: ${input.mode === 'video' ? 'VÍDEO' : 'IMAGEM'}. Gere exatamente para este modo.`,
       model: 'gemini-4-argon',
       temperature: 0.95,
       maxTokens: 420,
     });
-    return requireEnhancedPrompt(out, 1800, 'O agente não devolveu um prompt de imagem válido. Tente gerar outra ideia.');
+    return requireEnhancedPrompt(out, 1800, 'O agente não devolveu um prompt válido para este modo. Tente gerar outra ideia.');
   } catch (err) {
     if (err instanceof ApiError) throw err;
     const message = err instanceof Error ? err.message : String(err);

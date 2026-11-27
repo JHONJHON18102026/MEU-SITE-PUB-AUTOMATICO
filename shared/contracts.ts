@@ -94,6 +94,7 @@ export type EnhanceCharacterWorldRequest = z.input<typeof enhanceCharacterWorldS
 
 export const generateAvatarIdeaSchema = z.object({
   templateName: z.string().trim().min(1).max(60),
+  mode: z.enum(['image', 'video']).default('image'),
   templatePrompt: z.string().trim().min(1).max(1200),
   skills: z.array(z.object({ name: z.string().trim().min(1).max(80), instruction: z.string().trim().min(1).max(400) })).max(14),
   recentPrompts: z.array(z.string().trim().max(1800)).max(20).default([]),
