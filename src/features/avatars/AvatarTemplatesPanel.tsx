@@ -551,7 +551,7 @@ export function AvatarTemplatesPanel() {
           <div className="text-[11px] font-bold text-fg-muted">MONTE SEU TEMPLATE</div>
           <label className="block space-y-1.5">
             <span className="text-[10px] font-bold text-fg-muted">{promptIsArgonIdea ? 'PROMPT GERADO PELO ARGON · EDITÁVEL · SEM CUSTO EM CRÉDITOS' : 'IDEIA E DIREÇÃO DO TEMPLATE'}</span>
-            <textarea value={prompt} onChange={(event) => { setPrompt(event.target.value); setSelectedId(''); if (!promptIsArgonIdea) setTemplatePrompt(event.target.value); }} maxLength={1800} rows={5} placeholder="Escreva a estrutura ou a ideia principal..." className={`w-full resize-y rounded-xl border ${promptIsArgonIdea ? 'border-accent/40' : 'border-border'} bg-surface-2 p-3 text-xs leading-relaxed outline-none focus:border-accent`} />
+            <textarea value={prompt} onChange={(event) => { setPrompt(event.target.value); setSelectedId(''); setTemplatePrompt(event.target.value); }} maxLength={1800} rows={5} placeholder="Escreva a estrutura ou a ideia principal..." className={`w-full resize-y rounded-xl border ${promptIsArgonIdea ? 'border-accent/40' : 'border-border'} bg-surface-2 p-3 text-xs leading-relaxed outline-none focus:border-accent`} />
           </label>
           <button type="button" onClick={() => void generateRandomIdea()} disabled={generatingIdea || !templatePrompt.trim()} className="flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border border-accent/50 bg-accent-soft/50 px-3 py-2 text-[11px] font-semibold text-fg hover:border-accent disabled:cursor-wait disabled:opacity-60">
             <Dices className={`size-3.5 ${generatingIdea ? 'animate-spin' : ''}`} />
