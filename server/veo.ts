@@ -514,12 +514,25 @@ async function generateVeoSceneBufferInternal(opts: GenerateVeoSceneBufferOption
         await fs.writeFile(sourcePath, Buffer.from(opts.sourceVideoBytesBase64, 'base64'));
         base.source_video = sourcePath;
       }
-    const res = await fetch(`${env.rustMotorUrl}/v1/videos/generations`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(base),
-      signal: AbortSignal.timeout(10 * 60_000),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${env.rustMotorUrl}/v1/videos/generations`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(base),
+        signal: AbortSignal.timeout(10 * 60_000),
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new ApiError('GENERATION_FAILED', `MOTOR_CONNECTION_FAILED: a API não conseguiu concluir a chamada ao motor Rust de vídeo (${detail.slice(0, 180)}).`);
+    }
     const body = await res.json().catch(() => null) as any;
-    if (!res.ok) throw new ApiError('GENERATION_FAILED', body?.error?.message || `Motor Rust respondeu HTTP ${res.status}.`);
+    if (!res.ok) {
+      const providerMessage = String(body?.error?.message || `Motor Rust respondeu HTTP ${res.status}.`);
+      if (/fetch failed|networkerror|connection reset|timed? ?out/i.test(providerMessage)) {
+        const account = typeof base.account_id === 'string' ? base.account_id : 'não informada';
+        throw new ApiError('GENERATION_FAILED', `FLOW_CONNECTION_FAILED [${account}]: o motor Rust recebeu a solicitação, mas a comunicação com o Google Flow falhou (${providerMessage.slice(0, 180)}).`);
+      }
+      throw new ApiError('GENERATION_FAILED', providerMessage);
+    }
     const savedPath = body?.saved_path;
     if (!savedPath) throw new ApiError('GENERATION_FAILED', 'Motor Rust não devolveu o caminho do vídeo.');
     try {
@@ -589,9 +602,16 @@ async function generateVeoSceneBufferInternal(opts: GenerateVeoSceneBufferOption
   const video = operation.response?.generatedVideos?.[0]?.video;
   if (video?.videoBytes) return Buffer.from(video.videoBytes, 'base64');
   if (video?.uri) {
-    const res = await fetch(video.uri, {
-      headers: env.geminiApiKey ? { 'x-goog-api-key': env.geminiApiKey } : {},
-    });
+    let res: Response;
+    try {
+      res = await fetch(video.uri, {
+        headers: env.geminiApiKey ? { 'x-goog-api-key': env.geminiApiKey } : {},
+        signal: AbortSignal.timeout(60_000),
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new ApiError('GENERATION_FAILED', `VIDEO_DOWNLOAD_FAILED: o Veo concluiu a geração, mas a API não conseguiu baixar o arquivo (${detail.slice(0, 180)}).`);
+    }
     if (!res.ok) throw new ApiError('GENERATION_FAILED', `Erro ao baixar vídeo do Veo (${res.status}).`);
     return Buffer.from(await res.arrayBuffer());
   }

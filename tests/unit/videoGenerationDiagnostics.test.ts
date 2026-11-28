@@ -42,4 +42,18 @@ describe('diagnóstico das falhas do provedor de vídeo', () => {
     expect(explainVideoGenerationFailure('RESOURCE_EXHAUSTED: quota exceeded', 'omni-flash')).toContain('atingiu a cota');
     expect(explainVideoGenerationFailure('UNAUTHENTICATED: missing bearer', 'veo-3.1-fast')).toContain('não está autenticada');
   });
+
+  it('distingue indisponibilidade da API→motor de falha do motor→Flow', () => {
+    expect(explainVideoGenerationFailure('MOTOR_CONNECTION_FAILED: fetch failed', 'veo-3.1-lowerpriority'))
+      .toContain('nenhuma falha de sessão do Google Flow foi confirmada');
+    expect(explainVideoGenerationFailure('FLOW_CONNECTION_FAILED [conta_2]: fetch failed', 'veo-3.1-lowerpriority', 'conta_2'))
+      .toContain('na conta_2');
+    expect(explainVideoGenerationFailure('VIDEO_DOWNLOAD_FAILED: fetch failed', 'omni-flash'))
+      .toContain('concluiu Omni Flash 1.2');
+  });
+
+  it('exibe o modelo efetivo lower priority em vez do modelo selecionado na interface', () => {
+    expect(explainVideoGenerationFailure('FLOW_CONNECTION_FAILED [conta_2]: fetch failed', 'veo-3.1-lowerpriority'))
+      .toContain('Veo 3.1 Lower Priority');
+  });
 });

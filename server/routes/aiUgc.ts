@@ -255,8 +255,17 @@ async function processVideoProject(projectId: string, userId: string, generation
     } catch (err) {
       failedCount++;
       const rawError = err instanceof Error ? err.message : String(err);
-      lastError = explainVideoGenerationFailure(rawError, req.engine ?? 'veo-3.1-fast');
-      console.error('[video] Falha no motor de vídeo', { projectId, generationId, engine: req.engine ?? 'veo-3.1-fast', code: lastError.match(/\(([^)]+)\)/)?.[1] ?? null });
+      const actualEngine = useLowerPriorityQueue ? 'veo-3.1-lowerpriority' : req.engine ?? 'veo-3.1-fast';
+      const engineAccount = useLowerPriorityQueue ? 'conta_2' : req.engine === 'omni-flash' ? 'conta_1' : null;
+      lastError = explainVideoGenerationFailure(rawError, actualEngine, engineAccount);
+      const diagnosticCode = /FLOW_CONNECTION_FAILED/i.test(rawError)
+        ? 'FLOW_CONNECTION_FAILED'
+        : /MOTOR_CONNECTION_FAILED/i.test(rawError)
+          ? 'MOTOR_CONNECTION_FAILED'
+          : /VIDEO_DOWNLOAD_FAILED/i.test(rawError)
+            ? 'VIDEO_DOWNLOAD_FAILED'
+            : lastError.match(/\(([^)]+)\)/)?.[1] ?? null;
+      console.error('[video] Falha no motor de vídeo', { projectId, generationId, engine: actualEngine, accountId: engineAccount, code: diagnosticCode });
       sceneOutputs[i] = { ...sceneOutputs[i]!, status: 'failed', error: lastError };
     }
     await admin.from('video_projects').update({ scenes: sceneOutputs }).eq('id', projectId);

@@ -30,14 +30,26 @@ export function buildAvatarReferenceGuidance(input: AvatarReferenceContext): str
   return lines.join(' ');
 }
 
-type VideoEngine = CreateUgcVideoRequest['engine'];
+type VideoEngine = CreateUgcVideoRequest['engine'] | 'veo-3.1-lowerpriority';
 
 /** Convert provider failures into a short, actionable status while retaining its error code. */
-export function explainVideoGenerationFailure(raw: string, engine: VideoEngine): string {
-  const model = engine === 'omni-flash' ? 'Omni Flash 1.2' : 'Veo 3.1';
+export function explainVideoGenerationFailure(raw: string, engine: VideoEngine, accountId?: string | null): string {
+  const model = engine === 'omni-flash'
+    ? 'Omni Flash 1.2'
+    : engine === 'veo-3.1-lowerpriority' ? 'Veo 3.1 Lower Priority' : 'Veo 3.1';
   const codes = [...new Set(raw.match(/PUBLIC_ERROR_[A-Z0-9_]+|IP_PROHIBITED|RESOURCE_EXHAUSTED|UNAUTHENTICATED|PERMISSION_DENIED|NOT_FOUND|DEADLINE_EXCEEDED/g) ?? [])];
   const code = codes.join(' / ');
 
+  if (/MOTOR_CONNECTION_FAILED/i.test(raw)) {
+    return `A API não conseguiu se comunicar com o motor Rust de vídeo para ${model}. Verifique a conexão entre a API e o motor; nenhuma falha de sessão do Google Flow foi confirmada.`;
+  }
+  if (/VIDEO_DOWNLOAD_FAILED/i.test(raw)) {
+    return `O provedor concluiu ${model}, mas a API falhou ao baixar o arquivo final. Verifique a conectividade de saída da API antes de recriar o vídeo.`;
+  }
+  if (/FLOW_CONNECTION_FAILED|\bfetch failed\b|networkerror|connection reset|timed? ?out/i.test(raw)) {
+    const account = accountId || raw.match(/FLOW_CONNECTION_FAILED\s*\[([^\]]+)\]/i)?.[1];
+    return `O motor Rust recebeu o pedido de ${model}, mas a conexão com o Google Flow falhou${account ? ` na ${account}` : ''}. O health geral da API não valida a sessão dessa conta. Confira bearer e saúde da conta Flow antes de tentar novamente${code ? ` (${code})` : ''}.`;
+  }
   if (/IP_PROHIBITED|PUBLIC_ERROR_IP_INPUT_IMAGE/i.test(raw)) {
     return `O Google Flow recusou a imagem de referência por restrição de propriedade intelectual${code ? ` (${code})` : ''}. Nenhum vídeo foi concluído. Use uma imagem própria/autorizada sem marca ou personagem protegido e tente novamente.`;
   }
