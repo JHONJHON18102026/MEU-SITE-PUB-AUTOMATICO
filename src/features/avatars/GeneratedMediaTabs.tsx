@@ -305,7 +305,7 @@ function ProjectMediaCard({ project, onDeleteProject, onRecreateProject, onOpenP
             poster={project.thumbnail_url}
             controls
             playsInline
-            preload="metadata"
+            preload="none"
             className="aspect-[3/4] w-full bg-black object-contain"
             aria-label={project.title}
             onLoadedMetadata={(event) => {

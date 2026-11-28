@@ -380,9 +380,10 @@ export function ProjectsPage() {
                   {p.status === 'done' && p.video_url && p.mode !== 'image-ad' && p.mode !== 'slideshow' && !p.is_preview ? (
                     <video
                       src={p.video_url}
+                      poster={p.thumbnail_url || '/showcase/modelo-01.webp'}
                       muted
                       playsInline
-                      preload="metadata"
+                      preload="none"
                       aria-label={`Quadro do vídeo ${p.title}`}
                       onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.min(0.5, event.currentTarget.duration || 0); }}
                       className="aspect-[9/14] w-full object-cover object-top"
