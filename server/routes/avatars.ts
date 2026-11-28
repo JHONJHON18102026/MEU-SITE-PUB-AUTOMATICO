@@ -183,7 +183,7 @@ avatarRoutes.get('/gallery', async (c) => {
   const admin = getAdmin();
   let query = admin
     .from('avatars')
-    .select('id, user_id, generation_id, name, storage_path, prompt, attributes, engine, framing, aspect_ratio, is_public, is_favorite, created_at')
+    .select('id, user_id, generation_id, name, storage_path, thumbnail_path, prompt, attributes, engine, framing, aspect_ratio, is_public, is_favorite, created_at')
     .order('created_at', { ascending: false })
     .limit(scope === 'community' ? 60 : 120);
   query = scope === 'community' ? query.eq('is_public', true) : query.eq('user_id', userId);
@@ -201,23 +201,14 @@ avatarRoutes.get('/gallery', async (c) => {
   } catch (error) {
     throw new ApiError('INTERNAL', `Não consegui preparar as imagens da galeria: ${error instanceof Error ? error.message : String(error)}`);
   }
+  const thumbnailPaths = rows.flatMap((avatar) => avatar.thumbnail_path ? [avatar.thumbnail_path] : []);
   let thumbnailByPath = new Map<string, string>();
-  if (scope === 'mine') {
-    // One Storage listing per owner's folder reveals which legacy/new items have
-    // a thumbnail without probing every object or adding a database migration.
-    const { data: files, error: listError } = await admin.storage.from(BUCKET).list(userId, { limit: 1000 });
-    if (!listError) {
-      const fileNames = new Set((files ?? []).map((file) => file.name));
-      const thumbnailPaths = rows
-        .map((avatar) => avatarThumbnailPath(avatar.storage_path))
-        .filter((path) => fileNames.has(path.slice(userId.length + 1)));
-      try {
-        thumbnailByPath = await signedStorageUrls(BUCKET, thumbnailPaths, SIGNED_IMAGE_TTL_SECONDS);
-      } catch (signError) {
-        console.warn(`[avatars] Não foi possível assinar miniaturas: ${signError instanceof Error ? signError.message : String(signError)}`);
-      }
-    } else {
-      console.warn(`[avatars] Não foi possível listar miniaturas: ${listError.message}`);
+  if (thumbnailPaths.length) {
+    try {
+      thumbnailByPath = await signedStorageUrls(BUCKET, thumbnailPaths, SIGNED_IMAGE_TTL_SECONDS);
+    } catch (signError) {
+      // A thumbnail is an optimization, so keep the original usable if signing fails.
+      console.warn(`[avatars] Não foi possível assinar miniaturas: ${signError instanceof Error ? signError.message : String(signError)}`);
     }
   }
   const avatars = rows.map((avatar) => {
@@ -226,9 +217,9 @@ avatarRoutes.get('/gallery', async (c) => {
       console.error(`[avatars] URL temporária falhou para ${avatar.id}: URL ausente`);
       return null;
     }
-    const thumbnailPath = avatarThumbnailPath(avatar.storage_path);
-    const thumbnailUrl = thumbnailByPath.get(thumbnailPath);
-    return { ...avatar, image_url: signedUrl, ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}) };
+    const { thumbnail_path: _thumbnailPath, ...publicAvatar } = avatar;
+    const thumbnailUrl = avatar.thumbnail_path ? thumbnailByPath.get(avatar.thumbnail_path) : undefined;
+    return { ...publicAvatar, image_url: signedUrl, ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}) };
   });
   return c.json({ avatars: avatars.filter((avatar): avatar is NonNullable<typeof avatar> => avatar !== null) });
 });
@@ -397,6 +388,7 @@ avatarRoutes.post('/generate', async (c) => {
         name: suggestAvatarName(req.attributes as AttributeSelection, index, req.extraDetails),
         image_url: signedUrl,
         ...(signed.get(thumbnailPath) ? { thumbnail_url: signed.get(thumbnailPath)! } : {}),
+        ...(thumbnailUpload.error ? {} : { thumbnail_path: thumbnailPath }),
         storage_path: storagePath,
         // Persist the exact assembled prompt sent to the image engine so the
         // detail view exposes selected attributes, references, and constraints.
