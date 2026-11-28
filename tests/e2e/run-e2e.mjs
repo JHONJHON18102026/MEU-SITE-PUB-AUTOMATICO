@@ -173,6 +173,12 @@ async function installMocks(page) {
     json(route, 200, { prompt: 'Mulher sorrindo segurando o pote do suplemento numa cozinha clara, luz da manhã entrando pela janela, enquadramento meio corpo.' }),
   );
 
+  // O painel consulta templates salvos ao abrir; mantenha esse endpoint isolado
+  // junto com os demais mocks, sem deixar o Vite tentar alcançar a API real.
+  await page.route(`${BASE}/api/avatars/templates`, (route) =>
+    json(route, 200, { templates: [] }),
+  );
+
   await page.route(`${BASE}/api/avatars/generate`, async (route) => {
     const body = JSON.parse(route.request().postData() || '{}');
     state.lastGenerateBody = body;

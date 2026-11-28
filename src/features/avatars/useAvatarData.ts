@@ -56,11 +56,12 @@ function useQuery<T>(fetcher: () => Promise<T[]>, deps: unknown[], refreshEveryM
         .then((rows) => alive && (lastFetchedAt.current = Date.now(), hasLoadedRef.current = true, setData(rows), setError(null)))
         .catch((err: unknown) => alive && setError(err instanceof Error ? err.message : String(err)));
     };
-    const timer = window.setInterval(refreshIfStaleAndVisible, Math.min(refreshEveryMs, 60_000));
+    // Do not poll while the gallery is open. Each refetch can rotate signed
+    // Storage URLs and defeat the browser cache for every visible image. Keep
+    // the gallery fresh when the user returns to a stale tab instead.
     document.addEventListener('visibilitychange', refreshIfStaleAndVisible);
     return () => {
       alive = false;
-      window.clearInterval(timer);
       document.removeEventListener('visibilitychange', refreshIfStaleAndVisible);
     };
   }, [run, refreshEveryMs]);
